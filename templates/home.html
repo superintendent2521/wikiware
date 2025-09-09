@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Home - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="hero">
+        <h2>Welcome to WikiWare</h2>
+        <p>A simple, fast wiki built with FastAPI and MongoDB</p>
+        <a href="/edit/Home" class="btn btn-primary">Create Your First Page</a>
+    </div>
+
+    <div class="recent-pages">
+        <h3>Recent Pages</h3>
+        {% if offline %}
+        <div class="offline-message">
+            <p>⚠️ Database not available. Running in offline mode.</p>
+            <p>You can still view the interface, but changes won't be saved.</p>
+        </div>
+        {% elif pages %}
+        <div class="page-list">
+            {% for page in pages %}
+            <div class="page-item">
+                <h4><a href="/page/{{ page.title }}">{{ page.title }}</a></h4>
+                <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}</p>
+                <a href="/edit/{{ page.title }}" class="btn btn-secondary">Edit</a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p>No pages yet. <a href="/edit/Home">Create the first one!</a></p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

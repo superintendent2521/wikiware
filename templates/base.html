@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}WikiWare{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="nav-container">
+                <h1><a href="/">WikiWare</a></h1>
+                <div class="nav-links">
+                    <a href="/">Home</a>
+                    <a href="/search">Search</a>
+                    {% if offline %}
+                    <span class="offline-indicator">⚠️ Offline Mode</span>
+                    {% endif %}
+                    <form action="/search" method="get" class="search-form">
+                        <input type="text" name="q" placeholder="Search wiki..." value="{{ request.query_params.get('q', '') }}">
+                        <button type="submit">Search</button>
+                    </form>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; 2025 WikiWare. Powered by FastAPI & MongoDB.</p>
+    </footer>
+</body>
+</html>

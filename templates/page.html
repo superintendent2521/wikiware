@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2>{{ page.title }}</h2>
+        <div class="page-actions">
+            <a href="/edit/{{ page.title }}" class="btn btn-primary">Edit Page</a>
+            <a href="/" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </div>
+
+    <div class="page-meta">
+        <p>
+            <strong>Last updated:</strong> {{ page.updated_at.strftime('%Y-%m-%d %H:%M:%S') }} |
+            <strong>Author:</strong> {{ page.author }}
+        </p>
+    </div>
+
+    <div class="page-content">
+        {{ page.html_content | safe }}
+    </div>
+
+    <div class="page-footer">
+        <a href="/edit/{{ page.title }}" class="btn btn-primary">Edit this page</a>
+    </div>
+</div>
+{% endblock %}

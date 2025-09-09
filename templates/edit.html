@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ title }} - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="edit-header">
+        <h2>Editing: {{ title }}</h2>
+        <div class="edit-actions">
+            <a href="/page/{{ title }}" class="btn btn-secondary">View Page</a>
+            <a href="/" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </div>
+
+    <div class="edit-form-container">
+        <form action="/edit/{{ title }}" method="post">
+            <div class="form-group">
+                <label for="author">Author:</label>
+                <input type="text" id="author" name="author" value="Anonymous" required>
+            </div>
+
+            <div class="form-group">
+                <label for="content">Content (Markdown supported):</label>
+                <textarea id="content" name="content" rows="20" required>{{ content }}</textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save Page</button>
+                <a href="/page/{{ title }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="markdown-help">
+        <h3>Markdown Help</h3>
+        <ul>
+            <li><code># Header</code> - Large header</li>
+            <li><code>## Subheader</code> - Smaller header</li>
+            <li><code>**bold**</code> - Bold text</li>
+            <li><code>*italic*</code> - Italic text</li>
+            <li><code>[link](url)</code> - Link</li>
+            <li><code>`code`</code> - Inline code</li>
+            <li><code>```code block```</code> - Code block</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
