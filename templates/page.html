@@ -12,6 +12,12 @@
         </div>
     </div>
 
+    {% if request.query_params.get('updated') %}
+    <div style="background-color: green; color: white; padding: 10px; margin-bottom: 20px; border-radius: 10px;">
+        Updated. Please wait for it to propagate across caches.
+    </div>
+    {% endif %}
+
     <div class="page-meta">
         <p>
             <strong>Last updated:</strong> {{ page.updated_at.strftime('%Y-%m-%d %H:%M:%S') }} |

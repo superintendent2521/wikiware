@@ -10,6 +10,24 @@
         <a href="/edit/Home" class="btn btn-primary">Create Your First Page</a>
     </div>
 
+    <div class="create-page">
+        <h3>Create a New Page</h3>
+        <form onsubmit="createNewPage(event)">
+            <input type="text" id="new_page_title" placeholder="Enter page title" required>
+            <button type="submit" class="btn btn-primary">Create Page</button>
+        </form>
+    </div>
+
+    <script>
+        function createNewPage(event) {
+            event.preventDefault();
+            const title = document.getElementById('new_page_title').value.trim();
+            if (title) {
+                window.location.href = '/edit/' + encodeURIComponent(title);
+            }
+        }
+    </script>
+
     <div class="recent-pages">
         <h3>Recent Pages</h3>
         {% if offline %}

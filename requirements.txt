@@ -6,3 +6,4 @@ jinja2
 python-multipart
 markdown
 python-dotenv
+loguru
