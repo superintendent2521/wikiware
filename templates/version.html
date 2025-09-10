@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Version {{ version_num }} of {{ page.title }} - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2>Version {{ version_num }} of {{ page.title }}</h2>
+        <div class="page-actions">
+            <a href="/history/{{ page.title }}" class="btn btn-primary">View All History</a>
+            <a href="/page/{{ page.title }}" class="btn btn-secondary">View Current</a>
+            <a href="/edit/{{ page.title }}" class="btn btn-secondary">Edit Page</a>
+            <a href="/" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </div>
+
+    <div class="page-meta">
+        <p>
+            <strong>Date:</strong> {{ page.updated_at.strftime('%Y-%m-%d %H:%M:%S') }} |
+            <strong>Author:</strong> {{ page.author }}
+        </p>
+    </div>
+
+    <div class="page-content">
+        {{ page.html_content | safe }}
+    </div>
+
+    <div class="page-footer">
+        <form action="/restore/{{ page.title }}/{{ version_index }}" method="post">
+            <button type="submit" class="btn btn-primary" 
+                    onclick="return confirm('Are you sure you want to restore this version?')">Restore This Version</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

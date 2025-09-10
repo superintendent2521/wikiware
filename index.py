@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import markdown
 import os
 from datetime import datetime, timezone
@@ -167,6 +167,117 @@ async def search(request: Request, q: str = ""):
     except Exception as e:
         logger.error(f"Error during search '{q}': {str(e)}")
         return templates.TemplateResponse("search.html", {"request": request, "pages": [], "query": q, "offline": True})
+
+@app.get("/history/{title}", response_class=HTMLResponse)
+async def page_history(request: Request, title: str):
+    try:
+        if not db_instance.is_connected:
+            logger.warning(f"Database not connected - viewing history: {title}")
+            return templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "offline": True})
+
+        history_collection = get_history_collection()
+        if history_collection is not None:
+            # Get history versions
+            versions = await history_collection.find({"title": title}).sort("updated_at", -1).to_list(100)
+            # Get current version
+            pages_collection = get_pages_collection()
+            current = await pages_collection.find_one({"title": title})
+            if current:
+                versions.insert(0, current)  # Add current version at the beginning
+        else:
+            versions = []
+
+        logger.info(f"History viewed: {title}")
+        return templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": versions, "offline": not db_instance.is_connected})
+    except Exception as e:
+        logger.error(f"Error viewing history {title}: {str(e)}")
+        return templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "offline": True})
+
+@app.get("/history/{title}/{version_index}", response_class=HTMLResponse)
+async def view_version(request: Request, title: str, version_index: int):
+    try:
+        if not db_instance.is_connected:
+            logger.warning(f"Database not connected - viewing version: {title} v{version_index}")
+            return templates.TemplateResponse("page.html", {"request": request, "title": title, "content": "", "offline": True})
+
+        pages_collection = get_pages_collection()
+        history_collection = get_history_collection()
+        
+        page = None
+        if version_index == 0:
+            # Current version
+            page = await pages_collection.find_one({"title": title})
+        else:
+            # Historical version
+            versions = await history_collection.find({"title": title}).sort("updated_at", -1).to_list(100)
+            if version_index - 1 < len(versions):
+                page = versions[version_index - 1]
+        
+        if not page:
+            logger.info(f"Version not found - viewing edit page: {title}")
+            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": False})
+
+        page["html_content"] = markdown.markdown(page["content"])
+        logger.info(f"Version viewed: {title} v{version_index}")
+        return templates.TemplateResponse("version.html", {
+            "request": request, 
+            "page": page, 
+            "version_num": version_index,
+            "version_index": version_index,
+            "offline": not db_instance.is_connected
+        })
+    except Exception as e:
+        logger.error(f"Error viewing version {title} v{version_index}: {str(e)}")
+        return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True})
+
+@app.post("/restore/{title}/{version_index}")
+async def restore_version(title: str, version_index: int):
+    try:
+        if not db_instance.is_connected:
+            logger.error(f"Database not connected - restoring version: {title} v{version_index}")
+            return {"error": "Database not available"}
+
+        pages_collection = get_pages_collection()
+        history_collection = get_history_collection()
+        
+        page = None
+        if version_index == 0:
+            # Current version - nothing to restore
+            return RedirectResponse(url=f"/page/{title}", status_code=303)
+        else:
+            # Historical version
+            versions = await history_collection.find({"title": title}).sort("updated_at", -1).to_list(100)
+            if version_index - 1 < len(versions):
+                page = versions[version_index - 1]
+        
+        if not page:
+            logger.error(f"Version not found for restore: {title} v{version_index}")
+            return RedirectResponse(url=f"/page/{title}", status_code=303)
+
+        # Save current version to history before restoring
+        current_page = await pages_collection.find_one({"title": title})
+        if current_page:
+            await history_collection.insert_one({
+                "title": title,
+                "content": current_page["content"],
+                "author": current_page.get("author", "Anonymous"),
+                "updated_at": current_page["updated_at"]
+            })
+
+        # Restore the version
+        await pages_collection.update_one(
+            {"title": title},
+            {"$set": {
+                "content": page["content"],
+                "author": page.get("author", "Anonymous"),
+                "updated_at": datetime.now(timezone.utc)
+            }}
+        )
+        logger.info(f"Version restored: {title} v{version_index}")
+        return RedirectResponse(url=f"/page/{title}?restored=true", status_code=303)
+    except Exception as e:
+        logger.error(f"Error restoring version {title} v{version_index}: {str(e)}")
+        return RedirectResponse(url=f"/page/{title}", status_code=303)
 
 if __name__ == "__main__":
     import uvicorn

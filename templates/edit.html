@@ -4,10 +4,17 @@
 
 {% block content %}
 <div class="container">
+    {% if request.query_params.get('restored') %}
+    <div style="background-color: green; color: white; padding: 10px; margin-bottom: 20px; border-radius: 10px;">
+        Page restored successfully.
+    </div>
+    {% endif %}
+
     <div class="edit-header">
         <h2>Editing: {{ title }}</h2>
         <div class="edit-actions">
             <a href="/page/{{ title }}" class="btn btn-secondary">View Page</a>
+            <a href="/history/{{ title }}" class="btn btn-secondary">View History</a>
             <a href="/" class="btn btn-secondary">Back to Home</a>
         </div>
     </div>

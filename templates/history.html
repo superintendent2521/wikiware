@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}History of {{ title }} - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2>History of {{ title }}</h2>
+        <div class="page-actions">
+            <a href="/page/{{ title }}" class="btn btn-primary">View Page</a>
+            <a href="/edit/{{ title }}" class="btn btn-secondary">Edit Page</a>
+            <a href="/" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </div>
+
+    {% if versions %}
+    <div class="history-list">
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Version</th>
+                    <th>Author</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for version in versions %}
+                <tr>
+                    <td>Version {{ loop.index }}</td>
+                    <td>{{ version.author }}</td>
+                    <td>{{ version.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>
+                        <a href="/history/{{ title }}/{{ loop.index0 }}" class="btn btn-small btn-secondary">View</a>
+                        <form action="/restore/{{ title }}/{{ loop.index0 }}" method="post" style="display: inline;">
+                            <button type="submit" class="btn btn-small btn-warning" 
+                                    onclick="return confirm('Are you sure you want to restore this version?')">Restore</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>No history found for this page.</p>
+    {% endif %}
+</div>
+{% endblock %}

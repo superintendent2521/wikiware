@@ -8,6 +8,7 @@
         <h2>{{ page.title }}</h2>
         <div class="page-actions">
             <a href="/edit/{{ page.title }}" class="btn btn-primary">Edit Page</a>
+            <a href="/history/{{ page.title }}" class="btn btn-secondary">View History</a>
             <a href="/" class="btn btn-secondary">Back to Home</a>
         </div>
     </div>
@@ -15,6 +16,12 @@
     {% if request.query_params.get('updated') %}
     <div style="background-color: green; color: white; padding: 10px; margin-bottom: 20px; border-radius: 10px;">
         Updated. Please wait for it to propagate across caches.
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('restored') %}
+    <div style="background-color: green; color: white; padding: 10px; margin-bottom: 20px; border-radius: 10px;">
+        Page restored successfully.
     </div>
     {% endif %}
 
