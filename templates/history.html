@@ -18,6 +18,11 @@
             <a href="/" class="btn btn-secondary">Back to Home</a>
         </div>
     </div>
+    <div class="page-meta">
+        <p>
+            <strong>Revision History system works by having the newest version be the lowest number, Read more <a href="/help/revision_history">here</a>.</strong><br>
+            <strong>Total Versions:</strong> {{ versions|length }}
+        </p>
 
     {% if versions %}
     <div class="history-list">
