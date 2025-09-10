@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from database import get_pages_collection, get_history_collection
+from .database import get_pages_collection, get_history_collection
 from loguru import logger
 
 # Caching variables for stats

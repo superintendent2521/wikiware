@@ -8,10 +8,10 @@ import markdown
 import os
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-from database import init_database, get_pages_collection, get_history_collection, db_instance
+from .database import init_database, get_pages_collection, get_history_collection, db_instance
 from loguru import logger
 import asyncio
-from stats import get_stats
+from .stats import get_stats
 
 load_dotenv()
 
