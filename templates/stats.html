@@ -10,19 +10,19 @@
 
     {% if offline %}
     <div class="offline-message">
-        <p>⚠️ Database not available. Running in offline mode.</p>
+        <p><i class="fas fa-exclamation-triangle"></i> Database not available. Running in offline mode.</p>
         <p>Statistics cannot be displayed when offline.</p>
     </div>
     {% else %}
     <div class="stats-container">
         <div class="stat-card">
-            <h3>Total Edits</h3>
+            <h3><i class="fas fa-edit"></i> Total Edits</h3>
             <p class="stat-number">{{ total_edits }}</p>
             <p class="stat-description">Total number of edits made to wiki pages</p>
         </div>
 
         <div class="stat-card">
-            <h3>Total Characters</h3>
+            <h3><i class="fas fa-font"></i> Total Characters</h3>
             <p class="stat-number">{{ total_characters }}</p>
             <p class="stat-description">Total characters across all wiki pages</p>
             {% if last_updated %}
@@ -31,7 +31,7 @@
         </div>
 
         <div class="stat-card">
-            <h3>Total Pages</h3>
+            <h3><i class="fas fa-file-alt"></i> Total Pages</h3>
             <p class="stat-number">{{ total_pages }}</p>
             <p class="stat-description">Number of wiki pages in the database</p>
         </div>

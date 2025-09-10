@@ -9,7 +9,7 @@
         <h3>Create a New Page</h3>
         <form onsubmit="createNewPage(event)">
             <input type="text" id="new_page_title" placeholder="Enter page title" required>
-            <button type="submit" class="btn btn-primary">Create Page</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Create Page</button>
         </form>
     </div>
 
@@ -27,7 +27,7 @@
         <h3>Recent Pages</h3>
         {% if offline %}
         <div class="offline-message">
-            <p>⚠️ Database not available. Running in offline mode.</p>
+            <p><i class="fas fa-exclamation-triangle"></i> Database not available. Running in offline mode.</p>
             <p>You can still view the interface, but changes won't be saved.</p>
         </div>
         {% elif pages %}
@@ -36,7 +36,7 @@
             <div class="page-item">
                 <h4><a href="/page/{{ page.title }}">{{ page.title }}</a></h4>
                 <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}</p>
-                <a href="/edit/{{ page.title }}" class="btn btn-secondary">Edit</a>
+                <a href="/edit/{{ page.title }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit</a>
             </div>
             {% endfor %}
         </div>

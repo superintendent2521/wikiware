@@ -4,49 +4,51 @@
 
 {% block content %}
 <div class="container">
-    <div class="search-header">
-        <h2>Search Results</h2>
-        <form action="/search" method="get" class="search-form-large">
-            <input type="text" name="q" placeholder="Search wiki pages..." value="{{ query }}" required>
-            <button type="submit" class="btn btn-primary">Search</button>
-        </form>
-    </div>
+    <div class="search-wrapper">
+        <div class="search-header">
+            <h2>Search Results</h2>
+            <form action="/search" method="get" class="search-form-large">
+                <input type="text" name="q" placeholder="Search wiki pages..." value="{{ query }}" required>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Search</button>
+            </form>
+        </div>
 
-    {% if query %}
-    <div class="search-results">
-        <h3>Results for "{{ query }}"</h3>
-        {% if pages %}
-        <div class="page-list">
-            {% for page in pages %}
-            <div class="page-item">
-                <h4><a href="/page/{{ page.title }}">{{ page.title }}</a></h4>
-                <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}</p>
-                <div class="page-preview">
-                    {% if page.content %}
-                    {{ page.content[:200] }}...
-                    {% endif %}
+        {% if query %}
+        <div class="search-results">
+            <h3>Results for "{{ query }}"</h3>
+            {% if pages %}
+            <div class="page-list">
+                {% for page in pages %}
+                <div class="page-item">
+                    <h4><a href="/page/{{ page.title }}">{{ page.title }}</a></h4>
+                    <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}</p>
+                    <div class="page-preview">
+                        {% if page.content %}
+                        {{ page.content[:200] }}...
+                        {% endif %}
+                    </div>
+                    <div class="page-actions">
+                        <a href="/page/{{ page.title }}" class="btn btn-primary"><i class="fas fa-eye"></i> View</a>
+                        <a href="/edit/{{ page.title }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit</a>
+                    </div>
                 </div>
-                <div class="page-actions">
-                    <a href="/page/{{ page.title }}" class="btn btn-primary">View</a>
-                    <a href="/edit/{{ page.title }}" class="btn btn-secondary">Edit</a>
-                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
+            {% else %}
+            <p>No pages found matching "{{ query }}". <a href="/edit/{{ query }}">Create this page?</a></p>
+            {% endif %}
         </div>
         {% else %}
-        <p>No pages found matching "{{ query }}". <a href="/edit/{{ query }}">Create this page?</a></p>
+        <div class="search-instructions">
+            <h3>Search Instructions</h3>
+            <p>Enter a search term above to find wiki pages by title or content.</p>
+            <p>You can also:</p>
+            <ul>
+                <li><a href="/">Browse all pages</a></li>
+                <li><a href="/edit/Home">Create a new page</a></li>
+            </ul>
+        </div>
         {% endif %}
     </div>
-    {% else %}
-    <div class="search-instructions">
-        <h3>Search Instructions</h3>
-        <p>Enter a search term above to find wiki pages by title or content.</p>
-        <p>You can also:</p>
-        <ul>
-            <li><a href="/">Browse all pages</a></li>
-            <li><a href="/edit/Home">Create a new page</a></li>
-        </ul>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}

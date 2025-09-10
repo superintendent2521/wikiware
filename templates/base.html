@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}WikiWare{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <header>
@@ -12,15 +13,16 @@
             <div class="nav-container">
                 <h1><a href="/">WikiWare</a></h1>
                 <div class="nav-links">
-                    <a href="/">Home</a>
-                    <a href="/search">Search</a>
-                    <a href="/stats">Stats</a>
+                    <a href="/"><i class="fas fa-home"></i> Home</a>
+                    <a href="/search"><i class="fas fa-search"></i> Search</a>
+                    <a href="/stats"><i class="fas fa-chart-bar"></i> Stats</a>
+                    <button id="dark-mode-toggle" class="btn btn-secondary btn-small"><i class="fas fa-moon"></i> Dark Mode</button>
                     {% if offline %}
-                    <span class="offline-indicator">⚠️ Offline Mode</span>
+                    <span class="offline-indicator"><i class="fas fa-exclamation-triangle"></i> Offline Mode</span>
                     {% endif %}
                     <form action="/search" method="get" class="search-form">
                         <input type="text" name="q" placeholder="Search wiki..." value="{{ request.query_params.get('q', '') }}">
-                        <button type="submit">Search</button>
+                        <button type="submit"><i class="fas fa-search"></i></button>
                     </form>
                 </div>
             </div>
@@ -34,5 +36,44 @@
     <footer>
         <p>&copy; 2025 WikiWare. Powered by FastAPI & MongoDB.</p>
     </footer>
+    
+    <script>
+        // Dark mode toggle functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggleButton = document.getElementById('dark-mode-toggle');
+            const themeIcon = toggleButton.querySelector('i');
+            
+            // Check for saved theme preference or respect OS preference
+            const savedTheme = localStorage.getItem('theme');
+            const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
+            
+            // Set initial theme
+            if (savedTheme === 'dark' || (!savedTheme && prefersDarkScheme.matches)) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                themeIcon.classList.remove('fa-moon');
+                themeIcon.classList.add('fa-sun');
+                toggleButton.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+            }
+            
+            // Toggle theme when button is clicked
+            toggleButton.addEventListener('click', function() {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                
+                if (currentTheme === 'dark') {
+                    document.documentElement.removeAttribute('data-theme');
+                    localStorage.setItem('theme', 'light');
+                    themeIcon.classList.remove('fa-sun');
+                    themeIcon.classList.add('fa-moon');
+                    toggleButton.innerHTML = '<i class="fas fa-moon"></i> Dark Mode';
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    localStorage.setItem('theme', 'dark');
+                    themeIcon.classList.remove('fa-moon');
+                    themeIcon.classList.add('fa-sun');
+                    toggleButton.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+                }
+            });
+        });
+    </script>
 </body>
 </html>
