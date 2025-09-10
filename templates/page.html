@@ -4,17 +4,43 @@
 
 {% block content %}
 <div class="container">
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-error">
+        <strong>Error:</strong> 
+        {% if request.query_params.get('error') == 'database_not_available' %}
+            Database not available.
+        {% elif request.query_params.get('error') == 'database_error' %}
+            Database error occurred.
+        {% elif request.query_params.get('error') == 'version_not_found' %}
+            Version not found.
+        {% elif request.query_params.get('error') == 'restore_failed' %}
+            Failed to restore version.
+        {% elif request.query_params.get('error') == 'restore_error' %}
+            An error occurred while restoring.
+        {% else %}
+            An error occurred.
+        {% endif %}
+    </div>
+    {% endif %}
+
     <div class="page-header">
         <h2>{{ page.title }}</h2>
         <div class="page-actions">
             <a href="/edit/{{ page.title }}" class="btn btn-primary">Edit Page</a>
+            <a href="/history/{{ page.title }}" class="btn btn-secondary">View History</a>
             <a href="/" class="btn btn-secondary">Back to Home</a>
         </div>
     </div>
 
     {% if request.query_params.get('updated') %}
-    <div style="background-color: green; color: white; padding: 10px; margin-bottom: 20px; border-radius: 10px;">
+    <div class="alert alert-success">
         Updated. Please wait for it to propagate across caches.
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('restored') %}
+    <div class="alert alert-success">
+        Page restored successfully.
     </div>
     {% endif %}
 
