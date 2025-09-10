@@ -5,8 +5,14 @@
 {% block content %}
 <div class="container">
     {% if request.query_params.get('restored') %}
-    <div style="background-color: green; color: white; padding: 10px; margin-bottom: 20px; border-radius: 10px;">
+    <div class="alert alert-success">
         Page restored successfully.
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-error">
+        <strong>Error:</strong> {{ error }}
     </div>
     {% endif %}
 
