@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from database import init_database, get_pages_collection, get_history_collection, db_instance
 from loguru import logger
+import asyncio
+from stats import get_stats
 
 load_dotenv()
 
@@ -347,6 +349,30 @@ async def restore_version(title: str, version_index: int):
     except Exception as e:
         logger.error(f"Error restoring version {title} v{version_index}: {str(e)}")
         return RedirectResponse(url=f"/page/{title}?error=restore_error", status_code=303)
+
+@app.get("/stats", response_class=HTMLResponse)
+async def stats_page(request: Request):
+    """Display wiki statistics page."""
+    try:
+        if not db_instance.is_connected:
+            logger.warning("Database not connected - viewing stats")
+            return templates.TemplateResponse("stats.html", {"request": request, "offline": True})
+
+        # Get statistics from our stats module
+        stats = await get_stats()
+        
+        logger.info("Stats page viewed")
+        return templates.TemplateResponse("stats.html", {
+            "request": request,
+            "total_edits": stats["total_edits"],
+            "total_characters": stats["total_characters"],
+            "total_pages": stats["total_pages"],
+            "last_updated": stats["last_updated"],
+            "offline": False
+        })
+    except Exception as e:
+        logger.error(f"Error viewing stats page: {str(e)}")
+        return templates.TemplateResponse("stats.html", {"request": request, "offline": True})
 
 if __name__ == "__main__":
     import uvicorn
