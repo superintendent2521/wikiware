@@ -4,6 +4,24 @@
 
 {% block content %}
 <div class="container">
+    <!-- Image Upload Modal -->
+    <div id="imageUploadModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Upload Image</h3>
+            <form id="imageUploadForm">
+                <div class="form-group">
+                    <label for="imageFile">Select Image:</label>
+                    <input type="file" id="imageFile" name="image" accept="image/*">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Upload Image</button>
+                    <button type="button" class="btn btn-secondary" id="cancelUpload">Cancel</button>
+                </div>
+            </form>
+            <div id="uploadStatus"></div>
+        </div>
+    </div>
     {% if request.query_params.get('restored') %}
     <div class="alert alert-success">
         Page restored successfully.
@@ -34,6 +52,11 @@
 
             <div class="form-group">
                 <label for="content">Content (Markdown supported):</label>
+                <div class="toolbar">
+                    <button type="button" id="insertImageBtn" class="btn btn-secondary btn-small">
+                        <i class="fas fa-image"></i> Insert Image
+                    </button>
+                </div>
                 <textarea id="content" name="content" rows="20" required>{{ content }}</textarea>
             </div>
 
@@ -54,7 +77,99 @@
             <li><code>[link](url)</code> - Link</li>
             <li><code>`code`</code> - Inline code</li>
             <li><code>```code block```</code> - Code block</li>
+            <li><code>![alt text](image-url)</code> - Image (use Insert Image button to upload)</li>
         </ul>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Image upload modal elements
+        const modal = document.getElementById('imageUploadModal');
+        const insertImageBtn = document.getElementById('insertImageBtn');
+        const closeBtn = document.querySelector('.modal .close');
+        const cancelUpload = document.getElementById('cancelUpload');
+        const imageUploadForm = document.getElementById('imageUploadForm');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const contentTextarea = document.getElementById('content');
+        
+        // Show modal when insert image button is clicked
+        insertImageBtn.addEventListener('click', function() {
+            modal.style.display = 'block';
+        });
+        
+        // Close modal when close button is clicked
+        closeBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+        
+        // Close modal when cancel button is clicked
+        cancelUpload.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+        
+        // Close modal when clicking outside of modal content
+        window.addEventListener('click', function(event) {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Handle image upload form submission
+        imageUploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('imageFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                uploadStatus.innerHTML = '<div class="alert alert-error">Please select an image file.</div>';
+                return;
+            }
+            
+            // Create FormData object
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Upload image
+            uploadStatus.innerHTML = '<div class="alert alert-info">Uploading...</div>';
+            
+            fetch('/upload-image', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    uploadStatus.innerHTML = '<div class="alert alert-error">' + data.error + '</div>';
+                } else {
+                    // Insert image markdown into content
+                    const imageMarkdown = '![' + data.filename + '](' + data.url + ')';
+                    const startPos = contentTextarea.selectionStart;
+                    const endPos = contentTextarea.selectionEnd;
+                    const content = contentTextarea.value;
+                    const newContent = content.substring(0, startPos) + imageMarkdown + content.substring(endPos);
+                    contentTextarea.value = newContent;
+                    
+                    // Close modal
+                    modal.style.display = 'none';
+                    
+                    // Clear form
+                    imageUploadForm.reset();
+                    uploadStatus.innerHTML = '<div class="alert alert-success">Image uploaded successfully!</div>';
+                    
+                    // Clear status after 2 seconds
+                    setTimeout(() => {
+                        uploadStatus.innerHTML = '';
+                    }, 2000);
+                }
+            })
+            .catch(error => {
+                uploadStatus.innerHTML = '<div class="alert alert-error">Error uploading image: ' + error.message + '</div>';
+            });
+        });
+    });
+</script>
 {% endblock %}

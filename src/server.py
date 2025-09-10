@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, Form, HTTPException, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -12,6 +12,8 @@ from .database import init_database, get_pages_collection, get_history_collectio
 from loguru import logger
 import asyncio
 from .stats import get_stats
+import uuid
+import shutil
 
 load_dotenv()
 
@@ -349,6 +351,54 @@ async def restore_version(title: str, version_index: int):
     except Exception as e:
         logger.error(f"Error restoring version {title} v{version_index}: {str(e)}")
         return RedirectResponse(url=f"/page/{title}?error=restore_error", status_code=303)
+
+@app.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    try:
+        # Create uploads directory if it doesn't exist
+        upload_dir = "static/uploads"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+        if file.content_type not in allowed_types:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed."}
+            )
+        
+        # Validate file size (max 5MB)
+        contents = await file.read()
+        if len(contents) > 5 * 1024 * 1024:  # 5MB
+            return JSONResponse(
+                status_code=400,
+                content={"error": "File too large. Maximum file size is 5MB."}
+            )
+        
+        # Reset file pointer
+        await file.seek(0)
+        
+        # Generate unique filename
+        file_extension = file.filename.split(".")[-1] if "." in file.filename else ""
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        
+        # Save file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Return success response with image URL
+        image_url = f"/static/uploads/{unique_filename}"
+        return JSONResponse(
+            status_code=200,
+            content={"url": image_url, "filename": unique_filename}
+        )
+    except Exception as e:
+        logger.error(f"Error uploading image: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to upload image"}
+        )
 
 @app.get("/stats", response_class=HTMLResponse)
 async def stats_page(request: Request):
