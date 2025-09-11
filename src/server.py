@@ -417,6 +417,7 @@ async def stats_page(request: Request):
             "total_edits": stats["total_edits"],
             "total_characters": stats["total_characters"],
             "total_pages": stats["total_pages"],
+            "total_images": stats["total_images"],
             "last_updated": stats["last_updated"],
             "offline": False
         })
