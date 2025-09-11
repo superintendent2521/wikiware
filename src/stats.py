@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import os
 from .database import get_pages_collection, get_history_collection
 from loguru import logger
 
@@ -77,6 +78,31 @@ async def get_total_pages():
         logger.error(f"Error counting total pages: {str(e)}")
         return 0
 
+async def get_total_images():
+    """
+    Count total number of images uploaded.
+    
+    Returns:
+        int: Total number of images
+    """
+    try:
+        upload_dir = "static/uploads"
+        if os.path.exists(upload_dir):
+            # Count files in the uploads directory
+            files = os.listdir(upload_dir)
+            # Filter for image files (common image extensions)
+            image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff'}
+            image_count = 0
+            for file in files:
+                _, ext = os.path.splitext(file.lower())
+                if ext in image_extensions:
+                    image_count += 1
+            return image_count
+        return 0
+    except Exception as e:
+        logger.error(f"Error counting total images: {str(e)}")
+        return 0
+
 async def get_stats():
     """
     Get all statistics for the wiki.
@@ -88,5 +114,6 @@ async def get_stats():
         "total_edits": await get_total_edits(),
         "total_characters": await get_total_characters(),
         "total_pages": await get_total_pages(),
+        "total_images": await get_total_images(),
         "last_updated": last_character_count_time.strftime("%Y-%m-%d %H:%M:%S") if last_character_count_time else None
     }
