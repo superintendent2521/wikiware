@@ -26,11 +26,17 @@
     <div class="page-header">
         <h2>{{ page.title }}</h2>
         <div class="page-actions">
-            <a href="/edit/{{ page.title }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
-            <a href="/history/{{ page.title }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
+            <a href="/edit/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
+            <a href="/history/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
             <a href="/" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
         </div>
     </div>
+
+    {% if branch %}
+    <div class="branch-info">
+        <p><strong>Current Branch:</strong> {{ branch }}</p>
+    </div>
+    {% endif %}
 
     {% if request.query_params.get('updated') %}
     <div class="alert alert-success">

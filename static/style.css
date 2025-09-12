@@ -975,3 +975,58 @@ footer p {
         font-size: var(--font-size-xl);
     }
 }
+
+/* Branch UI Styles */
+.branch-selector {
+    background: var(--secondary-white);
+    padding: var(--space-md);
+    border-radius: var(--border-radius-sm);
+    margin-bottom: var(--space-lg);
+    border: var(--border-width) solid var(--light-gray);
+}
+
+.branch-selector label {
+    font-weight: var(--font-weight-medium);
+    color: var(--darker-gray);
+    margin-right: var(--space-xs);
+}
+
+.branch-selector select {
+    padding: var(--space-xs) var(--space-sm);
+    border: var(--border-width) solid var(--medium-gray);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--primary-white);
+    color: var(--darker-gray);
+    font-size: var(--font-size-sm);
+    transition: border-color var(--transition-fast);
+}
+
+.branch-selector select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+.branch-info {
+    background: var(--secondary-white);
+    padding: var(--space-md);
+    border-radius: var(--border-radius-sm);
+    margin-bottom: var(--space-lg);
+    border-left: 4px solid var(--accent-teal);
+}
+
+.branch-info p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--dark-gray);
+}
+
+.branch-info summary {
+    font-weight: var(--font-weight-medium);
+    color: var(--darker-gray);
+    cursor: pointer;
+    margin-bottom: var(--space-sm);
+}
+
+.branch-info details[open] summary {
+    margin-bottom: var(--space-md);
+}

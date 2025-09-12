@@ -48,6 +48,9 @@ def get_pages_collection():
 def get_history_collection():
     return db_instance.get_collection("history")
 
+def get_branches_collection():
+    return db_instance.get_collection("branches")
+
 # Helper functions
 async def create_indexes():
     if db_instance.is_connected:

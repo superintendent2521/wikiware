@@ -16,12 +16,25 @@
                     <a href="/"><i class="fas fa-home"></i> Home</a>
                     <a href="/search"><i class="fas fa-search"></i> Search</a>
                     <a href="/stats"><i class="fas fa-chart-bar"></i> Stats</a>
+                    {% if branches %}
+                    <div class="branch-selector">
+                        <form action="/set-branch" method="post">
+                            <label for="branch">Branch:</label>
+                            <select name="branch" id="branch" onchange="this.form.submit()">
+                                {% for b in branches %}
+                                <option value="{{ b }}" {% if b == branch %}selected{% endif %}>{{ b }}</option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    </div>
+                    {% endif %}
                     <button id="dark-mode-toggle" class="btn btn-secondary btn-small"><i class="fas fa-moon"></i> Dark Mode</button>
                     {% if offline %}
                     <span class="offline-indicator"><i class="fas fa-exclamation-triangle"></i> Offline Mode</span>
                     {% endif %}
                     <form action="/search" method="get" class="search-form">
                         <input type="text" name="q" placeholder="Search wiki..." value="{{ request.query_params.get('q', '') }}">
+                        <input type="hidden" name="branch" value="{{ branch or 'main' }}">
                         <button type="submit"><i class="fas fa-search"></i></button>
                     </form>
                 </div>

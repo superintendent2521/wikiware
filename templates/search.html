@@ -9,6 +9,7 @@
             <h2>Search Results</h2>
             <form action="/search" method="get" class="search-form-large">
                 <input type="text" name="q" placeholder="Search wiki pages..." value="{{ query }}" required>
+                <input type="hidden" name="branch" value="{{ branch or 'main' }}">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Search</button>
             </form>
         </div>
@@ -20,16 +21,16 @@
             <div class="page-list">
                 {% for page in pages %}
                 <div class="page-item">
-                    <h4><a href="/page/{{ page.title }}">{{ page.title }}</a></h4>
-                    <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}</p>
+                    <h4><a href="/page/{{ page.title }}?branch={{ page.branch or 'main' }}">{{ page.title }}</a></h4>
+                    <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}{% if page.branch and page.branch != 'main' %} (Branch: {{ page.branch }}){% endif %}</p>
                     <div class="page-preview">
                         {% if page.content %}
                         {{ page.content[:200] }}...
                         {% endif %}
                     </div>
                     <div class="page-actions">
-                        <a href="/page/{{ page.title }}" class="btn btn-primary"><i class="fas fa-eye"></i> View</a>
-                        <a href="/edit/{{ page.title }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit</a>
+                        <a href="/page/{{ page.title }}?branch={{ page.branch or 'main' }}" class="btn btn-primary"><i class="fas fa-eye"></i> View</a>
+                        <a href="/edit/{{ page.title }}?branch={{ page.branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit</a>
                     </div>
                 </div>
                 {% endfor %}

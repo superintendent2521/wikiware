@@ -34,9 +34,9 @@
         <div class="page-list">
             {% for page in pages %}
             <div class="page-item">
-                <h4><a href="/page/{{ page.title }}">{{ page.title }}</a></h4>
-                <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}</p>
-                <a href="/edit/{{ page.title }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit</a>
+                <h4><a href="/page/{{ page.title }}?branch={{ page.branch or 'main' }}">{{ page.title }}</a></h4>
+                <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}{% if page.branch and page.branch != 'main' %} (Branch: {{ page.branch }}){% endif %}</p>
+                <a href="/edit/{{ page.title }}?branch={{ page.branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit</a>
             </div>
             {% endfor %}
         </div>
