@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import os
-from .database import get_pages_collection, get_history_collection
 from loguru import logger
+from .database import get_pages_collection, get_history_collection
 
 # Caching variables for stats
 last_character_count = 0
