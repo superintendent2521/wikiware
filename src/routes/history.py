@@ -8,6 +8,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from typing import List, Dict, Any
 import markdown
+from ..utils.markdown_extensions import InternalLinkExtension
+from ..utils.link_processor import process_internal_links
 from ..database import get_pages_collection, get_history_collection, db_instance
 from ..services.branch_service import BranchService
 from ..utils.validation import is_valid_title
@@ -114,7 +116,11 @@ async def view_version(request: Request, title: str, version_index: int, branch:
             return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": False})
 
         try:
-            page["html_content"] = markdown.markdown(page["content"])
+            # First process internal links with our custom processor
+            processed_content = process_internal_links(page["content"])
+            # Then render as Markdown (with any remaining Markdown syntax)
+            md = markdown.Markdown()
+            page["html_content"] = md.convert(processed_content)
         except Exception as md_error:
             logger.error(f"Error rendering markdown for version {version_index} of {title} on branch {branch}: {str(md_error)}")
             page["html_content"] = page["content"]  # Fallback to raw content

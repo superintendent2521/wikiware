@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, TEMPLATE_DIR
 from .database import init_database
-from .routes import pages, search, history, branches, uploads, stats
+from .routes import pages, search, history, branches, uploads, stats, logs
 from loguru import logger
 import os
 
@@ -29,6 +29,7 @@ app.include_router(history.router)
 app.include_router(branches.router)
 app.include_router(uploads.router)
 app.include_router(stats.router)
+app.include_router(logs.router)
 
 # Startup event
 @app.on_event("startup")

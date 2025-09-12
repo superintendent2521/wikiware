@@ -8,6 +8,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional
 import markdown
+from ..utils.markdown_extensions import InternalLinkExtension
+from ..utils.link_processor import process_internal_links
 from ..services.page_service import PageService
 from ..services.branch_service import BranchService
 from ..database import db_instance
@@ -25,7 +27,7 @@ async def home(request: Request, branch: str = "main"):
     if not db_instance.is_connected:
         return templates.TemplateResponse("home.html", {"request": request, "pages": [], "offline": True, "branch": branch})
 
-    # Get available branches
+    # Get available branches for home page
     branches = await BranchService.get_available_branches()
 
     # Get pages for the branch
@@ -58,7 +60,11 @@ async def get_page(request: Request, title: str, branch: str = "main"):
             logger.info(f"Page not found - viewing edit page: {title} on branch: {branch}")
             return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": False, "branch": branch, "branches": branches})
 
-        page["html_content"] = markdown.markdown(page["content"])
+        # First process internal links with our custom processor
+        processed_content = process_internal_links(page["content"])
+        # Then render as Markdown (with any remaining Markdown syntax)
+        md = markdown.Markdown()
+        page["html_content"] = md.convert(processed_content)
         logger.info(f"Page viewed: {title} on branch: {branch}")
         return templates.TemplateResponse("page.html", {"request": request, "page": page, "branch": branch, "offline": False, "branches": branches})
     except Exception as e:
@@ -74,8 +80,8 @@ async def edit_page(request: Request, title: str, branch: str = "main"):
             logger.warning(f"Database not connected - editing page: {title} on branch: {branch}")
             return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True})
 
-        # Get available branches
-        branches = await BranchService.get_available_branches()
+        # Get branches specific to this page
+        branches = await BranchService.get_branches_for_page(title)
 
         # Get existing content
         content = ""
