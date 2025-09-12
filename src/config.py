@@ -1,0 +1,38 @@
+"""
+Configuration module for WikiWare.
+Centralizes all configuration settings and environment variables.
+"""
+
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Server configuration
+PORT = int(os.getenv("PORT", "8000"))
+DEV = os.getenv("DEV", "false").lower() == "true"
+HOST = os.getenv("HOST", "0.0.0.0")
+
+# Database configuration
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+
+# Application settings
+APP_TITLE = "WikiWare"
+APP_DESCRIPTION = "A simple wiki software"
+
+# File upload settings
+UPLOAD_DIR = "static/uploads"
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+
+# Logging settings
+LOG_DIR = "logs"
+LOG_RETENTION = "7 days"
+LOG_LEVEL = "INFO"
+
+# Template settings
+TEMPLATE_DIR = "templates"
+
+# Static files settings
+STATIC_DIR = "static"
