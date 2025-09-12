@@ -1,0 +1,208 @@
+"""
+Page service layer for WikiWare.
+Contains business logic for page operations.
+"""
+
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+from ..database import get_pages_collection, get_history_collection, db_instance
+from ..models.page import WikiPage
+from loguru import logger
+
+
+class PageService:
+    """Service class for page-related operations."""
+
+    @staticmethod
+    async def get_page(title: str, branch: str = "main") -> Optional[Dict[str, Any]]:
+        """
+        Get a page by title and branch.
+
+        Args:
+            title: Page title
+            branch: Branch name
+
+        Returns:
+            Page document or None if not found
+        """
+        try:
+            if not db_instance.is_connected:
+                logger.warning(f"Database not connected - cannot get page: {title} on branch: {branch}")
+                return None
+
+            pages_collection = get_pages_collection()
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return None
+
+            page = await pages_collection.find_one({"title": title, "branch": branch})
+            return page
+        except Exception as e:
+            logger.error(f"Error getting page {title} on branch {branch}: {str(e)}")
+            return None
+
+    @staticmethod
+    async def create_page(title: str, content: str, author: str = "Anonymous", branch: str = "main") -> bool:
+        """
+        Create a new page.
+
+        Args:
+            title: Page title
+            content: Page content
+            author: Author name
+            branch: Branch name
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not db_instance.is_connected:
+                logger.error(f"Database not connected - cannot create page: {title} on branch: {branch}")
+                return False
+
+            pages_collection = get_pages_collection()
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return False
+
+            page_data = {
+                "title": title,
+                "content": content,
+                "author": author,
+                "branch": branch,
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
+            }
+
+            await pages_collection.insert_one(page_data)
+            logger.info(f"Page created: {title} on branch: {branch} by {author}")
+            return True
+        except Exception as e:
+            logger.error(f"Error creating page {title} on branch {branch}: {str(e)}")
+            return False
+
+    @staticmethod
+    async def update_page(title: str, content: str, author: str = "Anonymous", branch: str = "main") -> bool:
+        """
+        Update an existing page.
+
+        Args:
+            title: Page title
+            content: New content
+            author: Author name
+            branch: Branch name
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not db_instance.is_connected:
+                logger.error(f"Database not connected - cannot update page: {title} on branch: {branch}")
+                return False
+
+            pages_collection = get_pages_collection()
+            history_collection = get_history_collection()
+
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return False
+
+            # Get existing page
+            existing_page = await pages_collection.find_one({"title": title, "branch": branch})
+
+            if existing_page:
+                # Save to history
+                if history_collection is not None:
+                    history_item = {
+                        "title": title,
+                        "content": existing_page["content"],
+                        "author": existing_page.get("author", "Anonymous"),
+                        "branch": branch,
+                        "updated_at": existing_page["updated_at"]
+                    }
+                    await history_collection.insert_one(history_item)
+
+                # Update page
+                await pages_collection.update_one(
+                    {"title": title, "branch": branch},
+                    {"$set": {
+                        "content": content,
+                        "author": author,
+                        "updated_at": datetime.now(timezone.utc)
+                    }}
+                )
+                logger.info(f"Page updated: {title} on branch: {branch} by {author}")
+                return True
+            else:
+                # Create new page if it doesn't exist
+                return await PageService.create_page(title, content, author, branch)
+        except Exception as e:
+            logger.error(f"Error updating page {title} on branch {branch}: {str(e)}")
+            return False
+
+    @staticmethod
+    async def get_pages_by_branch(branch: str = "main", limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Get all pages for a specific branch.
+
+        Args:
+            branch: Branch name
+            limit: Maximum number of pages to return
+
+        Returns:
+            List of page documents
+        """
+        try:
+            if not db_instance.is_connected:
+                logger.warning(f"Database not connected - cannot get pages for branch: {branch}")
+                return []
+
+            pages_collection = get_pages_collection()
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return []
+
+            pages = await pages_collection.find({"branch": branch}).sort("updated_at", -1).to_list(limit)
+            return pages
+        except Exception as e:
+            logger.error(f"Error getting pages for branch {branch}: {str(e)}")
+            return []
+
+    @staticmethod
+    async def search_pages(query: str, branch: str = "main", limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Search pages by title or content.
+
+        Args:
+            query: Search query
+            branch: Branch name
+            limit: Maximum number of results
+
+        Returns:
+            List of matching page documents
+        """
+        try:
+            if not db_instance.is_connected:
+                logger.warning(f"Database not connected - cannot search pages with query: {query}")
+                return []
+
+            pages_collection = get_pages_collection()
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return []
+
+            pages = await pages_collection.find({
+                "$and": [
+                    {"branch": branch},
+                    {"$or": [
+                        {"title": {"$regex": query, "$options": "i"}},
+                        {"content": {"$regex": query, "$options": "i"}}
+                    ]}
+                ]
+            }).to_list(limit)
+
+            logger.info(f"Search performed: '{query}' on branch '{branch}' - found {len(pages)} results")
+            return pages
+        except Exception as e:
+            logger.error(f"Error searching pages with query '{query}' on branch '{branch}': {str(e)}")
+            return []
