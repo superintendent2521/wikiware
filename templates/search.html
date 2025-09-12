@@ -36,7 +36,7 @@
                 {% endfor %}
             </div>
             {% else %}
-            <p>No pages found matching "{{ query }}". <a href="/edit/{{ query }}">Create this page?</a></p>
+            <p>No pages found matching "{{ query }}". <a href="/edit/{{ query }}?branch={{ branch or 'main' }}">Create this page?</a></p>
             {% endif %}
         </div>
         {% else %}
@@ -45,8 +45,8 @@
             <p>Enter a search term above to find wiki pages by title or content.</p>
             <p>You can also:</p>
             <ul>
-                <li><a href="/">Browse all pages</a></li>
-                <li><a href="/edit/Home">Create a new page</a></li>
+                <li><a href="/?branch={{ branch or 'main' }}">Browse all pages</a></li>
+                <li><a href="/edit/Home?branch={{ branch or 'main' }}">Create a new page</a></li>
             </ul>
         </div>
         {% endif %}

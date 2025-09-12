@@ -16,18 +16,7 @@
                     <a href="/"><i class="fas fa-home"></i> Home</a>
                     <a href="/search"><i class="fas fa-search"></i> Search</a>
                     <a href="/stats"><i class="fas fa-chart-bar"></i> Stats</a>
-                    {% if branches %}
-                    <div class="branch-selector">
-                        <form action="/set-branch" method="post">
-                            <label for="branch">Branch:</label>
-                            <select name="branch" id="branch" onchange="this.form.submit()">
-                                {% for b in branches %}
-                                <option value="{{ b }}" {% if b == branch %}selected{% endif %}>{{ b }}</option>
-                                {% endfor %}
-                            </select>
-                        </form>
-                    </div>
-                    {% endif %}
+
                     <button id="dark-mode-toggle" class="btn btn-secondary btn-small"><i class="fas fa-moon"></i> Dark Mode</button>
                     {% if offline %}
                     <span class="offline-indicator"><i class="fas fa-exclamation-triangle"></i> Offline Mode</span>
@@ -55,11 +44,11 @@
         document.addEventListener('DOMContentLoaded', function() {
             const toggleButton = document.getElementById('dark-mode-toggle');
             const themeIcon = toggleButton.querySelector('i');
-            
+
             // Check for saved theme preference or respect OS preference
             const savedTheme = localStorage.getItem('theme');
             const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
-            
+
             // Set initial theme
             if (savedTheme === 'dark' || (!savedTheme && prefersDarkScheme.matches)) {
                 document.documentElement.setAttribute('data-theme', 'dark');
@@ -67,11 +56,11 @@
                 themeIcon.classList.add('fa-sun');
                 toggleButton.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
             }
-            
+
             // Toggle theme when button is clicked
             toggleButton.addEventListener('click', function() {
                 const currentTheme = document.documentElement.getAttribute('data-theme');
-                
+
                 if (currentTheme === 'dark') {
                     document.documentElement.removeAttribute('data-theme');
                     localStorage.setItem('theme', 'light');
@@ -84,6 +73,51 @@
                     themeIcon.classList.remove('fa-moon');
                     themeIcon.classList.add('fa-sun');
                     toggleButton.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+                }
+            });
+
+            // Branch selector functionality
+            const branchSelectors = document.querySelectorAll('.branch-selector');
+
+            branchSelectors.forEach(selector => {
+                const button = selector.querySelector('.branch-button');
+                const dropdown = selector.querySelector('.branch-dropdown');
+                const options = selector.querySelectorAll('.branch-option');
+
+                // Toggle dropdown
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    selector.classList.toggle('open');
+
+                    // Close other branch selectors
+                    branchSelectors.forEach(otherSelector => {
+                        if (otherSelector !== selector) {
+                            otherSelector.classList.remove('open');
+                        }
+                    });
+                });
+
+                // Handle option selection
+                options.forEach(option => {
+                    option.addEventListener('click', function() {
+                        const selectedBranch = this.getAttribute('data-branch');
+                        const currentUrl = new URL(window.location.href);
+
+                        // Update URL parameter
+                        currentUrl.searchParams.set('branch', selectedBranch);
+
+                        // Navigate to new URL
+                        window.location.href = currentUrl.toString();
+                    });
+                });
+            });
+
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.branch-selector')) {
+                    branchSelectors.forEach(selector => {
+                        selector.classList.remove('open');
+                    });
                 }
             });
         });

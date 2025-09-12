@@ -56,7 +56,15 @@ async def create_indexes():
     if db_instance.is_connected:
         pages = get_pages_collection()
         if pages is not None:
-            await pages.create_index("title", unique=True)
+            # Drop the old unique index on title alone if it exists
+            try:
+                await pages.drop_index("title_1")
+                print("Dropped old unique index on title")
+            except:
+                pass  # Index might not exist, that's fine
+
+            # Create compound unique index on title and branch
+            await pages.create_index([("title", 1), ("branch", 1)], unique=True)
             await pages.create_index("updated_at")
             print("Database indexes created")
 

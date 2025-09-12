@@ -24,11 +24,30 @@
     {% endif %}
 
     <div class="page-header">
-        <h2>{{ page.title }}</h2>
+        <div class="page-title-section">
+            <h2>{{ page.title }}</h2>
+            {% if branches %}
+            <div class="branch-selector" id="page-branch-selector">
+                <button type="button" class="branch-button" id="page-branch-button">
+                    <i class="fas fa-code-branch branch-icon"></i>
+                    <span class="branch-name">{{ branch or 'main' }}</span>
+                    <i class="fas fa-chevron-down dropdown-icon"></i>
+                </button>
+                <div class="branch-dropdown" id="page-branch-dropdown">
+                    {% for b in branches %}
+                    <div class="branch-option {% if b == (branch or 'main') %}current{% endif %}" data-branch="{{ b }}">
+                        <i class="fas fa-code-branch branch-icon"></i>
+                        <span>{{ b }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
         <div class="page-actions">
             <a href="/edit/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
             <a href="/history/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
-            <a href="/" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
+            <a href="/?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
         </div>
     </div>
 
@@ -62,7 +81,7 @@
     </div>
 
     <div class="page-footer">
-        <a href="/edit/{{ page.title }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit this page</a>
+        <a href="/edit/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit this page</a>
     </div>
 </div>
 {% endblock %}

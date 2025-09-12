@@ -64,22 +64,22 @@ async def home(request: Request, branch: str = "main"):
 
     pages_collection = get_pages_collection()
     branches_collection = get_branches_collection()
-    
+
     # Get available branches
     branches = ["main"]
     if branches_collection is not None:
         branch_docs = await branches_collection.find().to_list(100)
         branches = list(set(["main"] + [doc["branch_name"] for doc in branch_docs]))
-    
+
     if pages_collection is not None:
         pages = await pages_collection.find({"branch": branch}).sort("updated_at", -1).to_list(100)
     else:
         pages = []
 
     return templates.TemplateResponse("home.html", {
-        "request": request, 
-        "pages": pages, 
-        "offline": not db_instance.is_connected, 
+        "request": request,
+        "pages": pages,
+        "offline": not db_instance.is_connected,
         "branch": branch,
         "branches": branches
     })
@@ -93,12 +93,17 @@ async def get_page(request: Request, title: str, branch: str = "main"):
 
         pages_collection = get_pages_collection()
         branches_collection = get_branches_collection()
-        
-        # Get available branches
+
+        # Get page-specific branches
         branches = ["main"]
         if branches_collection is not None:
-            branch_docs = await branches_collection.find().to_list(100)
+            branch_docs = await branches_collection.find({"page_title": title}).to_list(100)
             branches = list(set(["main"] + [doc["branch_name"] for doc in branch_docs]))
+
+        # Also check if there are any branches in the pages collection for this title
+        if pages_collection is not None:
+            page_branches = await pages_collection.distinct("branch", {"title": title})
+            branches = list(set(branches + page_branches))
         
         if pages_collection is not None:
             page = await pages_collection.find_one({"title": title, "branch": branch})
@@ -342,7 +347,7 @@ async def view_version(request: Request, title: str, version_index: int, branch:
         return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "An error occurred while loading version"})
 
 @app.post("/restore/{title}/{version_index}")
-async def restore_version(title: str, version_index: int, branch: str = "main"):
+async def restore_version(title: str, version_index: int, branch: str = Form("main")):
     try:
         # Sanitize title to prevent path traversal or other issues
         if not is_valid_title(title):

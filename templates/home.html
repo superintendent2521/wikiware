@@ -18,7 +18,8 @@
             event.preventDefault();
             const title = document.getElementById('new_page_title').value.trim();
             if (title) {
-                window.location.href = '/edit/' + encodeURIComponent(title);
+                const currentBranch = '{{ branch or "main" }}';
+                window.location.href = '/edit/' + encodeURIComponent(title) + '?branch=' + encodeURIComponent(currentBranch);
             }
         }
     </script>
@@ -41,7 +42,7 @@
             {% endfor %}
         </div>
         {% else %}
-        <p>No pages yet. <a href="/edit/Home">Create the first one!</a></p>
+        <p>No pages yet. <a href="/edit/Home?branch={{ branch or 'main' }}">Create the first one!</a></p>
         {% endif %}
     </div>
 </div>
