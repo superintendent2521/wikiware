@@ -8,9 +8,11 @@ from fastapi.responses import JSONResponse
 import os
 import uuid
 import shutil
+from pathlib import Path
 from ..config import UPLOAD_DIR, MAX_FILE_SIZE, ALLOWED_IMAGE_TYPES
 from ..utils.validation import sanitize_filename
 from loguru import logger
+import mimetypes
 
 router = APIRouter()
 
@@ -20,31 +22,85 @@ async def upload_image(file: UploadFile = File(...)):
     """Upload an image file."""
     try:
         # Create uploads directory if it doesn't exist
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        upload_path = Path(UPLOAD_DIR)
+        upload_path.mkdir(parents=True, exist_ok=True)
 
-        # Validate file type
+        # Validate file type by content type and magic bytes
         if file.content_type not in ALLOWED_IMAGE_TYPES:
             return JSONResponse(
                 status_code=400,
                 content={"error": "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed."}
             )
 
-        # Validate file size
-        contents = await file.read()
-        if len(contents) > MAX_FILE_SIZE:
+        # Read first 256 bytes to check magic numbers
+        header = await file.read(256)
+        await file.seek(0)
+
+        # Check magic numbers for image types
+        magic_bytes = {
+            "image/jpeg": b"\xff\xd8\xff",
+            "image/png": b"\x89PNG\r\n\x1a\n",
+            "image/gif": b"GIF87a",
+            "image/webp": b"RIFF----WEBP"
+        }
+
+        if not any(header.startswith(magic) for magic in magic_bytes.values()):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid file type. File does not match expected image signature."}
+            )
+
+        # Validate file size without loading entire file into memory
+        if file.size is not None and file.size > MAX_FILE_SIZE:
             return JSONResponse(
                 status_code=400,
                 content={"error": f"File too large. Maximum file size is {MAX_FILE_SIZE // (1024 * 1024)}MB."}
             )
 
-        # Reset file pointer
-        await file.seek(0)
+        # If file.size is not available, stream and count bytes
+        if file.size is None:
+            content_length = 0
+            while True:
+                chunk = await file.read(8192)
+                if not chunk:
+                    break
+                content_length += len(chunk)
+                if content_length > MAX_FILE_SIZE:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": f"File too large. Maximum file size is {MAX_FILE_SIZE // (1024 * 1024)}MB."}
+                    )
+            await file.seek(0)
 
         # Generate unique filename
-        file_extension = file.filename.split(".")[-1] if "." in file.filename else ""
+        original_extension = file.filename.split(".")[-1] if "." in file.filename else ""
         sanitized_filename = sanitize_filename(file.filename)
+        
+        # Validate extension after sanitization
+        if original_extension and original_extension.lower() not in ["jpg", "jpeg", "png", "gif", "webp"]:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid file extension. Only .jpg, .jpeg, .png, .gif, and .webp are allowed."}
+            )
+
+        # Map content type to extension for consistency
+        extension_map = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/gif": "gif",
+            "image/webp": "webp"
+        }
+        file_extension = extension_map.get(file.content_type, original_extension.lower())
+
+        # Ensure sanitized filename doesn't contain dangerous patterns
+        if not sanitized_filename or ".." in sanitized_filename or "\0" in sanitized_filename:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid filename."}
+            )
+
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
-        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        file_path = upload_path / unique_filename
 
         # Save file
         with open(file_path, "wb") as buffer:
