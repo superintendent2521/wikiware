@@ -13,12 +13,18 @@
     <div class="page-header">
         <h2>Version {{ version_num }} of {{ page.title }}</h2>
         <div class="page-actions">
-            <a href="/history/{{ page.title }}" class="btn btn-primary">View All History</a>
-            <a href="/page/{{ page.title }}" class="btn btn-secondary">View Current</a>
-            <a href="/edit/{{ page.title }}" class="btn btn-secondary">Edit Page</a>
-            <a href="/" class="btn btn-secondary">Back to Home</a>
+            <a href="/history/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-primary">View All History</a>
+            <a href="/page/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-secondary">View Current</a>
+            <a href="/edit/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-secondary">Edit Page</a>
+            <a href="/?branch={{ branch or 'main' }}" class="btn btn-secondary">Back to Home</a>
         </div>
     </div>
+
+    {% if branch %}
+    <div class="branch-info">
+        <p><strong>Current Branch:</strong> {{ branch }}</p>
+    </div>
+    {% endif %}
 
     <div class="page-meta">
         <p>
@@ -33,6 +39,7 @@
 
     <div class="page-footer">
         <form action="/restore/{{ page.title }}/{{ version_index }}" method="post">
+            <input type="hidden" name="branch" value="{{ branch or 'main' }}">
             <button type="submit" class="btn btn-primary" 
                     onclick="return confirm('Are you sure you want to restore this version?')">Restore This Version</button>
         </form>

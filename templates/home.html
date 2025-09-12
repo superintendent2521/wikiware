@@ -18,7 +18,8 @@
             event.preventDefault();
             const title = document.getElementById('new_page_title').value.trim();
             if (title) {
-                window.location.href = '/edit/' + encodeURIComponent(title);
+                const currentBranch = '{{ branch or "main" }}';
+                window.location.href = '/edit/' + encodeURIComponent(title) + '?branch=' + encodeURIComponent(currentBranch);
             }
         }
     </script>
@@ -34,14 +35,14 @@
         <div class="page-list">
             {% for page in pages %}
             <div class="page-item">
-                <h4><a href="/page/{{ page.title }}">{{ page.title }}</a></h4>
-                <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}</p>
-                <a href="/edit/{{ page.title }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit</a>
+                <h4><a href="/page/{{ page.title }}?branch={{ page.branch or 'main' }}">{{ page.title }}</a></h4>
+                <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}{% if page.branch and page.branch != 'main' %} (Branch: {{ page.branch }}){% endif %}</p>
+                <a href="/edit/{{ page.title }}?branch={{ page.branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit</a>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <p>No pages yet. <a href="/edit/Home">Create the first one!</a></p>
+        <p>No pages yet. <a href="/edit/Home?branch={{ branch or 'main' }}">Create the first one!</a></p>
         {% endif %}
     </div>
 </div>

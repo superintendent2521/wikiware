@@ -37,14 +37,48 @@
     <div class="edit-header">
         <h2>Editing: {{ title }}</h2>
         <div class="edit-actions">
-            <a href="/page/{{ title }}" class="btn btn-secondary"><i class="fas fa-eye"></i> View Page</a>
-            <a href="/history/{{ title }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
-            <a href="/" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
+            <a href="/page/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-eye"></i> View Page</a>
+            <a href="/history/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
+            <a href="/?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
         </div>
+    </div>
+
+    {% if branch %}
+    <div class="branch-info">
+        <p><strong>Current Branch:</strong> {{ branch }}</p>
+    </div>
+    {% endif %}
+
+    <div class="branch-info">
+        <details>
+            <summary>Branch Management</summary>
+            <form action="/branches/{{ title }}/create" method="post">
+                <input type="hidden" name="branch" value="{{ branch or 'main' }}">
+                <div class="form-group">
+                    <label for="branch_name">New Branch Name:</label>
+                    <input type="text" id="branch_name" name="branch_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="source_branch">Source Branch:</label>
+                    <select name="source_branch" id="source_branch">
+                        <option value="main">main</option>
+                        {% if branches %}
+                        {% for b in branches %}
+                        {% if b != 'main' %}
+                        <option value="{{ b }}" {% if b == (branch or 'main') %}selected{% endif %}>{{ b }}</option>
+                        {% endif %}
+                        {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Branch</button>
+            </form>
+        </details>
     </div>
 
     <div class="edit-form-container">
         <form action="/edit/{{ title }}" method="post">
+            <input type="hidden" name="branch" value="{{ branch or 'main' }}">
             <div class="form-group">
                 <label for="author">Author:</label>
                 <input type="text" id="author" name="author" value="Anonymous" required>
@@ -62,7 +96,7 @@
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Page</button>
-                <a href="/page/{{ title }}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
+                <a href="/page/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
             </div>
         </form>
     </div>
