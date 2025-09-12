@@ -304,13 +304,22 @@ main {
 .page-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: var(--space-lg);
     padding-bottom: var(--space-lg);
     border-bottom: var(--border-width) solid var(--light-gray);
+    gap: var(--space-lg);
 }
 
-.page-header h2 {
+.page-title-section {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.page-title-section h2 {
     color: var(--darker-gray);
     font-size: var(--font-size-xxl);
     font-weight: var(--font-weight-bold);
@@ -890,6 +899,11 @@ footer p {
         text-align: center;
         padding-bottom: var(--space-md);
     }
+
+    .page-title-section {
+        justify-content: center;
+        text-align: center;
+    }
     
     .edit-header {
         flex-direction: column;
@@ -974,4 +988,138 @@ footer p {
     .stat-number {
         font-size: var(--font-size-xl);
     }
+}
+
+/* Branch UI Styles */
+.branch-selector {
+    position: relative;
+    display: inline-block;
+}
+
+.branch-selector .branch-button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--secondary-white);
+    border: var(--border-width) solid var(--medium-gray);
+    border-radius: var(--border-radius-sm);
+    color: var(--darker-gray);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    min-width: 120px;
+    justify-content: space-between;
+}
+
+.branch-selector .branch-button:hover {
+    background: var(--light-gray);
+    border-color: var(--dark-gray);
+}
+
+.branch-selector .branch-button:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.branch-selector .branch-icon {
+    font-size: var(--font-size-xs);
+    color: var(--dark-gray);
+}
+
+.branch-selector .branch-name {
+    flex: 1;
+    text-align: left;
+}
+
+.branch-selector .dropdown-icon {
+    font-size: var(--font-size-xs);
+    transition: transform var(--transition-fast);
+}
+
+.branch-selector.open .dropdown-icon {
+    transform: rotate(180deg);
+}
+
+.branch-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--primary-white);
+    border: var(--border-width) solid var(--medium-gray);
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--box-shadow-md);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 2px;
+    display: none;
+}
+
+.branch-selector.open .branch-dropdown {
+    display: block;
+}
+
+.branch-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    border-bottom: var(--border-width) solid var(--light-gray);
+}
+
+.branch-option:last-child {
+    border-bottom: none;
+}
+
+.branch-option:hover {
+    background: var(--secondary-white);
+}
+
+.branch-option.current {
+    background: var(--accent-blue);
+    color: var(--primary-white);
+}
+
+.branch-option.current:hover {
+    background: var(--accent-blue-dark);
+}
+
+.branch-option .branch-icon {
+    font-size: var(--font-size-sm);
+    color: var(--accent-teal);
+}
+
+.branch-option.current .branch-icon {
+    color: var(--primary-white);
+}
+
+.branch-info {
+    background: var(--secondary-white);
+    padding: var(--space-md);
+    border-radius: var(--border-radius-sm);
+    margin-bottom: var(--space-lg);
+    border-left: 4px solid var(--accent-teal);
+}
+
+.branch-info p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--dark-gray);
+}
+
+.branch-info summary {
+    font-weight: var(--font-weight-medium);
+    color: var(--darker-gray);
+    cursor: pointer;
+    margin-bottom: var(--space-sm);
+}
+
+.branch-info details[open] summary {
+    margin-bottom: var(--space-md);
 }

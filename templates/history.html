@@ -13,11 +13,17 @@
     <div class="page-header">
         <h2>History of {{ title }}</h2>
         <div class="page-actions">
-            <a href="/page/{{ title }}" class="btn btn-primary"><i class="fas fa-eye"></i> View Page</a>
-            <a href="/edit/{{ title }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit Page</a>
-            <a href="/" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
+            <a href="/page/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-primary"><i class="fas fa-eye"></i> View Page</a>
+            <a href="/edit/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit Page</a>
+            <a href="/?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
         </div>
     </div>
+
+    {% if branch %}
+    <div class="branch-info">
+        <p><strong>Current Branch:</strong> {{ branch }}</p>
+    </div>
+    {% endif %}
     <div class="page-meta">
         <p>
             <strong>Revision History system works by having the newest version be the lowest number, Read more <a href="/help/revision_history">here</a>.</strong><br>
@@ -42,9 +48,10 @@
                     <td>{{ version.author }}</td>
                     <td>{{ version.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td>
-                        <a href="/history/{{ title }}/{{ loop.index0 }}" class="btn btn-small btn-secondary"><i class="fas fa-eye"></i> View</a>
+                        <a href="/history/{{ title }}/{{ loop.index0 }}?branch={{ branch or 'main' }}" class="btn btn-small btn-secondary"><i class="fas fa-eye"></i> View</a>
                         <form action="/restore/{{ title }}/{{ loop.index0 }}" method="post" style="display: inline;">
-                            <button type="submit" class="btn btn-small btn-warning" 
+                            <input type="hidden" name="branch" value="{{ branch or 'main' }}">
+                            <button type="submit" class="btn btn-small btn-warning"
                                     onclick="return confirm('Are you sure you want to restore this version?')"><i class="fas fa-undo"></i> Restore</button>
                         </form>
                     </td>
