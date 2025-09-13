@@ -84,6 +84,15 @@
         </details>
     </div>
 
+    <div class="edit-stats">
+        <h4>Wiki Stats</h4>
+        <ul>
+            <li><strong>Edits:</strong> {{ global.edits }}</li>
+            <li><strong>Pages:</strong> {{ global.pages }}</li>
+            <li><strong>Characters:</strong> {{ global.characters }}</li>
+        </ul>
+    </div>
+
     <div class="edit-form-container">
         <form action="/edit/{{ title }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

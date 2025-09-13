@@ -18,6 +18,23 @@ router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 
+# Context processor to inject global stats into all templates
+async def global_stats_context(request: Request):
+    """Inject global statistics into all templates."""
+    if not db_instance.is_connected:
+        return {"global": {"edits": 0, "pages": 0, "characters": 0, "images": 0, "last_updated": None}}
+    
+    stats = await get_stats()
+    return {
+        "global": {
+            "edits": stats["total_edits"],
+            "pages": stats["total_pages"],
+            "characters": stats["total_characters"],
+            "images": stats["total_images"],
+            "last_updated": stats["last_updated"]
+        }
+    }
+
 @router.get("/stats", response_class=HTMLResponse)
 async def stats_page(request: Request, response: Response, branch: str = "main", csrf_protect: CsrfProtect = Depends()):
     """Display wiki statistics page."""
@@ -64,3 +81,6 @@ async def stats_page(request: Request, response: Response, branch: str = "main",
         if signed_token_e:
             csrf_protect.set_csrf_cookie(signed_token_e, template)
         return template
+
+# Register the context processor with Jinja2
+templates.env.globals.update(global_stats_context=global_stats_context)

@@ -16,6 +16,7 @@ from ..database import db_instance, get_pages_collection
 from ..utils.validation import is_valid_title
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
+from ..stats import get_stats
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
@@ -88,7 +89,7 @@ async def get_page(request: Request, response: Response, title: str, branch: str
             return template
 
         # First process internal links with our custom processor
-        processed_content = process_internal_links(page["content"])
+        processed_content = await process_internal_links(page["content"])
         # Then render as Markdown (with any remaining Markdown syntax)
         md = markdown.Markdown()
         page["html_content"] = md.convert(processed_content)
@@ -103,7 +104,34 @@ async def get_page(request: Request, response: Response, title: str, branch: str
             csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
         except Exception:
             csrf_token_e, signed_token_e = "", ""
-        template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "csrf_token": csrf_token_e})
+
+        # Get global stats for error fallback (edit.html)
+        if db_instance.is_connected:
+            stats = await get_stats()
+            global_stats = {
+                "edits": stats["total_edits"],
+                "pages": stats["total_pages"],
+                "characters": stats["total_characters"],
+                "images": stats["total_images"],
+                "last_updated": stats["last_updated"]
+            }
+        else:
+            global_stats = {
+                "edits": 0,
+                "pages": 0,
+                "characters": 0,
+                "images": 0,
+                "last_updated": None
+            }
+
+        template = templates.TemplateResponse("edit.html", {
+            "request": request,
+            "title": title,
+            "content": "",
+            "offline": True,
+            "csrf_token": csrf_token_e,
+            "global": global_stats
+        })
         if signed_token_e:
             csrf_protect.set_csrf_cookie(signed_token_e, template)
         return template
@@ -134,7 +162,37 @@ async def edit_page(request: Request, response: Response, title: str, branch: st
             content = page["content"]
 
         logger.info(f"Page edit accessed: {title} on branch: {branch} by user: {user['username']}")
-        template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": content, "branch": branch, "offline": not db_instance.is_connected, "branches": branches, "user": user, "csrf_token": csrf_token})
+        
+        # Get global stats for display in editor
+        if db_instance.is_connected:
+            stats = await get_stats()
+            global_stats = {
+                "edits": stats["total_edits"],
+                "pages": stats["total_pages"],
+                "characters": stats["total_characters"],
+                "images": stats["total_images"],
+                "last_updated": stats["last_updated"]
+            }
+        else:
+            global_stats = {
+                "edits": 0,
+                "pages": 0,
+                "characters": 0,
+                "images": 0,
+                "last_updated": None
+            }
+        
+        template = templates.TemplateResponse("edit.html", {
+            "request": request,
+            "title": title,
+            "content": content,
+            "branch": branch,
+            "offline": not db_instance.is_connected,
+            "branches": branches,
+            "user": user,
+            "csrf_token": csrf_token,
+            "global": global_stats
+        })
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
     except HTTPException:

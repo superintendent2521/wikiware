@@ -5,24 +5,28 @@ Provides a function to convert [[Page Title]] and [[Page:Branch]] syntax to HTML
 
 import re
 from typing import Optional
+from .template_processor import render_template_content
 
-def process_internal_links(content: str) -> str:
+async def process_internal_links(content: str) -> str:
     """
-    Process internal links in page content.
+    Process internal links and template variables in page content.
     Converts [[Page Title]] to <a href="/page/Page%20Title">Page Title</a>
     Converts [[Page:Branch]] to <a href="/page/Page?branch=Branch">Page</a>
+    Also renders Jinja2 template variables like {{ global.edits }}
     
     Args:
-        content: Raw page content with potential [[...]] links
+        content: Raw page content with potential [[...]] links and {{ variables }}
         
     Returns:
-        Content with internal links converted to HTML anchors
+        Content with internal links converted to HTML anchors and template variables rendered
     """
     if not content:
         return content
         
-    # Pattern to match [[Page Title]] and [[Page:Branch]]
-    # Uses non-greedy matching to handle multiple links in one line
+    # First, render any Jinja2 template variables (e.g., {{ global.edits }})
+    content = await render_template_content(content)
+    
+    # Then process internal links
     pattern = r'\[\[([^\]]+?)\]\]'
     
     def replace_link(match):
