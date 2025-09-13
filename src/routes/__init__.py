@@ -4,6 +4,6 @@ This package contains all the route modules for the application.
 """
 
 # Import route modules for easier access
-from . import pages, search, history, branches, uploads, stats, logs, admin
+from . import pages, search, history, branches, uploads, stats, logs, admin, images
 
-__all__ = ['pages', 'search', 'history', 'branches', 'uploads', 'stats', 'logs', 'admin']
+__all__ = ['pages', 'search', 'history', 'branches', 'uploads', 'stats', 'logs', 'admin', 'images']

@@ -156,7 +156,7 @@ async def view_version(request: Request, response: Response, title: str, version
 
         try:
             # First process internal links with our custom processor
-            processed_content = process_internal_links(page["content"])
+            processed_content = await process_internal_links(page["content"])
             # Then render as Markdown (with any remaining Markdown syntax)
             md = markdown.Markdown()
             page["html_content"] = md.convert(processed_content)
@@ -164,11 +164,22 @@ async def view_version(request: Request, response: Response, title: str, version
             logger.error(f"Error rendering markdown for version {version_index} of {title} on branch {branch}: {str(md_error)}")
             page["html_content"] = page["content"]  # Fallback to raw content
 
+        # Compute display version number so that newer versions have higher numbers
+        try:
+            total_history = 0
+            if history_collection is not None:
+                total_history = await history_collection.count_documents({"title": title, "branch": branch})
+            total_versions = 1 + total_history  # include current
+            display_version_num = max(1, total_versions - int(version_index))
+        except Exception:
+            # Fallback to original index if counting fails
+            display_version_num = int(version_index)
+
         logger.info(f"Version viewed: {title} v{version_index} on branch: {branch}")
         template = templates.TemplateResponse("version.html", {
             "request": request,
             "page": page,
-            "version_num": version_index,
+            "version_num": display_version_num,
             "version_index": version_index,
             "branch": branch,
             "offline": not db_instance.is_connected,

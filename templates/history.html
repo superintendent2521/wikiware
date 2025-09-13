@@ -26,7 +26,7 @@
     {% endif %}
     <div class="page-meta">
         <p>
-            <strong>Revision History system works by having the newest version be the lowest number, Read more <a href="/help/revision_history">here</a>.</strong><br>
+            <strong>Revision History numbers increase with newer versions. Read more <a href="/help/revision_history">here</a>.</strong><br>
             <strong>Total Versions:</strong> {{ versions|length }}
         </p>
 
@@ -44,7 +44,7 @@
             <tbody>
                 {% for version in versions %}
                 <tr>
-                    <td>Version {{ loop.index }}</td>
+                    <td>Version {{ versions|length - loop.index0 }}</td>
                     <td>{{ version.author }}</td>
                     <td>{{ version.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td>

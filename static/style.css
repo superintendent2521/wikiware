@@ -54,6 +54,12 @@
     /* Transitions */
     --transition-fast: 0.2s ease;
     --transition-normal: 0.3s ease;
+
+    /* Table (Wikipedia-like) */
+    --table-border: #c8ccd1;            /* subtle gray border */
+    --table-header-bg: #f2f3f5;         /* header background */
+    --table-row-even-bg: #fbfbfc;       /* zebra stripe */
+    --table-row-hover-bg: #f1f5f9;      /* hover */
 }
 
 /* Dark Mode Variables */
@@ -74,6 +80,12 @@
     --success-dark: #229954;
     --error: #e74c3c;
     --error-dark: #c0392b;
+
+    /* Table (Wikipedia-like) - dark */
+    --table-border: #404040;
+    --table-header-bg: #1f1f1f;
+    --table-row-even-bg: #151515;
+    --table-row-hover-bg: #232323;
 }
 
 * {
@@ -361,6 +373,70 @@ main {
     box-shadow: var(--box-shadow-sm);
     margin-bottom: var(--space-lg);
     line-height: 1.8;
+}
+
+/* Wikipedia-like tables in articles */
+.page-content table {
+    width: 100%;
+    margin: var(--space-lg) 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--table-border);
+    border-radius: var(--border-radius-sm);
+    overflow: hidden;
+    background: var(--primary-white);
+}
+
+.page-content th,
+.page-content td {
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+    border-right: 1px solid var(--table-border);
+    border-bottom: 1px solid var(--table-border);
+}
+
+.page-content th {
+    background-color: var(--table-header-bg);
+    font-weight: var(--font-weight-bold);
+    color: var(--darker-gray);
+    font-size: var(--font-size-sm);
+}
+
+.page-content td {
+    color: var(--darker-gray);
+    font-size: var(--font-size-md);
+}
+
+/* Zebra striping for body rows */
+.page-content tbody tr:nth-child(even) td {
+    background-color: var(--table-row-even-bg);
+}
+
+/* Hover state */
+.page-content tbody tr:hover td {
+    background-color: var(--table-row-hover-bg);
+}
+
+/* Remove extra borders on last column/row */
+.page-content tr > *:last-child {
+    border-right: 0;
+}
+.page-content tbody tr:last-child > * {
+    border-bottom: 0;
+}
+
+.page-content caption {
+    caption-side: bottom;
+    margin-top: var(--space-sm);
+    font-style: italic;
+    color: var(--dark-gray);
+    font-size: var(--font-size-sm);
+}
+
+.page-content table img {
+    max-width: 100%;
+    height: auto;
 }
 
 .page-content h1, .page-content h2, .page-content h3 {

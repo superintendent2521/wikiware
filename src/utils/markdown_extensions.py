@@ -1,12 +1,13 @@
 """
 Custom Markdown extensions for WikiWare.
-Adds support for [[Page Title]] internal linking syntax.
+Adds support for [[Page Title]] internal linking syntax and table rendering.
 """
 
 import re
 from markdown.extensions import Extension
 from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString
+from markdown.extensions.tables import TableExtension
 
 
 class InternalLinkProcessor(InlineProcessor):
@@ -48,3 +49,12 @@ class InternalLinkExtension(Extension):
         pattern = r'\[\[([^\]]+?)\]\]'
         # Use a higher priority (lower number) to ensure it runs before other inline patterns
         md.inlinePatterns.register(InternalLinkProcessor(pattern, md), 'internal_link', 170)
+
+
+# Add table extension to support GitHub-flavored tables
+class TableExtensionWrapper(Extension):
+    """Wrapper to add table extension with default settings."""
+    
+    def extendMarkdown(self, md):
+        # Register the built-in tables extension
+        md.registerExtension(TableExtension())

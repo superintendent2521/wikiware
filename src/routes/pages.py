@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional
 import markdown
-from ..utils.markdown_extensions import InternalLinkExtension
+from ..utils.markdown_extensions import InternalLinkExtension, TableExtensionWrapper
 from ..utils.link_processor import process_internal_links
 from ..services.page_service import PageService
 from ..services.branch_service import BranchService
@@ -46,7 +46,7 @@ async def home(request: Request, response: Response, branch: str = "main", csrf_
 
     # Process internal links and render as Markdown
     processed_content = await process_internal_links(page["content"])
-    md = markdown.Markdown()
+    md = markdown.Markdown(extensions=['tables'])
     page["html_content"] = md.convert(processed_content)
 
     template = templates.TemplateResponse("page.html", {
@@ -91,7 +91,7 @@ async def get_page(request: Request, response: Response, title: str, branch: str
         # First process internal links with our custom processor
         processed_content = await process_internal_links(page["content"])
         # Then render as Markdown (with any remaining Markdown syntax)
-        md = markdown.Markdown()
+        md = markdown.Markdown(extensions=['tables'])
         page["html_content"] = md.convert(processed_content)
         logger.info(f"Page viewed: {title} on branch: {branch}")
         template = templates.TemplateResponse("page.html", {"request": request, "page": page, "branch": branch, "offline": False, "branches": branches, "user": user, "csrf_token": csrf_token})
