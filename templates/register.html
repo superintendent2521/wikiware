@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Register - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="auth-container">
+        <h2>Register for WikiWare</h2>
+        
+        {% if error %}
+        <div class="alert alert-error">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        {% if offline %}
+        <div class="alert alert-warning">
+            <strong>Offline Mode:</strong> Database is not available. Registration is disabled.
+        </div>
+        {% endif %}
+
+        <form action="/register" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" value="{{ username or '' }}" required>
+                <small>Must be 3-50 characters, letters, numbers, and underscores only</small>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+                <small>Must be at least 6 characters long</small>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password:</label>
+                <input type="password" id="confirm_password" name="confirm_password" required>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" {% if offline %}disabled{% endif %}>Register</button>
+                <a href="/" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+
+        <div class="auth-links">
+            <p>Already have an account? <a href="/login">Login here</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

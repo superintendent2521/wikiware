@@ -3,14 +3,16 @@ Upload routes for WikiWare.
 Handles file upload operations.
 """
 
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Request, Depends
 from fastapi.responses import JSONResponse
+from fastapi_csrf_protect import CsrfProtect
 import os
 import uuid
 import shutil
 from pathlib import Path
 from ..config import UPLOAD_DIR, MAX_FILE_SIZE, ALLOWED_IMAGE_TYPES
 from ..utils.validation import sanitize_filename
+from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
 import mimetypes
 
@@ -18,9 +20,15 @@ router = APIRouter()
 
 
 @router.post("/upload-image")
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(request: Request, file: UploadFile = File(...), csrf_protect: CsrfProtect = Depends()):
     """Upload an image file."""
     try:
+        # Validate CSRF token
+        await csrf_protect.validate_csrf(request)
+        
+        # Check if user is authenticated
+        user = await AuthMiddleware.require_auth(request)
+        
         # Create uploads directory if it doesn't exist
         upload_path = Path(UPLOAD_DIR)
         upload_path.mkdir(parents=True, exist_ok=True)

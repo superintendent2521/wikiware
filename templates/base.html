@@ -17,6 +17,18 @@
                     <a href="/search"><i class="fas fa-search"></i> Search</a>
                     <a href="/stats"><i class="fas fa-chart-bar"></i> Stats</a>
 
+                    <!-- Authentication links -->
+                    {% if user %}
+                    <span class="user-info">Welcome, {{ user.username }}!</span>
+                    <form action="/logout" method="post" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-secondary btn-small"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                    </form>
+                    {% else %}
+                    <a href="/login"><i class="fas fa-sign-in-alt"></i> Login</a>
+                    <a href="/register"><i class="fas fa-user-plus"></i> Register</a>
+                    {% endif %}
+
                     <button id="dark-mode-toggle" class="btn btn-secondary btn-small"><i class="fas fa-moon"></i> Dark Mode</button>
                     {% if offline %}
                     <span class="offline-indicator"><i class="fas fa-exclamation-triangle"></i> Offline Mode</span>

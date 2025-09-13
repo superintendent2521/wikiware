@@ -51,9 +51,13 @@ def get_history_collection():
 def get_branches_collection():
     return db_instance.get_collection("branches")
 
+def get_users_collection():
+    return db_instance.get_collection("users")
+
 # Helper functions
 async def create_indexes():
     if db_instance.is_connected:
+        # Create indexes for pages collection
         pages = get_pages_collection()
         if pages is not None:
             # Drop the old unique index on title alone if it exists
@@ -66,7 +70,22 @@ async def create_indexes():
             # Create compound unique index on title and branch
             await pages.create_index([("title", 1), ("branch", 1)], unique=True)
             await pages.create_index("updated_at")
-            print("Database indexes created")
+            print("Pages collection indexes created")
+        
+        # Create indexes for users collection
+        users = get_users_collection()
+        if users is not None:
+            await users.create_index("username", unique=True)
+            await users.create_index("created_at")
+            print("Users collection indexes created")
+        
+        # Create indexes for sessions collection
+        sessions = db_instance.get_collection("sessions")
+        if sessions is not None:
+            await sessions.create_index("session_id", unique=True)
+            await sessions.create_index("user_id")
+            await sessions.create_index("expires_at", expireAfterSeconds=0)
+            print("Sessions collection indexes created")
 
 async def init_database():
     await db_instance.connect()

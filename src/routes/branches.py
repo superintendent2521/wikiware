@@ -3,13 +3,15 @@ Branch routes for WikiWare.
 Handles branch management operations.
 """
 
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi_csrf_protect import CsrfProtect
 from ..services.branch_service import BranchService
 from ..database import db_instance
 from ..utils.validation import is_valid_title, is_valid_branch_name
 from ..config import TEMPLATE_DIR
+from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
 
 router = APIRouter()
@@ -41,9 +43,21 @@ async def list_branches(request: Request, title: str, branch: str = "main"):
 
 
 @router.post("/branches/{title}/create")
-async def create_branch(title: str, branch_name: str = Form(...), source_branch: str = Form("main")):
+async def create_branch(
+    request: Request,
+    title: str,
+    branch_name: str = Form(...),
+    source_branch: str = Form("main"),
+    csrf_protect: CsrfProtect = Depends()
+):
     """Create a new branch for a page."""
     try:
+        # Validate CSRF token
+        await csrf_protect.validate_csrf(request)
+        
+        # Check if user is authenticated
+        user = await AuthMiddleware.require_auth(request)
+        
         if not db_instance.is_connected:
             logger.error(f"Database not connected - creating branch: {branch_name} for page: {title}")
             return {"error": "Database not available"}
@@ -68,21 +82,29 @@ async def create_branch(title: str, branch_name: str = Form(...), source_branch:
 
 
 @router.post("/set-branch")
-async def set_branch(request: Request, branch: str = Form(...)):
+async def set_branch(request: Request, branch: str = Form(...), csrf_protect: CsrfProtect = Depends()):
     """Set the global branch for the session."""
-    # In a real application, you would store this in a session or cookie
-    # For now, we'll just redirect back to the referring page with the branch parameter
-    referer = request.headers.get("referer", "/")
-    if "?" in referer:
-        if "branch=" in referer:
-            # Replace existing branch parameter
-            import re
-            referer = re.sub(r'branch=[^&]*', f'branch={branch}', referer)
+    try:
+        # Validate CSRF token
+        await csrf_protect.validate_csrf(request)
+        
+        # In a real application, you would store this in a session or cookie
+        # For now, we'll just redirect back to the referring page with the branch parameter
+        referer = request.headers.get("referer", "/")
+        if "?" in referer:
+            if "branch=" in referer:
+                # Replace existing branch parameter
+                import re
+                referer = re.sub(r'branch=[^&]*', f'branch={branch}', referer)
+            else:
+                # Add branch parameter
+                referer += f"&branch={branch}"
         else:
-            # Add branch parameter
-            referer += f"&branch={branch}"
-    else:
-        referer += f"?branch={branch}"
+            referer += f"?branch={branch}"
 
-    logger.info(f"Branch set to: {branch}")
-    return RedirectResponse(url=referer, status_code=303)
+        logger.info(f"Branch set to: {branch}")
+        return RedirectResponse(url=referer, status_code=303)
+    except Exception as e:
+        logger.error(f"Error setting branch to {branch}: {str(e)}")
+        referer = request.headers.get("referer", "/")
+        return RedirectResponse(url=referer, status_code=303)

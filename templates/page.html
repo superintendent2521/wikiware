@@ -45,7 +45,9 @@
             {% endif %}
         </div>
         <div class="page-actions">
+            {% if user %}
             <a href="/edit/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
+            {% endif %}
             <a href="/history/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
             <a href="/?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
         </div>
@@ -81,7 +83,9 @@
     </div>
 
     <div class="page-footer">
+        {% if user %}
         <a href="/edit/{{ page.title }}?branch={{ branch or 'main' }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit this page</a>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

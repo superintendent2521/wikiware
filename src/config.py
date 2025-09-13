@@ -36,3 +36,7 @@ TEMPLATE_DIR = "templates"
 
 # Static files settings
 STATIC_DIR = "static"
+
+# Session cookie settings
+# Use __Host- prefix only when cookies are Secure (i.e., in production/HTTPS).
+SESSION_COOKIE_NAME = "__Host-user_session" if not DEV else "user_session"

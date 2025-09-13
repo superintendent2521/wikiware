@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Login - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="auth-container">
+        <h2>Login to WikiWare</h2>
+        
+        {% if error %}
+        <div class="alert alert-error">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        {% if offline %}
+        <div class="alert alert-warning">
+            <strong>Offline Mode:</strong> Database is not available. Authentication is disabled.
+        </div>
+        {% endif %}
+
+        <form action="/login" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" value="{{ username or '' }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" {% if offline %}disabled{% endif %}>Login</button>
+                <a href="/" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+
+        <div class="auth-links">
+            <p>Don't have an account? <a href="/register">Register here</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

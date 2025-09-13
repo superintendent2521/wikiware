@@ -5,9 +5,11 @@ This is the refactored, modular version with separated concerns.
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, TEMPLATE_DIR
+from fastapi_csrf_protect import CsrfProtect
+from pydantic import BaseModel
+from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, TEMPLATE_DIR, DEV
 from .database import init_database
-from .routes import pages, search, history, branches, uploads, stats, logs
+from .routes import pages, search, history, branches, uploads, stats, logs, auth
 from loguru import logger
 import os
 
@@ -15,6 +17,25 @@ import os
 os.makedirs("logs", exist_ok=True)
 logger.add("logs/wikiware.log", rotation="1 day", retention="7 days", level="INFO")
 logger.add("logs/errors.log", rotation="1 day", retention="7 days", level="ERROR")
+
+class CsrfSettings(BaseModel):
+    secret_key: str = "asecretkeythatisverylongandsecure"
+    cookie_samesite: str = "lax"
+    # Use env override so local HTTP works by default; set CSRF_COOKIE_SECURE=true in prod
+    cookie_secure: bool = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
+    httponly: bool = True
+    cookie_key: str = "fastapi-csrf-token"
+    # Read token from form body instead of header, using this field name
+    token_location: str = "body"
+    token_key: str = "csrf_token"
+
+@CsrfProtect.load_config
+def get_csrf_config():
+    settings = CsrfSettings()
+    logger.info(
+        f"CSRF config: secure={settings.cookie_secure}, httponly={settings.httponly}, samesite={settings.cookie_samesite}, key={settings.cookie_key}"
+    )
+    return settings
 
 # Create FastAPI app
 app = FastAPI(title=APP_TITLE, description=APP_DESCRIPTION)
@@ -30,6 +51,7 @@ app.include_router(branches.router)
 app.include_router(uploads.router)
 app.include_router(stats.router)
 app.include_router(logs.router)
+app.include_router(auth.router)
 
 # Startup event
 @app.on_event("startup")

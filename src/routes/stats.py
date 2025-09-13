@@ -3,13 +3,15 @@ Stats routes for WikiWare.
 Handles statistics display.
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi_csrf_protect import CsrfProtect
 from ..services.branch_service import BranchService
 from ..database import db_instance
 from ..config import TEMPLATE_DIR
 from ..stats import get_stats
+from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
 
 router = APIRouter()
@@ -17,12 +19,17 @@ templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 
 @router.get("/stats", response_class=HTMLResponse)
-async def stats_page(request: Request, branch: str = "main"):
+async def stats_page(request: Request, response: Response, branch: str = "main", csrf_protect: CsrfProtect = Depends()):
     """Display wiki statistics page."""
     try:
+        # Get current user
+        user = await AuthMiddleware.get_current_user(request)
+        csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+        csrf_protect.set_csrf_cookie(signed_token, response)
+        
         if not db_instance.is_connected:
             logger.warning("Database not connected - viewing stats")
-            return templates.TemplateResponse("stats.html", {"request": request, "offline": True, "branch": branch})
+            return templates.TemplateResponse("stats.html", {"request": request, "offline": True, "branch": branch, "user": user, "csrf_token": csrf_token})
 
         # Get available branches
         branches = await BranchService.get_available_branches()
@@ -40,7 +47,9 @@ async def stats_page(request: Request, branch: str = "main"):
             "last_updated": stats["last_updated"],
             "offline": False,
             "branch": branch,
-            "branches": branches
+            "branches": branches,
+            "user": user,
+            "csrf_token": csrf_token
         })
     except Exception as e:
         logger.error(f"Error viewing stats page: {str(e)}")
