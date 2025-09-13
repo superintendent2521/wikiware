@@ -136,6 +136,15 @@ header {
     gap: var(--space-md);
 }
 
+.user-info {
+    color: var(--dark-gray);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--secondary-white);
+    border-radius: var(--border-radius-sm);
+}
+
 .nav-links a {
     color: var(--dark-gray);
     text-decoration: none;
@@ -765,6 +774,52 @@ footer p {
     margin-bottom: var(--space-xl);
 }
 
+/* Authentication forms */
+.auth-container {
+    max-width: 500px;
+    margin: 0 auto;
+    background: var(--primary-white);
+    padding: var(--space-xl);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--box-shadow-sm);
+}
+
+.auth-container h2 {
+    text-align: center;
+    margin-bottom: var(--space-lg);
+    color: var(--darker-gray);
+}
+
+.auth-links {
+    text-align: center;
+    margin-top: var(--space-lg);
+    padding-top: var(--space-lg);
+    border-top: var(--border-width) solid var(--light-gray);
+}
+
+.auth-links a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-weight: var(--font-weight-medium);
+}
+
+.auth-links a:hover {
+    text-decoration: underline;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-weight: var(--font-weight-normal);
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
 /* Image upload modal */
 .modal {
     position: fixed;
@@ -786,6 +841,10 @@ footer p {
     box-shadow: var(--box-shadow-lg);
     width: 90%;
     max-width: 500px;
+    margin: 10% auto;
+    position: relative;
+    top: 0;
+    transform: none;
 }
 
 .modal .close {

@@ -50,6 +50,7 @@
                     <td>
                         <a href="/history/{{ title }}/{{ loop.index0 }}?branch={{ branch or 'main' }}" class="btn btn-small btn-secondary"><i class="fas fa-eye"></i> View</a>
                         <form action="/restore/{{ title }}/{{ loop.index0 }}" method="post" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="branch" value="{{ branch or 'main' }}">
                             <button type="submit" class="btn btn-small btn-warning"
                                     onclick="return confirm('Are you sure you want to restore this version?')"><i class="fas fa-undo"></i> Restore</button>

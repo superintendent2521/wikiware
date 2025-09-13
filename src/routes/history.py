@@ -3,9 +3,10 @@ History routes for WikiWare.
 Handles page version history and restoration.
 """
 
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi_csrf_protect import CsrfProtect
 from typing import List, Dict, Any
 import markdown
 from ..utils.markdown_extensions import InternalLinkExtension
@@ -14,6 +15,7 @@ from ..database import get_pages_collection, get_history_collection, db_instance
 from ..services.branch_service import BranchService
 from ..utils.validation import is_valid_title
 from ..config import TEMPLATE_DIR
+from ..middleware.auth_middleware import AuthMiddleware
 from datetime import datetime, timezone
 from loguru import logger
 
@@ -22,17 +24,25 @@ templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 
 @router.get("/history/{title}", response_class=HTMLResponse)
-async def page_history(request: Request, title: str, branch: str = "main"):
+async def page_history(request: Request, response: Response, title: str, branch: str = "main", csrf_protect: CsrfProtect = Depends()):
     """View page history."""
     try:
+        # Get current user
+        user = await AuthMiddleware.get_current_user(request)
+        csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+        
         # Sanitize title
         if not is_valid_title(title):
             logger.warning(f"Invalid title for history: {title} on branch: {branch}")
-            return templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "error": "Invalid page title"})
+            template = templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "error": "Invalid page title", "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         if not db_instance.is_connected:
             logger.warning(f"Database not connected - viewing history: {title} on branch: {branch}")
-            return templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "offline": True})
+            template = templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "offline": True, "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         pages_collection = get_pages_collection()
         history_collection = get_history_collection()
@@ -53,39 +63,62 @@ async def page_history(request: Request, title: str, branch: str = "main"):
                         versions.insert(0, current)  # Add current version at the beginning
         except Exception as db_error:
             logger.error(f"Database error while fetching history for {title} on branch {branch}: {str(db_error)}")
-            return templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "error": "Database error occurred"})
+            template = templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "error": "Database error occurred", "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         logger.info(f"History viewed: {title} on branch: {branch}")
-        return templates.TemplateResponse("history.html", {
+        template = templates.TemplateResponse("history.html", {
             "request": request,
             "title": title,
             "versions": versions,
             "branch": branch,
             "offline": not db_instance.is_connected,
-            "branches": branches
+            "branches": branches,
+            "user": user,
+            "csrf_token": csrf_token
         })
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
     except Exception as e:
         logger.error(f"Error viewing history {title} on branch {branch}: {str(e)}")
-        return templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "error": "An error occurred while loading history"})
+        try:
+            csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
+        except Exception:
+            csrf_token_e, signed_token_e = "", ""
+        template = templates.TemplateResponse("history.html", {"request": request, "title": title, "versions": [], "error": "An error occurred while loading history", "csrf_token": csrf_token_e})
+        if signed_token_e:
+            csrf_protect.set_csrf_cookie(signed_token_e, template)
+        return template
 
 
 @router.get("/history/{title}/{version_index}", response_class=HTMLResponse)
-async def view_version(request: Request, title: str, version_index: int, branch: str = "main"):
+async def view_version(request: Request, response: Response, title: str, version_index: int, branch: str = "main", csrf_protect: CsrfProtect = Depends()):
     """View a specific version of a page."""
     try:
+        # Get current user
+        user = await AuthMiddleware.get_current_user(request)
+        csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+        
         # Sanitize title
         if not is_valid_title(title):
             logger.warning(f"Invalid title for version view: {title} on branch: {branch}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "Invalid page title"})
+            template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "Invalid page title", "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         # Validate version index
         if version_index < 0:
             logger.warning(f"Invalid version index: {version_index} for title: {title} on branch: {branch}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "Invalid version index"})
+            template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "Invalid version index", "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         if not db_instance.is_connected:
             logger.warning(f"Database not connected - viewing version: {title} v{version_index} on branch: {branch}")
-            return templates.TemplateResponse("page.html", {"request": request, "title": title, "content": "", "offline": True})
+            template = templates.TemplateResponse("page.html", {"request": request, "title": title, "content": "", "offline": True, "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         pages_collection = get_pages_collection()
         history_collection = get_history_collection()
@@ -95,7 +128,9 @@ async def view_version(request: Request, title: str, version_index: int, branch:
 
         if pages_collection is None or history_collection is None:
             logger.error(f"Database collections not available - viewing version: {title} v{version_index} on branch: {branch}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "Database not available"})
+            template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "Database not available", "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         page = None
         try:
@@ -109,11 +144,15 @@ async def view_version(request: Request, title: str, version_index: int, branch:
                     page = versions[version_index - 1]
         except Exception as db_error:
             logger.error(f"Database error while fetching version {version_index} for {title} on branch {branch}: {str(db_error)}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "Database error occurred"})
+            template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "Database error occurred", "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         if not page:
             logger.info(f"Version not found - viewing edit page: {title} v{version_index} on branch: {branch}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": False})
+            template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": False, "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         try:
             # First process internal links with our custom processor
@@ -126,24 +165,41 @@ async def view_version(request: Request, title: str, version_index: int, branch:
             page["html_content"] = page["content"]  # Fallback to raw content
 
         logger.info(f"Version viewed: {title} v{version_index} on branch: {branch}")
-        return templates.TemplateResponse("version.html", {
+        template = templates.TemplateResponse("version.html", {
             "request": request,
             "page": page,
             "version_num": version_index,
             "version_index": version_index,
             "branch": branch,
             "offline": not db_instance.is_connected,
-            "branches": branches
+            "branches": branches,
+            "user": user,
+            "csrf_token": csrf_token
         })
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
     except Exception as e:
         logger.error(f"Error viewing version {title} v{version_index} on branch {branch}: {str(e)}")
-        return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "An error occurred while loading version"})
+        try:
+            csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
+        except Exception:
+            csrf_token_e, signed_token_e = "", ""
+        template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "error": "An error occurred while loading version", "csrf_token": csrf_token_e})
+        if signed_token_e:
+            csrf_protect.set_csrf_cookie(signed_token_e, template)
+        return template
 
 
 @router.post("/restore/{title}/{version_index}")
-async def restore_version(title: str, version_index: int, branch: str = Form("main")):
+async def restore_version(request: Request, title: str, version_index: int, branch: str = Form("main"), csrf_protect: CsrfProtect = Depends()):
     """Restore a page to a previous version."""
     try:
+        # Validate CSRF token
+        await csrf_protect.validate_csrf(request)
+        
+        # Check if user is authenticated
+        user = await AuthMiddleware.require_auth(request)
+        
         # Sanitize title
         if not is_valid_title(title):
             logger.warning(f"Invalid title for restore: {title} on branch: {branch}")

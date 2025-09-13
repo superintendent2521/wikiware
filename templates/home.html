@@ -5,6 +5,7 @@
 {% block content %}
 <div class="container">
 
+    {% if user %}
     <div class="create-page">
         <h3>Create a New Page</h3>
         <form onsubmit="createNewPage(event)">
@@ -23,6 +24,11 @@
             }
         }
     </script>
+    {% else %}
+    <div class="auth-prompt">
+        <p><a href="/login">Login</a> or <a href="/register">register</a> to create and edit pages.</p>
+    </div>
+    {% endif %}
 
     <div class="recent-pages">
         <h3>Recent Pages</h3>
