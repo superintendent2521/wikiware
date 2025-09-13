@@ -9,7 +9,7 @@ from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
 from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, TEMPLATE_DIR, DEV
 from .database import init_database
-from .routes import pages, search, history, branches, uploads, stats, logs, auth
+from .routes import pages, search, history, branches, uploads, stats, logs, auth, admin
 from loguru import logger
 import os
 
@@ -52,6 +52,7 @@ app.include_router(uploads.router)
 app.include_router(stats.router)
 app.include_router(logs.router)
 app.include_router(auth.router)
+app.include_router(admin.router)
 
 # Startup event
 @app.on_event("startup")
