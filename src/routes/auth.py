@@ -53,7 +53,6 @@ async def register_user(
         
         # Log form data for debugging
         form_data = await request.form()
-        logger.info(f"Registration form data: {dict(form_data)}")
         logger.info(f"CSRF cookie: {request.cookies.get('fastapi-csrf-token', 'NOT FOUND')}")
         
         if not db_instance.is_connected:

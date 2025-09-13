@@ -12,7 +12,7 @@ from ..utils.markdown_extensions import InternalLinkExtension
 from ..utils.link_processor import process_internal_links
 from ..services.page_service import PageService
 from ..services.branch_service import BranchService
-from ..database import db_instance
+from ..database import db_instance, get_pages_collection
 from ..utils.validation import is_valid_title
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
@@ -32,7 +32,9 @@ async def home(request: Request, response: Response, branch: str = "main", csrf_
     csrf_protect.set_csrf_cookie(signed_token, response)
     
     if not db_instance.is_connected:
-        return templates.TemplateResponse("home.html", {"request": request, "pages": [], "offline": True, "branch": branch, "user": user, "csrf_token": csrf_token})
+        template = templates.TemplateResponse("home.html", {"request": request, "pages": [], "offline": True, "branch": branch, "user": user, "csrf_token": csrf_token})
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
 
     # Get available branches for home page
     branches = await BranchService.get_available_branches()
@@ -40,7 +42,7 @@ async def home(request: Request, response: Response, branch: str = "main", csrf_
     # Get pages for the branch
     pages = await PageService.get_pages_by_branch(branch)
 
-    return templates.TemplateResponse("home.html", {
+    template = templates.TemplateResponse("home.html", {
         "request": request,
         "pages": pages,
         "offline": not db_instance.is_connected,
@@ -49,6 +51,8 @@ async def home(request: Request, response: Response, branch: str = "main", csrf_
         "user": user,
         "csrf_token": csrf_token
     })
+    csrf_protect.set_csrf_cookie(signed_token, template)
+    return template
 
 
 @router.get("/page/{title}", response_class=HTMLResponse)
@@ -58,11 +62,13 @@ async def get_page(request: Request, response: Response, title: str, branch: str
         # Get current user
         user = await AuthMiddleware.get_current_user(request)
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-        csrf_protect.set_csrf_cookie(signed_token, response)
+        # Ensure CSRF cookie is set on the actual response object we return
         
         if not db_instance.is_connected:
             logger.warning(f"Database not connected - viewing page: {title} on branch: {branch}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "user": user, "csrf_token": csrf_token})
+            template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         # Get page-specific branches
         branches = await BranchService.get_branches_for_page(title)
@@ -72,7 +78,9 @@ async def get_page(request: Request, response: Response, title: str, branch: str
 
         if not page:
             logger.info(f"Page not found - viewing edit page: {title} on branch: {branch}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": False, "branch": branch, "branches": branches, "user": user, "csrf_token": csrf_token})
+            template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": False, "branch": branch, "branches": branches, "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         # First process internal links with our custom processor
         processed_content = process_internal_links(page["content"])
@@ -80,10 +88,20 @@ async def get_page(request: Request, response: Response, title: str, branch: str
         md = markdown.Markdown()
         page["html_content"] = md.convert(processed_content)
         logger.info(f"Page viewed: {title} on branch: {branch}")
-        return templates.TemplateResponse("page.html", {"request": request, "page": page, "branch": branch, "offline": False, "branches": branches, "user": user, "csrf_token": csrf_token})
+        template = templates.TemplateResponse("page.html", {"request": request, "page": page, "branch": branch, "offline": False, "branches": branches, "user": user, "csrf_token": csrf_token})
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
     except Exception as e:
         logger.error(f"Error viewing page {title} on branch {branch}: {str(e)}")
-        return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True})
+        # Safely regenerate CSRF tokens for the error response
+        try:
+            csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
+        except Exception:
+            csrf_token_e, signed_token_e = "", ""
+        template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "csrf_token": csrf_token_e})
+        if signed_token_e:
+            csrf_protect.set_csrf_cookie(signed_token_e, template)
+        return template
 
 
 @router.get("/edit/{title}", response_class=HTMLResponse)
@@ -93,11 +111,13 @@ async def edit_page(request: Request, response: Response, title: str, branch: st
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-        csrf_protect.set_csrf_cookie(signed_token, response)
+        # Ensure CSRF cookie is set on the actual response object we return
         
         if not db_instance.is_connected:
             logger.warning(f"Database not connected - editing page: {title} on branch: {branch}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "user": user, "csrf_token": csrf_token})
+            template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         # Get branches specific to this page
         branches = await BranchService.get_branches_for_page(title)
@@ -109,13 +129,23 @@ async def edit_page(request: Request, response: Response, title: str, branch: st
             content = page["content"]
 
         logger.info(f"Page edit accessed: {title} on branch: {branch} by user: {user['username']}")
-        return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": content, "branch": branch, "offline": not db_instance.is_connected, "branches": branches, "user": user, "csrf_token": csrf_token})
+        template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": content, "branch": branch, "offline": not db_instance.is_connected, "branches": branches, "user": user, "csrf_token": csrf_token})
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
     except HTTPException:
         # Redirect to login if not authenticated
         return RedirectResponse(url="/login", status_code=303)
     except Exception as e:
         logger.error(f"Error accessing edit page {title} on branch {branch}: {str(e)}")
-        return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True})
+        # Safely regenerate CSRF tokens for the error response
+        try:
+            csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
+        except Exception:
+            csrf_token_e, signed_token_e = "", ""
+        template = templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "csrf_token": csrf_token_e})
+        if signed_token_e:
+            csrf_protect.set_csrf_cookie(signed_token_e, template)
+        return template
 
 
 @router.post("/edit/{title}")
@@ -149,3 +179,46 @@ async def save_page(request: Request, title: str, content: str = Form(...), auth
     except Exception as e:
         logger.error(f"Error saving page {title} on branch {branch}: {str(e)}")
         return {"error": f"Failed to save page: {str(e)}"}
+
+
+@router.post("/delete/{title}")
+async def delete_page(request: Request, title: str, branch: str = Form("main"), csrf_protect: CsrfProtect = Depends()):
+    """Delete a page."""
+    try:
+        # Get the CSRF token from the form data
+        form_data = await request.form()
+        csrf_token = form_data.get("csrf_token")
+        
+        # Validate CSRF token using the form data
+        await csrf_protect.validate_csrf(request, csrf_token)
+        
+        # Check if user is authenticated and is an admin
+        user = await AuthMiddleware.require_auth(request)
+        if not user.get("is_admin", False):
+            raise HTTPException(status_code=403, detail="Admin privileges required")
+
+        if not db_instance.is_connected:
+            logger.error(f"Database not connected - cannot delete page: {title} on branch: {branch}")
+            return {"error": "Database not available"}
+
+        # Delete the page
+        pages_collection = get_pages_collection()
+        if pages_collection is None:
+            logger.error("Pages collection not available")
+            return {"error": "Database error"}
+
+        result = await pages_collection.delete_one({"title": title, "branch": branch})
+        
+        if result.deleted_count > 0:
+            logger.info(f"Page deleted: {title} on branch: {branch} by admin {user['username']}")
+            return RedirectResponse(url="/", status_code=303)
+        else:
+            logger.warning(f"Page not found for deletion: {title} on branch: {branch}")
+            return {"error": "Page not found"}
+            
+    except HTTPException:
+        # Redirect to login if not authenticated
+        return RedirectResponse(url="/login", status_code=303)
+    except Exception as e:
+        logger.error(f"Error deleting page {title} on branch {branch}: {str(e)}")
+        return {"error": f"Failed to delete page: {str(e)}"}
