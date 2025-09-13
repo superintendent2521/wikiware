@@ -21,6 +21,7 @@
 
         <form action="/login" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="next" value="{{ next }}">
             <div class="form-group">
                 <label for="username">Username:</label>
                 <input type="text" id="username" name="username" value="{{ username or '' }}" required>
@@ -33,7 +34,7 @@
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary" {% if offline %}disabled{% endif %}>Login</button>
-                <a href="/" class="btn btn-secondary">Cancel</a>
+                <a href="{{ next }}" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
 

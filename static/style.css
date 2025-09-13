@@ -841,6 +841,10 @@ footer p {
     box-shadow: var(--box-shadow-lg);
     width: 90%;
     max-width: 500px;
+    margin: 10% auto;
+    position: relative;
+    top: 0;
+    transform: none;
 }
 
 .modal .close {

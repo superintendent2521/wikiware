@@ -142,13 +142,14 @@ async def register_user(
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_form(request: Request, response: Response, csrf_protect: CsrfProtect = Depends()):
+async def login_form(request: Request, response: Response, next: str = "/", csrf_protect: CsrfProtect = Depends()):
     """Show login form."""
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     template = templates.TemplateResponse("login.html", {
         "request": request,
         "offline": not db_instance.is_connected,
-        "csrf_token": csrf_token
+        "csrf_token": csrf_token,
+        "next": next
     })
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
@@ -160,6 +161,7 @@ async def login_user(
     response: Response,
     username: str = Form(...),
     password: str = Form(...),
+    next: str = Form("/"),
     csrf_protect: CsrfProtect = Depends()
 ):
     """Handle user login."""
@@ -207,7 +209,7 @@ async def login_user(
             return template
 
         # Set secure session cookie
-        response = RedirectResponse(url="/", status_code=303)
+        response = RedirectResponse(url=next, status_code=303)
         response.set_cookie(
             key=SESSION_COOKIE_NAME,
             value=session_id,
