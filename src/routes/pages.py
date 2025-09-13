@@ -45,7 +45,7 @@ async def home(request: Request, response: Response, branch: str = "main", csrf_
         page = {"title": "Home", "content": "", "author": "", "updated_at": "", "branch": branch}
 
     # Process internal links and render as Markdown
-    processed_content = process_internal_links(page["content"])
+    processed_content = await process_internal_links(page["content"])
     md = markdown.Markdown()
     page["html_content"] = md.convert(processed_content)
 
