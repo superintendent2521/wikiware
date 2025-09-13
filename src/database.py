@@ -1,19 +1,22 @@
+from dotenv import load_dotenv
+import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ServerSelectionTimeoutError
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
 
+"""Database connection and management for MongoDB."""
 class Database:
+    """Manages MongoDB connection and provides access to collections."""
     def __init__(self):
         self.client = None
         self.db = None
         self.is_connected = False
 
     async def connect(self):
+        """Establish connection to MongoDB and test connectivity."""
         try:
             self.client = AsyncIOMotorClient(MONGODB_URL, serverSelectionTimeoutMS=10000)
             # Test the connection
@@ -30,10 +33,12 @@ class Database:
             self.is_connected = False
 
     async def disconnect(self):
+        """Close the MongoDB connection."""
         if self.client:
             self.client.close()
 
     def get_collection(self, name):
+        """Get a collection by name if database is connected."""
         if self.is_connected and self.db is not None:
             return self.db[name]
         return None
@@ -43,19 +48,24 @@ db_instance = Database()
 
 # Collections
 def get_pages_collection():
+    """Get the pages collection."""
     return db_instance.get_collection("pages")
 
 def get_history_collection():
+    """Get the history collection."""
     return db_instance.get_collection("history")
 
 def get_branches_collection():
+    """Get the branches collection."""
     return db_instance.get_collection("branches")
 
 def get_users_collection():
+    """Get the users collection."""
     return db_instance.get_collection("users")
 
 # Helper functions
 async def create_indexes():
+    """Create required indexes on MongoDB collections."""
     if db_instance.is_connected:
         # Create indexes for pages collection
         pages = get_pages_collection()
@@ -64,7 +74,7 @@ async def create_indexes():
             try:
                 await pages.drop_index("title_1")
                 print("Dropped old unique index on title")
-            except:
+            except Exception:  # Specify exception type
                 pass  # Index might not exist, that's fine
 
             # Create compound unique index on title and branch
@@ -88,6 +98,7 @@ async def create_indexes():
             print("Sessions collection indexes created")
 
 async def init_database():
+    """Initialize database connection and create indexes."""
     await db_instance.connect()
     if db_instance.is_connected:
         await create_indexes()
