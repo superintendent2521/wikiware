@@ -25,11 +25,12 @@ async def stats_page(request: Request, response: Response, branch: str = "main",
         # Get current user
         user = await AuthMiddleware.get_current_user(request)
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-        csrf_protect.set_csrf_cookie(signed_token, response)
         
         if not db_instance.is_connected:
             logger.warning("Database not connected - viewing stats")
-            return templates.TemplateResponse("stats.html", {"request": request, "offline": True, "branch": branch, "user": user, "csrf_token": csrf_token})
+            template = templates.TemplateResponse("stats.html", {"request": request, "offline": True, "branch": branch, "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         # Get available branches
         branches = await BranchService.get_available_branches()
@@ -38,7 +39,7 @@ async def stats_page(request: Request, response: Response, branch: str = "main",
         stats = await get_stats()
 
         logger.info("Stats page viewed")
-        return templates.TemplateResponse("stats.html", {
+        template = templates.TemplateResponse("stats.html", {
             "request": request,
             "total_edits": stats["total_edits"],
             "total_characters": stats["total_characters"],
@@ -51,6 +52,15 @@ async def stats_page(request: Request, response: Response, branch: str = "main",
             "user": user,
             "csrf_token": csrf_token
         })
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
     except Exception as e:
         logger.error(f"Error viewing stats page: {str(e)}")
-        return templates.TemplateResponse("stats.html", {"request": request, "offline": True, "branch": branch})
+        try:
+            csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
+        except Exception:
+            csrf_token_e, signed_token_e = "", ""
+        template = templates.TemplateResponse("stats.html", {"request": request, "offline": True, "branch": branch, "csrf_token": csrf_token_e})
+        if signed_token_e:
+            csrf_protect.set_csrf_cookie(signed_token_e, template)
+        return template

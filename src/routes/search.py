@@ -25,11 +25,12 @@ async def search(request: Request, response: Response, q: str = "", branch: str 
         # Get current user
         user = await AuthMiddleware.get_current_user(request)
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-        csrf_protect.set_csrf_cookie(signed_token, response)
         
         if not db_instance.is_connected:
             logger.warning("Database not connected - search attempted")
-            return templates.TemplateResponse("search.html", {"request": request, "pages": [], "query": q, "offline": True, "user": user, "csrf_token": csrf_token})
+            template = templates.TemplateResponse("search.html", {"request": request, "pages": [], "query": q, "offline": True, "user": user, "csrf_token": csrf_token})
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         # Get available branches
         branches = await BranchService.get_available_branches()
@@ -40,7 +41,7 @@ async def search(request: Request, response: Response, q: str = "", branch: str 
         else:
             logger.info("Search accessed without query")
 
-        return templates.TemplateResponse("search.html", {
+        template = templates.TemplateResponse("search.html", {
             "request": request,
             "pages": pages,
             "query": q,
@@ -50,6 +51,15 @@ async def search(request: Request, response: Response, q: str = "", branch: str 
             "user": user,
             "csrf_token": csrf_token
         })
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
     except Exception as e:
         logger.error(f"Error during search '{q}' on branch '{branch}': {str(e)}")
-        return templates.TemplateResponse("search.html", {"request": request, "pages": [], "query": q, "offline": True})
+        try:
+            csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
+        except Exception:
+            csrf_token_e, signed_token_e = "", ""
+        template = templates.TemplateResponse("search.html", {"request": request, "pages": [], "query": q, "offline": True, "csrf_token": csrf_token_e})
+        if signed_token_e:
+            csrf_protect.set_csrf_cookie(signed_token_e, template)
+        return template

@@ -185,12 +185,13 @@ async def save_page(request: Request, title: str, content: str = Form(...), auth
 async def delete_page(request: Request, title: str, branch: str = Form("main"), csrf_protect: CsrfProtect = Depends()):
     """Delete a page."""
     try:
-        # Get the CSRF token from the form data
+        # Validate CSRF token (reads token from body per config and cookie)
+        # Add extra diagnostics in logs to help track issues
         form_data = await request.form()
         csrf_token = form_data.get("csrf_token")
-        
-        # Validate CSRF token using the form data
-        await csrf_protect.validate_csrf(request, csrf_token)
+        logger.debug(f"Delete '{title}' branch '{branch}' csrf_token in form present={bool(csrf_token)}; cookies keys={list(request.cookies.keys())}")
+        logger.debug(f"CSRF cookie value present={bool(request.cookies.get('fastapi-csrf-token'))}")
+        await csrf_protect.validate_csrf(request)
         
         # Check if user is authenticated and is an admin
         user = await AuthMiddleware.require_auth(request)
