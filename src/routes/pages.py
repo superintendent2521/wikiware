@@ -25,29 +25,34 @@ templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request, response: Response, branch: str = "main", csrf_protect: CsrfProtect = Depends()):
-    """Home page showing list of all pages."""
+    """Home page showing the hardcoded 'Home' page."""
     # Get current user
     user = await AuthMiddleware.get_current_user(request)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     csrf_protect.set_csrf_cookie(signed_token, response)
     
     if not db_instance.is_connected:
-        template = templates.TemplateResponse("home.html", {"request": request, "pages": [], "offline": True, "branch": branch, "user": user, "csrf_token": csrf_token})
+        template = templates.TemplateResponse("page.html", {"request": request, "page": {"title": "Home", "content": "", "author": "", "updated_at": "", "branch": branch}, "offline": True, "branch": branch, "user": user, "csrf_token": csrf_token})
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
 
-    # Get available branches for home page
-    branches = await BranchService.get_available_branches()
+    # Get the hardcoded 'Home' page
+    page = await PageService.get_page("Home", branch)
 
-    # Get pages for the branch
-    pages = await PageService.get_pages_by_branch(branch)
+    if not page:
+        # If Home page doesn't exist, create a placeholder
+        page = {"title": "Home", "content": "", "author": "", "updated_at": "", "branch": branch}
 
-    template = templates.TemplateResponse("home.html", {
+    # Process internal links and render as Markdown
+    processed_content = process_internal_links(page["content"])
+    md = markdown.Markdown()
+    page["html_content"] = md.convert(processed_content)
+
+    template = templates.TemplateResponse("page.html", {
         "request": request,
-        "pages": pages,
+        "page": page,
         "offline": not db_instance.is_connected,
         "branch": branch,
-        "branches": branches,
         "user": user,
         "csrf_token": csrf_token
     })
