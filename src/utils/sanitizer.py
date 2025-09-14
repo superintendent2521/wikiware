@@ -16,7 +16,7 @@ ALLOWED_TAGS: Iterable[str] = {
 }
 
 ALLOWED_ATTRIBUTES = {
-    'a': ['href', 'title', 'rel', 'target'],
+    'a': ['href', 'title', 'rel'],
     'img': ['src', 'alt', 'title', 'width', 'height'],
     'span': ['class'],
     'th': ['colspan', 'rowspan'],
@@ -28,14 +28,10 @@ ALLOWED_PROTOCOLS = ['http', 'https', 'mailto']
 
 def sanitize_html(html: str) -> str:
     """Sanitize HTML produced from Markdown to prevent XSS."""
-    # Ensure links get rel attributes for safety when target=_blank is used
-    cleaned = bleach.clean(
+    return bleach.clean(
         html,
         tags=ALLOWED_TAGS,
         attributes=ALLOWED_ATTRIBUTES,
         protocols=ALLOWED_PROTOCOLS,
         strip=True,
     )
-    cleaned = bleach.linkify(cleaned, callbacks=[bleach.linkifier.nofollow, bleach.linkifier.target_blank])
-    return cleaned
-
