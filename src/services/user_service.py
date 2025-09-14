@@ -124,7 +124,7 @@ class UserService:
             return None
 
     @staticmethod
-    async def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
+    async def authenticate_user(username: str, password: str, client_ip: str = "unknown", user_agent: str = "unknown") -> Optional[Dict[str, Any]]:
         """
         Authenticate a user by username and password.
 
@@ -140,16 +140,34 @@ class UserService:
             user = await UserService.get_user_by_username(username)
             if not user:
                 logger.warning(f"User not found: {username}")
+                # Log failed login attempt to dedicated file
+                try:
+                    with open("logs/login_failures.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n")
+                except Exception as e:
+                    logger.error(f"Failed to log failed login attempt for {username}: {str(e)}")
                 return None
 
             # Check if user is active
             if not user.get("is_active", True):
                 logger.warning(f"User account is inactive: {username}")
+                # Log failed login attempt to dedicated file
+                try:
+                    with open("logs/login_failures.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n")
+                except Exception as e:
+                    logger.error(f"Failed to log failed login attempt for {username}: {str(e)}")
                 return None
 
             # Verify password
             if not UserService.verify_password(password, user["password_hash"]):
                 logger.warning(f"Invalid password for user: {username}")
+                # Log failed login attempt to dedicated file
+                try:
+                    with open("logs/login_failures.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n")
+                except Exception as e:
+                    logger.error(f"Failed to log failed login attempt for {username}: {str(e)}")
                 return None
 
             logger.info(f"User authenticated: {username}")

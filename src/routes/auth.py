@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
 from typing import Optional
+from datetime import datetime, timezone
 import secrets
 from ..utils.validation import is_valid_title
 from ..services.user_service import UserService
@@ -167,9 +168,18 @@ async def login_user(
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
-        
+        # Extract client IP and User-Agent for logging
+        xff = request.headers.get("x-forwarded-for")
+        client_ip = (xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown"))
+        user_agent = request.headers.get("user-agent", "unknown")
+
         if not db_instance.is_connected:
             logger.error("Database not connected - cannot login user")
+            try:
+                with open("logs/login_activity.log", "a", encoding="utf-8") as f:
+                    f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent} | db_offline | {request.url.path}\n")
+            except Exception:
+                pass
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse("login.html", {
                 "request": request,
@@ -181,9 +191,15 @@ async def login_user(
             return template
 
         # Authenticate user
-        user = await UserService.authenticate_user(username, password)
+        user = await UserService.authenticate_user(username, password, client_ip=client_ip, user_agent=user_agent)
 
         if not user:
+            # Log failure to activity log with IP and UA
+            try:
+                with open("logs/login_activity.log", "a", encoding="utf-8") as f:
+                    f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent} | failure | {request.url.path}\n")
+            except Exception:
+                pass
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse("login.html", {
                 "request": request,
@@ -219,11 +235,26 @@ async def login_user(
             max_age=3600 * 24 * 7  # 1 week
         )
 
+        # Log successful login to activity log
+        try:
+            with open("logs/login_activity.log", "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent} | success | {request.url.path}\n")
+        except Exception:
+            pass
         logger.info(f"User logged in: {username}")
         return response
 
     except Exception as e:
         logger.error(f"Error logging in user {username}: {str(e)}")
+        # Log error to activity log
+        try:
+            xff = request.headers.get("x-forwarded-for")
+            client_ip = (xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown"))
+            user_agent = request.headers.get("user-agent", "unknown")
+            with open("logs/login_activity.log", "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent} | error | {request.url.path}\n")
+        except Exception:
+            pass
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
         template = templates.TemplateResponse("login.html", {
             "request": request,
@@ -239,9 +270,6 @@ async def login_user(
 async def logout_user(request: Request, response: Response, csrf_protect: CsrfProtect = Depends()):
     """Handle user logout."""
     try:
-        # Validate CSRF token
-        await csrf_protect.validate_csrf(request)
-        
         # Get session ID from cookie
         session_id = request.cookies.get(SESSION_COOKIE_NAME) or request.cookies.get("__Host-user_session") or request.cookies.get("user_session")
         
