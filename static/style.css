@@ -389,59 +389,21 @@ main {
 }
 
 /* Color classes for table cells */
-.page-content .color-red {
-    background-color: #e74c3c;
-    color: white;
-    display: block;
-    width: 100%;
-    height: 100%;
-    padding: 10px 12px;
-    box-sizing: border-box;
-    margin: -10px -12px;
-}
+/* Color markers inside table cells (no negative margins to avoid bleed) */
+.page-content .color-red    { background-color: #e74c3c; color: white; }
+.page-content .color-green  { background-color: #27ae60; color: white; }
+.page-content .color-blue   { background-color: #3498db; color: white; }
+.page-content .color-purple { background-color: #9b59b6; color: white; }
+.page-content .color-pink   { background-color: #e91e63; color: white; }
 
-.page-content .color-green {
-    background-color: #27ae60;
-    color: white;
-    display: block;
-    width: 100%;
-    height: 100%;
-    padding: 10px 12px;
-    box-sizing: border-box;
-    margin: -10px -12px;
-}
-
-.page-content .color-blue {
-    background-color: #3498db;
-    color: white;
-    display: block;
-    width: 100%;
-    height: 100%;
-    padding: 10px 12px;
-    box-sizing: border-box;
-    margin: -10px -12px;
-}
-
-.page-content .color-purple {
-    background-color: #9b59b6;
-    color: white;
-    display: block;
-    width: 100%;
-    height: 100%;
-    padding: 10px 12px;
-    box-sizing: border-box;
-    margin: -10px -12px;
-}
-
-.page-content .color-pink {
-    background-color: #e91e63;
-    color: white;
-    display: block;
-    width: 100%;
-    height: 100%;
-    padding: 10px 12px;
-    box-sizing: border-box;
-    margin: -10px -12px;
+/* When the whole cell is colored via :has(),
+   make inner color tags transparent so they don't create overlays. */
+.page-content td:has(.color-red) .color-red,
+.page-content td:has(.color-green) .color-green,
+.page-content td:has(.color-blue) .color-blue,
+.page-content td:has(.color-purple) .color-purple,
+.page-content td:has(.color-pink) .color-pink {
+    background: transparent;
 }
 
 .page-content th,
@@ -478,13 +440,13 @@ main {
 .page-content td:has(.color-purple) { background-color: #9b59b6; color: white; }
 .page-content td:has(.color-pink)   { background-color: #e91e63; color: white; }
 
-/* Zebra striping for body rows */
-.page-content tbody tr:nth-child(even) td {
+/* Zebra striping for body rows (skip colored cells) */
+.page-content tbody tr:nth-child(even) td:not(:has(.color-red, .color-green, .color-blue, .color-purple, .color-pink)) {
     background-color: var(--table-row-even-bg);
 }
 
-/* Hover state */
-.page-content tbody tr:hover td {
+/* Hover state (skip colored cells) */
+.page-content tbody tr:hover td:not(:has(.color-red, .color-green, .color-blue, .color-purple, .color-pink)) {
     background-color: var(--table-row-hover-bg);
 }
 
