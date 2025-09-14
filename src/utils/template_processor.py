@@ -27,12 +27,24 @@ async def render_template_content(content: str, request: dict = None) -> str:
     try:
         # Get global stats
         stats = await get_stats()
+        # Provide global context values used by templates in Markdown content.
+        # For colors, return HTML span markers that our CSS styles into full-cell backgrounds
+        # so using `{{ global.color.red }}` in a table cell renders a colored tile instead of a hex code.
         global_context = {
             "edits": stats["total_edits"],
             "pages": stats["total_pages"],
             "characters": stats["total_characters"],
             "images": stats["total_images"],
-            "last_updated": stats["last_updated"]
+            "last_updated": stats["last_updated"],
+            "color": {
+                # Insert HTML spans that Markdown will pass through unchanged.
+                # CSS in `static/style.css` styles these to fill the table cell.
+                "red": "<span class='color-red'></span>",
+                "green": "<span class='color-green'></span>",
+                "blue": "<span class='color-blue'></span>",
+                "purple": "<span class='color-purple'></span>",
+                "pink": "<span class='color-pink'></span>"
+            }
         }
 
         # Create template context

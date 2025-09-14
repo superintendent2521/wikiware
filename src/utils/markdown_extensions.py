@@ -1,6 +1,6 @@
 """
 Custom Markdown extensions for WikiWare.
-Adds support for [[Page Title]] internal linking syntax and table rendering.
+Adds support for [[Page Title]] internal linking syntax and table rendering with color support.
 """
 
 import re
@@ -51,10 +51,40 @@ class InternalLinkExtension(Extension):
         md.inlinePatterns.register(InternalLinkProcessor(pattern, md), 'internal_link', 170)
 
 
-# Add table extension to support GitHub-flavored tables
+# Add table extension to support GitHub-flavored tables with color support
 class TableExtensionWrapper(Extension):
-    """Wrapper to add table extension with default settings."""
+    """Wrapper to add table extension with default settings and color tagging support."""
     
     def extendMarkdown(self, md):
         # Register the built-in tables extension
         md.registerExtension(TableExtension())
+        
+        # Register custom inline pattern for color tags
+        # Set priority to 165 to run before table extension (default 180)
+        color_pattern = r'\{\{\s*global\.color\.(red|green|blue|purple|pink)\s*\}\}'
+        md.inlinePatterns.register(ColorTagProcessor(color_pattern, md), 'color_tag', 165)
+
+
+class ColorTagProcessor(InlineProcessor):
+    """Process {{ global.color.pink }} syntax and convert to CSS color class."""
+    
+    def __init__(self, pattern, md):
+        super().__init__(pattern, md)
+    
+    def handleMatch(self, m, data):
+        color_name = m.group(1).strip()
+        # Map color names to CSS classes
+        color_classes = {
+            'red': 'color-red',
+            'green': 'color-green',
+            'blue': 'color-blue',
+            'purple': 'color-purple',
+            'pink': 'color-pink'
+        }
+        css_class = color_classes.get(color_name, '')
+        # Return only the span, and consume the entire match so the raw code doesn't appear
+        return AtomicString(f'<span class="{css_class}"></span>'), m.start(0), m.end(0)
+
+
+# Add CSS classes for colors to the stylesheet
+# This will be handled by updating static/style.css separately

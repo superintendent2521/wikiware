@@ -385,6 +385,63 @@ main {
     border-radius: var(--border-radius-sm);
     overflow: hidden;
     background: var(--primary-white);
+    
+}
+
+/* Color classes for table cells */
+.page-content .color-red {
+    background-color: #e74c3c;
+    color: white;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    margin: -10px -12px;
+}
+
+.page-content .color-green {
+    background-color: #27ae60;
+    color: white;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    margin: -10px -12px;
+}
+
+.page-content .color-blue {
+    background-color: #3498db;
+    color: white;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    margin: -10px -12px;
+}
+
+.page-content .color-purple {
+    background-color: #9b59b6;
+    color: white;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    margin: -10px -12px;
+}
+
+.page-content .color-pink {
+    background-color: #e91e63;
+    color: white;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    margin: -10px -12px;
 }
 
 .page-content th,
@@ -394,6 +451,12 @@ main {
     vertical-align: top;
     border-right: 1px solid var(--table-border);
     border-bottom: 1px solid var(--table-border);
+}
+
+/* Remove default paragraph spacing inside table cells so color markers can fill cells */
+.page-content td > p,
+.page-content th > p {
+    margin: 0;
 }
 
 .page-content th {
@@ -407,6 +470,13 @@ main {
     color: var(--darker-gray);
     font-size: var(--font-size-md);
 }
+
+/* Make entire cell adopt the color when it contains a color marker */
+.page-content td:has(.color-red)    { background-color: #e74c3c; color: white; }
+.page-content td:has(.color-green)  { background-color: #27ae60; color: white; }
+.page-content td:has(.color-blue)   { background-color: #3498db; color: white; }
+.page-content td:has(.color-purple) { background-color: #9b59b6; color: white; }
+.page-content td:has(.color-pink)   { background-color: #e91e63; color: white; }
 
 /* Zebra striping for body rows */
 .page-content tbody tr:nth-child(even) td {
