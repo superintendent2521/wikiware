@@ -288,6 +288,47 @@
       const editor = qs(opts.editorSelector);
       const toolbar = qs(opts.toolbarSelector);
       const form = qs(opts.formSelector);
+      const buttons = () => qsa('[data-cmd]', toolbar);
+
+      function clearActive() {
+        buttons().forEach(b => b.classList.remove('active'));
+      }
+
+      function setActive(selector) {
+        const btn = toolbar.querySelector(selector);
+        if (btn) btn.classList.add('active');
+      }
+
+      function updateToolbarState() {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        let node = sel.anchorNode;
+        if (!node) return;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        if (!editor.contains(node)) return; // only update when selection is in editor
+
+        clearActive();
+
+        // Heading/paragraph state
+        const block = findAncestor(node, ['H1','H2','H3','P','DIV']);
+        if (block) {
+          const tag = block.nodeName;
+          if (tag === 'H1' || tag === 'H2' || tag === 'H3') {
+            setActive(`[data-cmd="formatBlock"][data-value="${tag}"]`);
+          } else {
+            setActive('[data-cmd="formatBlock"][data-value="P"]');
+          }
+        }
+
+        // Inline styles
+        try {
+          if (document.queryCommandState('bold')) setActive('[data-cmd="bold"]');
+          if (document.queryCommandState('italic')) setActive('[data-cmd="italic"]');
+          if (document.queryCommandState('underline')) setActive('[data-cmd="underline"]');
+          if (document.queryCommandState('insertUnorderedList')) setActive('[data-cmd="insertUnorderedList"]');
+          if (document.queryCommandState('insertOrderedList')) setActive('[data-cmd="insertOrderedList"]');
+        } catch (_) { /* some browsers may restrict queryCommandState */ }
+      }
 
       // Render initial content
       try {
@@ -300,9 +341,25 @@
       qsa('[data-cmd]', toolbar).forEach(btn => {
         btn.addEventListener('click', () => {
           const cmd = btn.getAttribute('data-cmd');
-          const val = btn.getAttribute('data-value');
+          const val = (btn.getAttribute('data-value') || '').toUpperCase();
           editor.focus();
-          exec(cmd, val);
+
+          // Toggle headings back to paragraph if the same level is clicked
+          if (cmd === 'formatBlock' && val) {
+            const sel = window.getSelection();
+            let node = sel && sel.anchorNode;
+            if (node && node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+            const block = findAncestor(node, ['H1', 'H2', 'H3', 'P', 'DIV']);
+            if (block && block.nodeName === val && val !== 'P') {
+              exec('formatBlock', 'P');
+              return;
+            }
+            exec('formatBlock', val);
+            return;
+          }
+
+          exec(cmd, val || null);
+          updateToolbarState();
         });
       });
       // Link creation
@@ -342,6 +399,15 @@
           }
         });
       }
+
+      // Keep toolbar state in sync with selection changes inside the editor
+      ['keyup','mouseup','mouseleave','input','focus'].forEach(ev => {
+        editor.addEventListener(ev, updateToolbarState);
+      });
+      document.addEventListener('selectionchange', updateToolbarState);
+
+      // Initial state
+      updateToolbarState();
     },
     insertImage({ src, alt }) {
       const img = document.createElement('img');
