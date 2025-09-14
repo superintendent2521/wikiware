@@ -1,0 +1,72 @@
+/* Basic styles for the WikiWare visual editor */
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.editor-toolbar .sep {
+  width: 1px;
+  height: 24px;
+  background: var(--border-color, #ddd);
+  margin: 0 4px;
+}
+.editor-toolbar .table-tools {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+}
+.visual-editor {
+  border: 1px solid var(--border-color, #c9c9c9);
+  border-radius: 6px;
+  padding: 10px;
+  min-height: 320px;
+  background: #ffffff;            /* Light mode default */
+  color: #111111;                 /* Ensure strong contrast on light bg */
+  overflow: auto;
+  caret-color: currentColor;
+}
+.visual-editor:focus {
+  outline: 2px solid var(--focus, #6aa9ff);
+  outline-offset: 1px;
+}
+.visual-editor h1,
+.visual-editor h2,
+.visual-editor h3 { margin: 0.6em 0 0.4em; }
+.visual-editor p { margin: 0.5em 0; }
+.visual-editor ul, .visual-editor ol { margin: 0.5em 0 0.5em 1.25em; }
+
+.visual-editor table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+  max-width: 100%;
+}
+.visual-editor th, .visual-editor td {
+  border: 1px solid #c8ccd1;
+  padding: 6px 8px;
+}
+.visual-editor thead th { background: #f2f3f5; color: #111; }
+
+/* Placeholder style when empty */
+.visual-editor:empty:before {
+  content: 'Start typing…';
+  color: #6b7280;
+}
+
+/* Dark theme high-contrast overrides */
+[data-theme="dark"] .visual-editor {
+  background: #121212;            /* match app dark base */
+  color: #f1f1f1;                 /* strong contrast on dark bg */
+  border-color: #404040;
+}
+[data-theme="dark"] .visual-editor thead th {
+  background: #1f1f1f;
+  color: #f1f1f1;
+}
+[data-theme="dark"] .visual-editor th,
+[data-theme="dark"] .visual-editor td {
+  border-color: #404040;
+}
+[data-theme="dark"] .visual-editor:empty:before { color: #9ca3af; }

@@ -4,6 +4,7 @@
 
 {% block content %}
 <div class="container">
+    <link rel="stylesheet" href="{{ url_for('static', path='editor.css') }}">
     <!-- Image Upload Modal -->
     <div id="imageUploadModal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -88,7 +89,7 @@
 
 
     <div class="edit-form-container">
-        <form action="/edit/{{ title }}" method="post">
+        <form id="editForm" action="/edit/{{ title }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="branch" value="{{ branch or 'main' }}">
             <div class="form-group">
@@ -98,13 +99,34 @@
             </div>
 
             <div class="form-group">
-                <label for="content">Content (Markdown supported):</label>
-                <div class="toolbar">
-                    <button type="button" id="insertImageBtn" class="btn btn-secondary btn-small">
-                        <i class="fas fa-image"></i> Insert Image
+                <label for="content">Content (Visual editor with Markdown save):</label>
+                <div class="editor-toolbar" id="wiki-editor-toolbar">
+                    <button type="button" data-cmd="formatBlock" data-value="H1" class="btn btn-secondary btn-small" title="Heading 1"><i class="fas fa-heading"></i> H1</button>
+                    <button type="button" data-cmd="formatBlock" data-value="H2" class="btn btn-secondary btn-small" title="Heading 2">H2</button>
+                    <button type="button" data-cmd="formatBlock" data-value="H3" class="btn btn-secondary btn-small" title="Heading 3">H3</button>
+                    <span class="sep"></span>
+                    <button type="button" data-cmd="bold" class="btn btn-secondary btn-small" title="Bold"><i class="fas fa-bold"></i></button>
+                    <button type="button" data-cmd="italic" class="btn btn-secondary btn-small" title="Italic"><i class="fas fa-italic"></i></button>
+                    <button type="button" data-cmd="underline" class="btn btn-secondary btn-small" title="Underline"><i class="fas fa-underline"></i></button>
+                    <span class="sep"></span>
+                    <button type="button" data-cmd="insertUnorderedList" class="btn btn-secondary btn-small" title="Bulleted List"><i class="fas fa-list-ul"></i></button>
+                    <button type="button" data-cmd="insertOrderedList" class="btn btn-secondary btn-small" title="Numbered List"><i class="fas fa-list-ol"></i></button>
+                    <button type="button" id="createLinkBtn" class="btn btn-secondary btn-small" title="Insert Link"><i class="fas fa-link"></i></button>
+                    <span class="sep"></span>
+                    <button type="button" id="insertTableBtn" class="btn btn-secondary btn-small" title="Insert Table"><i class="fas fa-table"></i> Table</button>
+                    <div class="table-tools">
+                        <button type="button" id="addRowBtn" class="btn btn-secondary btn-small" title="Add Row">+ Row</button>
+                        <button type="button" id="addColBtn" class="btn btn-secondary btn-small" title="Add Column">+ Col</button>
+                        <button type="button" id="delRowBtn" class="btn btn-secondary btn-small" title="Delete Row">- Row</button>
+                        <button type="button" id="delColBtn" class="btn btn-secondary btn-small" title="Delete Column">- Col</button>
+                    </div>
+                    <span class="sep"></span>
+                    <button type="button" id="insertImageBtn" class="btn btn-secondary btn-small" title="Insert Image">
+                        <i class="fas fa-image"></i> Image
                     </button>
                 </div>
-                <textarea id="content" name="content" rows="20" required>{{ content }}</textarea>
+                <div id="visual-editor" class="visual-editor" contenteditable="true"></div>
+                <textarea id="content" name="content" rows="20" required style="display:none;">{{ content }}</textarea>
             </div>
 
             <div class="form-actions">
@@ -133,8 +155,19 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', path='editor.js') }}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Initialize client-side visual editor (M1 + M2)
+        if (window.WikiEditor && typeof window.WikiEditor.init === 'function') {
+            window.WikiEditor.init({
+                textareaSelector: '#content',
+                editorSelector: '#visual-editor',
+                toolbarSelector: '#wiki-editor-toolbar',
+                formSelector: '#editForm',
+                initialMarkdown: document.getElementById('content').value || ''
+            });
+        }
         // Image upload modal elements
         const modal = document.getElementById('imageUploadModal');
         const insertImageBtn = document.getElementById('insertImageBtn');
@@ -206,17 +239,21 @@
                 if (data.error) {
                     uploadStatus.innerHTML = '<div class="alert alert-error">' + data.error + '</div>';
                 } else {
-                    // Insert image markdown into content
-                    const imageMarkdown = '![' + data.filename + '](' + data.url + ')';
-                    const startPos = contentTextarea.selectionStart;
-                    const endPos = contentTextarea.selectionEnd;
-                    const content = contentTextarea.value;
-                    const newContent = content.substring(0, startPos) + imageMarkdown + content.substring(endPos);
-                    contentTextarea.value = newContent;
-                    
+                    // Insert image into visual editor if available, otherwise into textarea as markdown
+                    if (window.WikiEditor && typeof window.WikiEditor.insertImage === 'function') {
+                        window.WikiEditor.insertImage({ src: data.url, alt: data.filename });
+                    } else {
+                        const imageMarkdown = '![' + data.filename + '](' + data.url + ')';
+                        const startPos = contentTextarea.selectionStart;
+                        const endPos = contentTextarea.selectionEnd;
+                        const content = contentTextarea.value;
+                        const newContent = content.substring(0, startPos) + imageMarkdown + content.substring(endPos);
+                        contentTextarea.value = newContent;
+                    }
+
                     // Close modal
                     modal.style.display = 'none';
-                    
+
                     // Clear form
                     imageUploadForm.reset();
                     uploadStatus.innerHTML = '<div class="alert alert-success">Image uploaded successfully!</div>';
