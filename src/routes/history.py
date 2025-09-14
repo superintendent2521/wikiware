@@ -11,6 +11,7 @@ from typing import List, Dict, Any
 import markdown
 from ..utils.markdown_extensions import InternalLinkExtension
 from ..utils.link_processor import process_internal_links
+from ..utils.sanitizer import sanitize_html
 from ..database import get_pages_collection, get_history_collection, db_instance
 from ..services.branch_service import BranchService
 from ..utils.validation import is_valid_title
@@ -159,7 +160,7 @@ async def view_version(request: Request, response: Response, title: str, version
             processed_content = await process_internal_links(page["content"])
             # Then render as Markdown (with any remaining Markdown syntax)
             md = markdown.Markdown()
-            page["html_content"] = md.convert(processed_content)
+            page["html_content"] = sanitize_html(md.convert(processed_content))
         except Exception as md_error:
             logger.error(f"Error rendering markdown for version {version_index} of {title} on branch {branch}: {str(md_error)}")
             page["html_content"] = page["content"]  # Fallback to raw content

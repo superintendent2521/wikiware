@@ -4,6 +4,8 @@ Provides a function to convert [[Page Title]] and [[Page:Branch]] syntax to HTML
 """
 
 import re
+import html as _html
+from urllib.parse import quote
 from typing import Optional
 from .template_processor import render_template_content
 
@@ -36,15 +38,16 @@ async def process_internal_links(content: str) -> str:
             parts = full_match.split(':', 1)
             title = parts[0].strip()
             branch = parts[1].strip()
-            # URL-encode both title and branch
-            encoded_title = title.replace(' ', '%20')
-            encoded_branch = branch.replace(' ', '%20')
-            return f'<a href="/page/{encoded_title}?branch={encoded_branch}">{title}</a>'
+            encoded_title = quote(title, safe='')
+            encoded_branch = quote(branch, safe='')
+            safe_text = _html.escape(title)
+            return f'<a href="/page/{encoded_title}?branch={encoded_branch}">{safe_text}</a>'
         else:
             # Default to main branch if no branch specified
             title = full_match
-            encoded_title = title.replace(' ', '%20')
-            return f'<a href="/page/{encoded_title}">{title}</a>'
+            encoded_title = quote(title, safe='')
+            safe_text = _html.escape(title)
+            return f'<a href="/page/{encoded_title}">{safe_text}</a>'
     
     # Replace all matches
     result = re.sub(pattern, replace_link, content)

@@ -8,6 +8,8 @@ from markdown.extensions import Extension
 from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString
 from markdown.extensions.tables import TableExtension
+from urllib.parse import quote
+import html as _html
 
 
 class InternalLinkProcessor(InlineProcessor):
@@ -25,15 +27,16 @@ class InternalLinkProcessor(InlineProcessor):
             parts = full_match.split(':', 1)
             title = parts[0].strip()
             branch = parts[1].strip()
-            # URL-encode both title and branch
-            encoded_title = title.replace(' ', '%20')
-            encoded_branch = branch.replace(' ', '%20')
-            link = f'<a href="/page/{encoded_title}?branch={encoded_branch}">{title}</a>'
+            encoded_title = quote(title, safe='')
+            encoded_branch = quote(branch, safe='')
+            link_text = _html.escape(title)
+            link = f'<a href="/page/{encoded_title}?branch={encoded_branch}">{link_text}</a>'
         else:
             # Default to main branch if no branch specified
             title = full_match
-            encoded_title = title.replace(' ', '%20')
-            link = f'<a href="/page/{encoded_title}">{title}</a>'
+            encoded_title = quote(title, safe='')
+            link_text = _html.escape(title)
+            link = f'<a href="/page/{encoded_title}">{link_text}</a>'
 
         logger = __import__('loguru').logger
         logger.debug(f"Internal link processed: {full_match} -> {link}")

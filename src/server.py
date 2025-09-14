@@ -13,6 +13,7 @@ from .routes import pages, search, history, branches, uploads, stats, logs, auth
 # Remove TableExtension import since it's not available in this version
 from loguru import logger
 import os
+from .middleware.security_headers import SecurityHeadersMiddleware
 
 # Configure loguru
 os.makedirs("logs", exist_ok=True)
@@ -47,6 +48,9 @@ app = FastAPI(title=APP_TITLE, description=APP_DESCRIPTION)
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/help", StaticFiles(directory=HELP_STATIC_DIR), name="help")
+
+# Security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Include route modules
 app.include_router(pages.router)
