@@ -331,9 +331,15 @@
 
       // Sync on submit: serialize editor HTML to Markdown
       if (form) {
-        form.addEventListener('submit', () => {
+        form.addEventListener('submit', (e) => {
           const md = htmlToMd(editor);
           textarea.value = md;
+          // Simple required validation since hidden textarea isn't required
+          if (!md.trim()) {
+            e.preventDefault();
+            editor.focus();
+            alert('Content cannot be empty.');
+          }
         });
       }
     },
@@ -346,4 +352,3 @@
 
   window.WikiEditor = WikiEditor;
 })();
-
