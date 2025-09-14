@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help - WikiWare</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Custom help page styling */
+        .help-section {
+            margin-bottom: var(--space-xxl);
+            padding: var(--space-lg);
+            background: var(--primary-white);
+            border-radius: var(--border-radius-md);
+            box-shadow: var(--box-shadow-sm);
+            border: var(--border-width) solid var(--light-gray);
+        }
+        
+        .help-section h2 {
+            color: var(--darker-gray);
+            margin-bottom: var(--space-md);
+            font-size: var(--font-size-xl);
+            font-weight: var(--font-weight-bold);
+            border-bottom: 2px solid var(--accent-blue);
+            padding-bottom: var(--space-sm);
+        }
+        
+        .help-section ul {
+            padding-left: var(--space-lg);
+            margin-bottom: var(--space-md);
+        }
+        
+        .help-section li {
+            margin-bottom: var(--space-xs);
+            font-size: var(--font-size-md);
+            color: var(--darker-gray);
+        }
+        
+        .help-section p {
+            color: var(--dark-gray);
+            margin-bottom: var(--space-md);
+            font-size: var(--font-size-md);
+            line-height: 1.7;
+        }
+        
+        header {
+            text-align: center;
+            padding: var(--space-lg) var(--space-lg);
+            margin-bottom: var(--space-xl);
+            border-bottom: 1px solid var(--light-gray);
+        }
+        
+        header h1 {
+            color: var(--darker-gray);
+            font-size: var(--font-size-xxl);
+            font-weight: var(--font-weight-bold);
+            margin-bottom: var(--space-xs);
+        }
+        
+        header p {
+            color: var(--dark-gray);
+            font-size: var(--font-size-lg);
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        
+        footer {
+            text-align: center;
+            padding: var(--space-xxl) var(--space-lg);
+            margin-top: var(--space-xxl);
+            border-top: 1px solid var(--light-gray);
+            color: var(--dark-gray);
+            font-size: var(--font-size-sm);
+        }
+        
+        main {
+            padding: 0 var(--space-lg);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Help Center</h1>
+            <p>Everything you need to know about using WikiWare</p>
+        </header>
+
+        <main>
+            <section class="help-section">
+                <h2>Getting Started</h2>
+                <p>WikiWare is a knowledge base for space history, mostly regarding starship. It allows users to create and share information easily. it also supports branches, which makes organizing related content simple and efficient.</p>
+                <ul>
+                    <li>To create your first page, start by searching for the title you’d like to use. If no results appear, you’ll have the option to create a new page with that title.</li>
+                    <li>Use Markdown syntax to format your content</li>
+                    <li>Link pages together using double brackets: [[ Page Name:branch ]]</li>
+                </ul>
+            </section>
+
+            <section class="help-section">
+                <h2>Editing Pages</h2>
+                <p>Editing pages is simple and intuitive. Click the edit button on any page to begin making changes.</p>
+                <ul>
+                    <li>Use headings (##, ###) to structure your content</li>
+                    <li>Insert images using ![](image-url)</li>
+                    <li>Use code blocks with triple backticks (```) for code snippets</li>
+                </ul>
+            </section>
+
+            <section class="help-section">
+                <h2>Navigation</h2>
+                <p>WikiWare provides multiple ways to navigate your content.</p>
+                <ul>
+                    <li>Use the sidebar to browse your pages</li>
+                    <li>Search for pages using the search bar at the top</li>
+                    <li>Use breadcrumbs to trace your path through the wiki</li>
+                </ul>
+            </section>
+
+            <section class="help-section">
+                <h2>Permissions</h2>
+                <p>You can only edit if you're logged in.</p>
+                <ul>
+                    <li>Public pages are visible to everyone</li>
+                    <li>Accounts only Username and Password, No email verifications/phone numbers</li>
+                    <li>Private pages are only visible to authorized users</li>
+                </ul>
+            </section>
+        </main>
+
+        <footer>
+            <p>Need more help? Contact support at support@wikiware.com</p>
+        </footer>
+    </div>
+</body>
+</html>
