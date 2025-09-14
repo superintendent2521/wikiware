@@ -43,7 +43,11 @@ async def render_template_content(content: str, request: dict = None) -> str:
                 "green": "<span class='color-green'></span>",
                 "blue": "<span class='color-blue'></span>",
                 "purple": "<span class='color-purple'></span>",
-                "pink": "<span class='color-pink'></span>"
+                "pink": "<span class='color-pink'></span>",
+                "orange": "<span class='color-orange'></span>",
+                "gray": "<span class='color-gray'></span>",
+                "yellow": "<span class='color-yellow'></span>",
+                "cyan": "<span class='color-cyan'></span>"
             }
         }
 
@@ -55,7 +59,8 @@ async def render_template_content(content: str, request: dict = None) -> str:
 
         # Render template
         template = Template(content)
-        rendered_content = template.render(context)
+        # Render with keyword expansion so variables like `global.*` resolve correctly
+        rendered_content = template.render(**context)
         return rendered_content
 
     except Exception as e:

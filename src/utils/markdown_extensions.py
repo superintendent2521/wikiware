@@ -61,7 +61,8 @@ class TableExtensionWrapper(Extension):
         
         # Register custom inline pattern for color tags
         # Set priority to 165 to run before table extension (default 180)
-        color_pattern = r'\{\{\s*global\.color\.(red|green|blue|purple|pink)\s*\}\}'
+        # Expanded to include newly supported colors
+        color_pattern = r'\{\{\s*global\.color\.(red|green|blue|purple|pink|orange|yellow|gray|cyan)\s*\}\}'
         md.inlinePatterns.register(ColorTagProcessor(color_pattern, md), 'color_tag', 165)
 
 
@@ -79,7 +80,11 @@ class ColorTagProcessor(InlineProcessor):
             'green': 'color-green',
             'blue': 'color-blue',
             'purple': 'color-purple',
-            'pink': 'color-pink'
+            'pink': 'color-pink',
+            'orange': 'color-orange',
+            'yellow': 'color-yellow',
+            'gray': 'color-gray',
+            'cyan': 'color-cyan'
         }
         css_class = color_classes.get(color_name, '')
         # Return only the span, and consume the entire match so the raw code doesn't appear

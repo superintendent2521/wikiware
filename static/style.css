@@ -394,14 +394,17 @@ main {
 .page-content .color-green  { background-color: #27ae60; color: white; }
 .page-content .color-blue   { background-color: #3498db; color: white; }
 .page-content .color-purple { background-color: #9b59b6; color: white; }
-.page-content .color-pink   { background-color: #e91e63; color: white; }
-
+.page-content .color-orange { background-color: #ffa500; color: white; }
+.page-content .color-gray   { background-color: #808080; color: white; }
+.page-content .color-yellow { background-color: #fdd835; color: white; }
 /* When the whole cell is colored via :has(),
    make inner color tags transparent so they don't create overlays. */
 .page-content td:has(.color-red) .color-red,
 .page-content td:has(.color-green) .color-green,
 .page-content td:has(.color-blue) .color-blue,
 .page-content td:has(.color-purple) .color-purple,
+.page-content td:has(.color-orange) .color-orange,
+.page-content td:has(.color-yellow) .color-yellow,
 .page-content td:has(.color-pink) .color-pink {
     background: transparent;
 }
@@ -438,15 +441,19 @@ main {
 .page-content td:has(.color-green)  { background-color: #27ae60; color: white; }
 .page-content td:has(.color-blue)   { background-color: #3498db; color: white; }
 .page-content td:has(.color-purple) { background-color: #9b59b6; color: white; }
+.page-content td:has(.color-orange) { background-color: #ffa500; color: white; }
+.page-content td:has(.color-gray)   { background-color: #808080; color: white; }
 .page-content td:has(.color-pink)   { background-color: #e91e63; color: white; }
+/* Added missing yellow so the whole cell adopts the color */
+.page-content td:has(.color-yellow) { background-color: #fdd835; color: white; }
 
 /* Zebra striping for body rows (skip colored cells) */
-.page-content tbody tr:nth-child(even) td:not(:has(.color-red, .color-green, .color-blue, .color-purple, .color-pink)) {
+.page-content tbody tr:nth-child(even) td:not(:has(.color-red, .color-green, .color-blue, .color-purple, .color-pink, .color-orange, .color-gray, .color-yellow)) {
     background-color: var(--table-row-even-bg);
 }
 
 /* Hover state (skip colored cells) */
-.page-content tbody tr:hover td:not(:has(.color-red, .color-green, .color-blue, .color-purple, .color-pink)) {
+.page-content tbody tr:hover td:not(:has(.color-red, .color-green, .color-blue, .color-purple, .color-pink, .color-orange, .color-gray, .color-yellow)) {
     background-color: var(--table-row-hover-bg);
 }
 
