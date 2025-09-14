@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ServerSelectionTimeoutError
-
+from loguru import logger
 load_dotenv()
 
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
@@ -23,13 +23,13 @@ class Database:
             await self.client.admin.command('ping')
             self.db = self.client.wikiware
             self.is_connected = True
-            print("Connected to MongoDB successfully")
+            logger.info("Connected to MongoDB successfully")
         except ServerSelectionTimeoutError:
-            print("Warning: MongoDB server not available. Running in offline mode.")
+            logger.error("Warning: MongoDB server not available. Running in offline mode.")
             self.is_connected = False
         except Exception as e:
-            print(f"Database connection error: {e}")
-            print(f"MongoDB URL: {MONGODB_URL}")
+            logger.error(f"Database connection error: {e}")
+            logger.error(f"MongoDB URL: {MONGODB_URL}")
             self.is_connected = False
 
     async def disconnect(self):
@@ -73,21 +73,21 @@ async def create_indexes():
             # Drop the old unique index on title alone if it exists
             try:
                 await pages.drop_index("title_1")
-                print("Dropped old unique index on title")
+                logger.info("Dropped old unique index on title")
             except Exception:  # Specify exception type
                 pass  # Index might not exist, that's fine
 
             # Create compound unique index on title and branch
             await pages.create_index([("title", 1), ("branch", 1)], unique=True)
             await pages.create_index("updated_at")
-            print("Pages collection indexes created")
+            logger.info("Pages collection indexes created")
         
         # Create indexes for users collection
         users = get_users_collection()
         if users is not None:
             await users.create_index("username", unique=True)
             await users.create_index("created_at")
-            print("Users collection indexes created")
+            logger.info("Users collection indexes created")
         
         # Create indexes for sessions collection
         sessions = db_instance.get_collection("sessions")
@@ -95,7 +95,7 @@ async def create_indexes():
             await sessions.create_index("session_id", unique=True)
             await sessions.create_index("user_id")
             await sessions.create_index("expires_at", expireAfterSeconds=0)
-            print("Sessions collection indexes created")
+            logger.info("Sessions collection indexes created")
 
 async def init_database():
     """Initialize database connection and create indexes."""
