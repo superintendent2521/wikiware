@@ -26,8 +26,10 @@ class CsrfSettings(BaseModel):
     cookie_secure: bool = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
     httponly: bool = True
     cookie_key: str = "fastapi-csrf-token"
-    # Read token from form body instead of header, using this field name
-    token_location: str = "body"
+    # Use header-based tokens for better compatibility with multipart uploads
+    token_location: str = "header"
+    header_name: str = "X-CSRF-Token"
+    # Keep token_key for forms elsewhere if needed (ignored when token_location='header')
     token_key: str = "csrf_token"
 
 @CsrfProtect.load_config

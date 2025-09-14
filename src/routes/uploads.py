@@ -6,6 +6,8 @@ Handles file upload operations.
 from fastapi import APIRouter, UploadFile, File, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi_csrf_protect import CsrfProtect
+from fastapi_csrf_protect.exceptions import CsrfProtectError
+from fastapi import HTTPException
 import os
 import uuid
 import shutil
@@ -23,6 +25,14 @@ router = APIRouter()
 async def upload_image(request: Request, file: UploadFile = File(...), csrf_protect: CsrfProtect = Depends()):
     """Upload an image file."""
     try:
+        # Ensure form is parsed so fastapi-csrf-protect can read csrf_token from body
+        try:
+            form = await request.form()
+            # No-op; calling form() populates request._form for the CSRF lib
+            _ = list(form.keys())
+        except Exception:
+            pass
+
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
         
@@ -59,14 +69,14 @@ async def upload_image(request: Request, file: UploadFile = File(...), csrf_prot
             )
 
         # Validate file size without loading entire file into memory
-        if file.size is not None and file.size > MAX_FILE_SIZE:
+        if hasattr(file, 'size') and file.size is not None and file.size > MAX_FILE_SIZE:
             return JSONResponse(
                 status_code=400,
                 content={"error": f"File too large. Maximum file size is {MAX_FILE_SIZE // (1024 * 1024)}MB."}
             )
 
         # If file.size is not available, stream and count bytes
-        if file.size is None:
+        if not hasattr(file, 'size') or file.size is None:
             content_length = 0
             while True:
                 chunk = await file.read(8192)
@@ -120,6 +130,19 @@ async def upload_image(request: Request, file: UploadFile = File(...), csrf_prot
         return JSONResponse(
             status_code=200,
             content={"url": image_url, "filename": unique_filename}
+        )
+    except CsrfProtectError as e:
+        logger.error(f"CSRF error uploading image: {e.message}")
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"error": e.message}
+        )
+    except HTTPException as e:
+        # Authentication errors and similar
+        logger.error(f"HTTP error uploading image: {e.detail}")
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"error": e.detail}
         )
     except Exception as e:
         logger.error(f"Error uploading image: {str(e)}")

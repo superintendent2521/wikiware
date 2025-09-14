@@ -16,6 +16,7 @@
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Upload Image</button>
+                    <a href="/images" target="_blank" class="btn btn-secondary">Browse Images</a>
                     <button type="button" class="btn btn-secondary" id="cancelUpload">Cancel</button>
                 </div>
             </form>
@@ -84,14 +85,7 @@
         </details>
     </div>
 
-    <div class="edit-stats">
-        <h4>Wiki Stats</h4>
-        <ul>
-            <li><strong>Edits:</strong> {{ global.edits }}</li>
-            <li><strong>Pages:</strong> {{ global.pages }}</li>
-            <li><strong>Characters:</strong> {{ global.characters }}</li>
-        </ul>
-    </div>
+
 
     <div class="edit-form-container">
         <form action="/edit/{{ title }}" method="post">
@@ -185,12 +179,24 @@
             // Create FormData object
             const formData = new FormData();
             formData.append('file', file);
+            // Include CSRF token (kept in body for backward-compat, but we send header too)
+            let csrfToken = '';
+            try {
+                const csrfInput = document.querySelector('input[name="csrf_token"]');
+                if (csrfInput && csrfInput.value) {
+                    csrfToken = csrfInput.value;
+                    formData.append('csrf_token', csrfToken);
+                }
+            } catch (_) { /* no-op */ }
             
             // Upload image
             uploadStatus.innerHTML = '<div class="alert alert-info">Uploading...</div>';
             
             fetch('/upload-image', {
                 method: 'POST',
+                headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+                // Ensure session cookies are sent for auth
+                credentials: 'same-origin',
                 body: formData
             })
             .then(response => response.json())

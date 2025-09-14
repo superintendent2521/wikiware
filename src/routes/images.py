@@ -39,8 +39,7 @@ def _list_images() -> List[Dict]:
                     "modified": int(stat.st_mtime),
                 })
             except Exception as e:
-                logger.warning(f"Failed to stat image {entry}: {e}
-")
+                logger.warning(f"Failed to stat image {entry}: {e}")
                 continue
 
     # Sort by most recently modified first
