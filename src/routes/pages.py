@@ -10,6 +10,7 @@ from typing import Optional
 import markdown
 from ..utils.markdown_extensions import InternalLinkExtension, TableExtensionWrapper
 from ..utils.link_processor import process_internal_links
+from ..utils.sanitizer import sanitize_html
 from ..services.page_service import PageService
 from ..services.branch_service import BranchService
 from ..database import db_instance, get_pages_collection
@@ -47,7 +48,7 @@ async def home(request: Request, response: Response, branch: str = "main", csrf_
     # Process internal links and render as Markdown
     processed_content = await process_internal_links(page["content"])
     md = markdown.Markdown(extensions=['tables'])
-    page["html_content"] = md.convert(processed_content)
+    page["html_content"] = sanitize_html(md.convert(processed_content))
 
     template = templates.TemplateResponse("page.html", {
         "request": request,
@@ -92,7 +93,7 @@ async def get_page(request: Request, response: Response, title: str, branch: str
         processed_content = await process_internal_links(page["content"])
         # Then render as Markdown (with any remaining Markdown syntax)
         md = markdown.Markdown(extensions=['tables'])
-        page["html_content"] = md.convert(processed_content)
+        page["html_content"] = sanitize_html(md.convert(processed_content))
         logger.info(f"Page viewed: {title} on branch: {branch}")
         template = templates.TemplateResponse("page.html", {"request": request, "page": page, "branch": branch, "offline": False, "branches": branches, "user": user, "csrf_token": csrf_token})
         csrf_protect.set_csrf_cookie(signed_token, template)

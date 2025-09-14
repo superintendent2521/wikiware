@@ -1,69 +1,64 @@
 """
 Template processor for dynamic content rendering in wiki pages.
-Handles Jinja2 template variable substitution in page content.
+Performs safe, limited placeholder substitution (no Jinja execution).
 """
 
-from jinja2 import Template
+import re
 from ..stats import get_stats
 from ..database import db_instance
 from loguru import logger
 
+
+_SIMPLE_TOKEN_RE = re.compile(r"\{\{\s*global\.(edits|pages|characters|images|last_updated)\s*\}\}")
+_COLOR_TOKEN_RE = re.compile(r"\{\{\s*global\.color\.(red|green|blue|purple|pink|orange|yellow|gray|cyan)\s*\}\}")
+
+
 async def render_template_content(content: str, request: dict = None) -> str:
     """
-    Render Jinja2 template variables in page content.
-    Supports variables like {{ global.edits }}, {{ global.pages }}, etc.
-    
-    Args:
-        content (str): Raw page content (Markdown)
-        request (dict): Optional request context (used for user, branch, etc.)
-    
-    Returns:
-        str: Content with template variables rendered
+    Render limited placeholders in page content.
+    Supports tokens like {{ global.edits }} and {{ global.color.red }}.
     """
+    if not content:
+        return content
+
     if not db_instance.is_connected:
         # If DB is down, return content unchanged (no stats available)
         return content
 
     try:
-        # Get global stats
         stats = await get_stats()
-        # Provide global context values used by templates in Markdown content.
-        # For colors, return HTML span markers that our CSS styles into full-cell backgrounds
-        # so using `{{ global.color.red }}` in a table cell renders a colored tile instead of a hex code.
-        global_context = {
-            "edits": stats["total_edits"],
-            "pages": stats["total_pages"],
-            "characters": stats["total_characters"],
-            "images": stats["total_images"],
-            "last_updated": stats["last_updated"],
-            "color": {
-                # Insert HTML spans that Markdown will pass through unchanged.
-                # CSS in `static/style.css` styles these to fill the table cell.
-                "red": "<span class='color-red'></span>",
-                "green": "<span class='color-green'></span>",
-                "blue": "<span class='color-blue'></span>",
-                "purple": "<span class='color-purple'></span>",
-                "pink": "<span class='color-pink'></span>",
-                "orange": "<span class='color-orange'></span>",
-                "gray": "<span class='color-gray'></span>",
-                "yellow": "<span class='color-yellow'></span>",
-                "cyan": "<span class='color-cyan'></span>"
-            }
+        values = {
+            "edits": str(stats.get("total_edits", "")),
+            "pages": str(stats.get("total_pages", "")),
+            "characters": str(stats.get("total_characters", "")),
+            "images": str(stats.get("total_images", "")),
+            "last_updated": str(stats.get("last_updated", "")),
         }
 
-        # Create template context
-        context = {
-            "global": global_context,
-            "request": request or {}
+        color_spans = {
+            'red': "<span class='color-red'></span>",
+            'green': "<span class='color-green'></span>",
+            'blue': "<span class='color-blue'></span>",
+            'purple': "<span class='color-purple'></span>",
+            'pink': "<span class='color-pink'></span>",
+            'orange': "<span class='color-orange'></span>",
+            'yellow': "<span class='color-yellow'></span>",
+            'gray': "<span class='color-gray'></span>",
+            'cyan': "<span class='color-cyan'></span>",
         }
 
-        # Render template
-        template = Template(content)
-        # Render with keyword expansion so variables like `global.*` resolve correctly
-        rendered_content = template.render(**context)
-        return rendered_content
+        def _replace_simple(m: re.Match) -> str:
+            key = m.group(1)
+            return values.get(key, "")
+
+        def _replace_color(m: re.Match) -> str:
+            key = m.group(1)
+            return color_spans.get(key, "")
+
+        content = _SIMPLE_TOKEN_RE.sub(_replace_simple, content)
+        content = _COLOR_TOKEN_RE.sub(_replace_color, content)
+        return content
 
     except Exception as e:
-        logger.error(f"Error rendering template in page content: {str(e)}")
-        # Return original content if rendering fails (fail-safe)
+        logger.error(f"Error rendering placeholders in page content: {str(e)}")
         return content

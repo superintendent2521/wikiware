@@ -51,7 +51,7 @@
     </footer>
     
     <script src="/static/create_page_modal.js"></script>
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         // Dark mode toggle functionality
         document.addEventListener('DOMContentLoaded', function() {
             const toggleButton = document.getElementById('dark-mode-toggle');

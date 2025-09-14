@@ -157,7 +157,7 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', path='editor.js') }}"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize client-side visual editor (M1 + M2)
         if (window.WikiEditor && typeof window.WikiEditor.init === 'function') {
