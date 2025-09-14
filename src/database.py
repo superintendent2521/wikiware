@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ServerSelectionTimeoutError
 from loguru import logger
@@ -16,21 +17,32 @@ class Database:
         self.is_connected = False
 
     async def connect(self):
-        """Establish connection to MongoDB and test connectivity."""
-        try:
-            self.client = AsyncIOMotorClient(MONGODB_URL, serverSelectionTimeoutMS=10000)
-            # Test the connection
-            await self.client.admin.command('ping')
-            self.db = self.client.wikiware
-            self.is_connected = True
-            logger.info("Connected to MongoDB successfully")
-        except ServerSelectionTimeoutError:
-            logger.error("Warning: MongoDB server not available. Running in offline mode.")
-            self.is_connected = False
-        except Exception as e:
-            logger.error(f"Database connection error: {e}")
-            logger.error(f"MongoDB URL: {MONGODB_URL}")
-            self.is_connected = False
+        """Establish connection to MongoDB and test connectivity with retry logic."""
+        max_retries = 10  # Will try for ~50 seconds total (10 attempts * 5s delay)
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                self.client = AsyncIOMotorClient(MONGODB_URL, serverSelectionTimeoutMS=10000)
+                # Test the connection
+                await self.client.admin.command('ping')
+                self.db = self.client.wikiware
+                self.is_connected = True
+                logger.info("Connected to MongoDB successfully")
+                return  # Exit the loop on successful connection
+            except ServerSelectionTimeoutError:
+                retry_count += 1
+                logger.warning(f"MongoDB server not available. Attempt {retry_count}/{max_retries}. Retrying in 5 seconds...")
+                await asyncio.sleep(5)  # Wait 5 seconds before retrying
+            except Exception as e:
+                logger.error(f"Database connection error: {e}")
+                logger.error(f"MongoDB URL: {MONGODB_URL}")
+                self.is_connected = False
+                return  # Don't retry on other errors
+        
+        # If we've exhausted all retries
+        logger.error("Failed to connect to MongoDB after multiple attempts. Running in offline mode.")
+        self.is_connected = False
 
     async def disconnect(self):
         """Close the MongoDB connection."""
