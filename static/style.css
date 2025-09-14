@@ -624,6 +624,20 @@ main {
     border-bottom: none;
 }
 
+.markdown-help a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-weight: var(--font-weight-medium);
+    transition: color var(--transition-fast), text-decoration var(--transition-fast);
+    border-bottom: 1px solid transparent;
+}
+
+.markdown-help a:hover {
+    color: var(--accent-blue-dark);
+    text-decoration: underline;
+    border-bottom-color: var(--accent-blue);
+}
+
 .markdown-help code {
     background: var(--secondary-white);
     padding: 2px 6px;

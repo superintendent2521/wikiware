@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
-from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, TEMPLATE_DIR, DEV
+from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
 from .routes import pages, search, history, branches, uploads, stats, logs, auth, admin, images
 # Remove TableExtension import since it's not available in this version
@@ -46,6 +46,7 @@ app = FastAPI(title=APP_TITLE, description=APP_DESCRIPTION)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/help", StaticFiles(directory=HELP_STATIC_DIR), name="help")
 
 # Include route modules
 app.include_router(pages.router)
