@@ -131,4 +131,4 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
         return RedirectResponse(url="/login", status_code=303)
     except Exception as e:
         logger.error(f"Error saving user page {username} on branch {branch}: {str(e)}")
-        return {"error": f"Failed to save user page: {str(e)}"}
+        return {"error": f"Failed to save user page, try again later."}
