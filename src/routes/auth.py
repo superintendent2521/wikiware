@@ -10,7 +10,7 @@ from fastapi_csrf_protect import CsrfProtect
 from typing import Optional
 from datetime import datetime, timezone
 import secrets
-from ..utils.validation import is_valid_title
+from ..utils.validation import is_valid_title, sanitize_redirect_path
 from ..services.user_service import UserService
 from ..models.user import UserRegistration, UserLogin
 from ..config import TEMPLATE_DIR, DEV, SESSION_COOKIE_NAME
@@ -145,11 +145,12 @@ async def register_user(
 async def login_form(request: Request, response: Response, next: str = "/", csrf_protect: CsrfProtect = Depends()):
     """Show login form."""
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    safe_next = sanitize_redirect_path(next)
     template = templates.TemplateResponse("login.html", {
         "request": request,
         "offline": not db_instance.is_connected,
         "csrf_token": csrf_token,
-        "next": next
+        "next": safe_next
     })
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
@@ -168,6 +169,8 @@ async def login_user(
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
+        safe_next = sanitize_redirect_path(next)
+        
         # Extract client IP and User-Agent for logging
         xff = request.headers.get("x-forwarded-for")
         client_ip = (xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown"))
@@ -224,7 +227,7 @@ async def login_user(
             return template
 
         # Set secure session cookie
-        response = RedirectResponse(url=next, status_code=303)
+        response = RedirectResponse(url=safe_next, status_code=303)
         response.set_cookie(
             key=SESSION_COOKIE_NAME,
             value=session_id,

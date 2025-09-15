@@ -12,7 +12,7 @@ from ..utils.link_processor import process_internal_links
 from ..utils.sanitizer import sanitize_html
 from ..services.page_service import PageService
 from ..database import db_instance
-from ..utils.validation import is_valid_title
+from ..utils.validation import is_valid_title, is_safe_branch_parameter
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
 from fastapi_csrf_protect import CsrfProtect
@@ -115,6 +115,10 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
         import re
         if not is_valid_title(username) or not re.match(r"^[a-zA-Z0-9_-]+$", username):
             raise HTTPException(status_code=400, detail="Invalid username")
+
+        if not is_safe_branch_parameter(branch):
+            logger.warning(f"Invalid branch '{branch}' while saving user page for {username}, defaulting to main")
+            branch = "main"
 
         # Use the authenticated user as the author
         author = user["username"]
