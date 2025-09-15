@@ -286,4 +286,4 @@ async def delete_page(request: Request, title: str, branch: str = Form("main"), 
         return RedirectResponse(url="/login", status_code=303)
     except Exception as e:
         logger.error(f"Error deleting page {title} on branch {branch}: {str(e)}")
-        return {"error": f"Failed to delete page: {str(e)}"}
+        return {"error": "Failed to delete page"}
