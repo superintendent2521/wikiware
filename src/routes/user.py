@@ -111,8 +111,9 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
         if user["username"] != username:
             raise HTTPException(status_code=403, detail="You can only edit your own user page")
 
-        # Validate title (username)
-        if not is_valid_title(username):
+        # Validate title (username) - must be safe for path inclusion
+        import re
+        if not is_valid_title(username) or not re.match(r"^[a-zA-Z0-9_-]+$", username):
             raise HTTPException(status_code=400, detail="Invalid username")
 
         # Use the authenticated user as the author
@@ -122,6 +123,7 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
         success = await PageService.update_page(username, content, author, branch)
 
         if success:
+            # Safe redirect: username validated and only used in local path
             return RedirectResponse(url=f"/user/{username}?branch={branch}&updated=true", status_code=303)
         else:
             return {"error": "Failed to save user page"}
