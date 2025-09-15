@@ -1,36 +1,26 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ username }}'s Page - WikiWare</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
-    {% include "base.html" %}
-    
-    <main>
-        <div class="page-container">
-            <div class="page-header">
-                <h1>{{ username }}'s Page</h1>
-                {% if is_owner %}
-                <div class="page-actions">
-                    <a href="/user/{{ username }}/edit" class="btn btn-primary">Edit Page</a>
-                </div>
-                {% endif %}
+{% extends "base.html" %}
+
+{% block title %}{{ username }}'s Page - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-container">
+        <div class="page-header">
+            <h1>{{ username }}'s Page</h1>
+            {% if is_owner %}
+            <div class="page-actions">
+                <a href="/user/{{ username }}/edit" class="btn btn-primary">Edit Page</a>
             </div>
-            
-            <div class="page-content">
-                {% if page.html_content %}
-                {{ page.html_content|safe }}
-                {% else %}
-                <p>No content available.</p>
-                {% endif %}
-            </div>
+            {% endif %}
         </div>
-    </main>
-    
-    <script src="/static/editor.js"></script>
-</body>
-</html>
+
+        <div class="page-content">
+            {% if page.html_content %}
+            {{ page.html_content|safe }}
+            {% else %}
+            <p>No content available.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
