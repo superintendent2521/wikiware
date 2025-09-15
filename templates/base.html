@@ -18,11 +18,18 @@
 
                     <!-- Authentication links -->
                     {% if user %}
-                    <span class="user-info">Welcome, {{ user.username }}!</span>
-                    <form action="/logout" method="post" style="display: inline;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <button type="submit" class="btn btn-secondary btn-small"><i class="fas fa-sign-out-alt"></i> Logout</button>
-                    </form>
+                    <div class="user-dropdown" tabindex="0" role="button" aria-haspopup="menu" aria-expanded="false">
+                        <span class="user-info">Welcome, {{ user.username }}! <i class="fas fa-chevron-down" aria-hidden="true"></i></span>
+                        <div class="dropdown-menu">
+                            <a href="/user/{{ user.username }}">My Page</a>
+                            <a href="/user/{{ user.username }}/edit">Edit My Page</a>
+                            <div class="dropdown-divider"></div>
+                            <form action="/logout" method="post" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="dropdown-item"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Logout</button>
+                            </form>
+                        </div>
+                    </div>
                     {% else %}
                     <a href="/login"><i class="fas fa-sign-in-alt"></i> Login</a>
                     <a href="/register"><i class="fas fa-user-plus"></i> Register</a>
@@ -124,12 +131,44 @@
                 });
             });
 
+            // User dropdown functionality
+            const userDropdown = document.querySelector('.user-dropdown');
+            if (userDropdown) {
+                const userInfo = userDropdown.querySelector('.user-info');
+                const menu = userDropdown.querySelector('.dropdown-menu');
+
+                // Toggle on click of the label
+                userInfo.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const isOpen = userDropdown.classList.toggle('open');
+                    userDropdown.setAttribute('aria-expanded', String(isOpen));
+                });
+
+                // Keyboard accessibility
+                userDropdown.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        const isOpen = userDropdown.classList.toggle('open');
+                        userDropdown.setAttribute('aria-expanded', String(isOpen));
+                    } else if (e.key === 'Escape') {
+                        userDropdown.classList.remove('open');
+                        userDropdown.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
+
             // Close dropdowns when clicking outside
             document.addEventListener('click', function(e) {
                 if (!e.target.closest('.branch-selector')) {
                     branchSelectors.forEach(selector => {
                         selector.classList.remove('open');
                     });
+                }
+                if (!e.target.closest('.user-dropdown')) {
+                    if (userDropdown) {
+                        userDropdown.classList.remove('open');
+                        userDropdown.setAttribute('aria-expanded', 'false');
+                    }
                 }
             });
         });
