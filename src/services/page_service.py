@@ -5,7 +5,7 @@ Contains business logic for page operations.
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
-from ..database import get_pages_collection, get_history_collection, db_instance
+from ..database import get_pages_collection, get_history_collection, get_users_collection, db_instance
 from ..models.page import WikiPage
 from loguru import logger
 
@@ -102,6 +102,7 @@ class PageService:
 
             pages_collection = get_pages_collection()
             history_collection = get_history_collection()
+            users_collection = get_users_collection()
 
             if pages_collection is None:
                 logger.error("Pages collection not available")
@@ -131,11 +132,33 @@ class PageService:
                         "updated_at": datetime.now(timezone.utc)
                     }}
                 )
+
+                # Update user edit statistics
+                if users_collection is not None and author != "Anonymous":
+                    # Increment total edits
+                    await users_collection.update_one(
+                        {"username": author},
+                        {"$inc": {"total_edits": 1}}
+                    )
+                    # Increment page-specific edits
+                    await users_collection.update_one(
+                        {"username": author},
+                        {"$inc": {f"page_edits.{title}": 1}}
+                    )
+
                 logger.info(f"Page updated: {title} on branch: {branch} by {author}")
                 return True
             else:
                 # Create new page if it doesn't exist
-                return await PageService.create_page(title, content, author, branch)
+                created = await PageService.create_page(title, content, author, branch)
+                if created and author != "Anonymous":
+                    # Update user edit statistics for new page
+                    if users_collection is not None:
+                        await users_collection.update_one(
+                            {"username": author},
+                            {"$inc": {"total_edits": 1, f"page_edits.{title}": 1}}
+                        )
+                return created
         except Exception as e:
             logger.error(f"Error updating page {title} on branch {branch}: {str(e)}")
             return False

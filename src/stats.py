@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import os
 from loguru import logger
-from .database import get_pages_collection, get_history_collection
+from .database import get_pages_collection, get_history_collection, get_users_collection
 
 # Caching variables for stats
 last_character_count = 0
@@ -24,6 +24,38 @@ async def get_total_edits():
     except Exception as e:
         logger.error(f"Error counting total edits: {str(e)}")
         return 0
+
+
+async def get_user_edit_stats():
+    """
+    Get total edit statistics for all users.
+    
+    Returns:
+        dict: Dictionary containing total edits per user
+    """
+    try:
+        users_collection = get_users_collection()
+        if users_collection is None:
+            return {}
+        
+        # Get all users with their edit statistics
+        users = await users_collection.find(
+            {},
+            {"username": 1, "total_edits": 1, "page_edits": 1, "_id": 0}
+        ).to_list(None)
+        
+        # Convert to dictionary with username as key
+        user_stats = {}
+        for user in users:
+            user_stats[user["username"]] = {
+                "total_edits": user.get("total_edits", 0),
+                "page_edits": user.get("page_edits", {})
+            }
+        
+        return user_stats
+    except Exception as e:
+        logger.error(f"Error getting user edit stats: {str(e)}")
+        return {}
 
 async def get_total_characters():
     """
@@ -110,10 +142,13 @@ async def get_stats():
     Returns:
         dict: Dictionary containing all statistics
     """
+    user_edit_stats = await get_user_edit_stats()
+    
     return {
         "total_edits": await get_total_edits(),
         "total_characters": await get_total_characters(),
         "total_pages": await get_total_pages(),
         "total_images": await get_total_images(),
-        "last_updated": last_character_count_time.strftime("%Y-%m-%d %H:%M:%S") if last_character_count_time else None
+        "last_updated": last_character_count_time.strftime("%Y-%m-%d %H:%M:%S") if last_character_count_time else None,
+        "user_edit_stats": user_edit_stats
     }

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
-from urllib.parse import urlparse, parse_qsl, urlencode, quote
+from urllib.parse import urlparse, parse_qsl, urlencode
 from ..services.branch_service import BranchService
 from ..database import db_instance
 from ..utils.validation import is_valid_title, is_valid_branch_name, is_safe_branch_parameter, sanitize_referer_url
@@ -17,6 +17,15 @@ from loguru import logger
 
 router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+
+def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
+    """Construct a safe internal URL for the page view."""
+    safe_branch = branch if is_safe_branch_parameter(branch) else "main"
+    target_url = request.url_for("get_page", title=title)
+    if safe_branch != "main":
+        target_url = target_url.include_query_params(branch=safe_branch)
+    return str(target_url)
 
 
 @router.get("/branches/{title}", response_class=HTMLResponse)
@@ -74,12 +83,8 @@ async def create_branch(
         success = await BranchService.create_branch(title, branch_name, source_branch)
 
         if success:
-            safe_branch = branch_name if is_safe_branch_parameter(branch_name) else "main"
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{quote(title, safe='')}"
-            if safe_branch != "main":
-                redirect_target += f"?branch={safe_branch}"
-            return RedirectResponse(url=redirect_target, status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch_name)
+            return RedirectResponse(url=redirect_url, status_code=303)
         else:
             return {"error": "Failed to create branch"}
     except Exception as e:

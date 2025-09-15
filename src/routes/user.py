@@ -57,6 +57,17 @@ async def user_page(request: Request, response: Response, username: str, branch:
     # Check if current user is the owner of this page
     is_owner = current_user and current_user["username"] == username
 
+    # Get user statistics
+    user_stats = None
+    users_collection = db_instance.get_collection("users")
+    if users_collection is not None:
+        user_doc = await users_collection.find_one({"username": username})
+        if user_doc:
+            user_stats = {
+                "total_edits": user_doc.get("total_edits", 0),
+                "page_edits": user_doc.get("page_edits", {})
+            }
+
     template = templates.TemplateResponse("user.html", {
         "request": request,
         "username": username,
@@ -65,7 +76,8 @@ async def user_page(request: Request, response: Response, username: str, branch:
         "branch": branch,
         "user": current_user,
         "is_owner": is_owner,
-        "csrf_token": csrf_token
+        "csrf_token": csrf_token,
+        "user_stats": user_stats
     })
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template

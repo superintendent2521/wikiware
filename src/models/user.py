@@ -15,6 +15,8 @@ class User(BaseModel):
     created_at: datetime = datetime.now(timezone.utc)
     is_active: bool = True
     is_admin: bool = False
+    page_edits: dict = {}  # Dictionary to track edits per page: {"page_title": edit_count}
+    total_edits: int = 0  # Total number of edits by this user
 
     @validator('username')
     def validate_username(cls, v):

@@ -67,7 +67,8 @@ async def stats_page(request: Request, response: Response, branch: str = "main",
             "branch": branch,
             "branches": branches,
             "user": user,
-            "csrf_token": csrf_token
+            "csrf_token": csrf_token,
+            "user_edit_stats": stats["user_edit_stats"]
         })
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
