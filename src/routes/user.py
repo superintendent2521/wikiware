@@ -12,7 +12,7 @@ from ..utils.link_processor import process_internal_links
 from ..utils.sanitizer import sanitize_html
 from ..services.page_service import PageService
 from ..database import db_instance
-from ..utils.validation import is_valid_title
+from ..utils.validation import is_valid_title, is_safe_branch_parameter
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
 from fastapi_csrf_protect import CsrfProtect
@@ -111,9 +111,14 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
         if user["username"] != username:
             raise HTTPException(status_code=403, detail="You can only edit your own user page")
 
-        # Validate title (username)
-        if not is_valid_title(username):
+        # Validate title (username) - must be safe for path inclusion
+        import re
+        if not is_valid_title(username) or not re.match(r"^[a-zA-Z0-9_-]+$", username):
             raise HTTPException(status_code=400, detail="Invalid username")
+
+        if not is_safe_branch_parameter(branch):
+            logger.warning(f"Invalid branch '{branch}' while saving user page for {username}, defaulting to main")
+            branch = "main"
 
         # Use the authenticated user as the author
         author = user["username"]
@@ -122,6 +127,7 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
         success = await PageService.update_page(username, content, author, branch)
 
         if success:
+            # Safe redirect: username validated and only used in local path
             return RedirectResponse(url=f"/user/{username}?branch={branch}&updated=true", status_code=303)
         else:
             return {"error": "Failed to save user page"}
@@ -129,4 +135,4 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
         return RedirectResponse(url="/login", status_code=303)
     except Exception as e:
         logger.error(f"Error saving user page {username} on branch {branch}: {str(e)}")
-        return {"error": f"Failed to save user page: {str(e)}"}
+        return {"error": f"Failed to save user page, try again later."}

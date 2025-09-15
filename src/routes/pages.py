@@ -14,7 +14,7 @@ from ..utils.sanitizer import sanitize_html
 from ..services.page_service import PageService
 from ..services.branch_service import BranchService
 from ..database import db_instance, get_pages_collection
-from ..utils.validation import is_valid_title
+from ..utils.validation import is_valid_title, is_safe_branch_parameter
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
 from ..stats import get_stats
@@ -227,6 +227,9 @@ async def save_page(request: Request, title: str, content: str = Form(...), auth
         if not is_valid_title(title):
             raise HTTPException(status_code=400, detail="Invalid page title")
 
+        if not is_safe_branch_parameter(branch):
+            raise HTTPException(status_code=400, detail="Invalid branch")
+
         # Use the authenticated user as the author
         author = user["username"]
 
@@ -242,7 +245,7 @@ async def save_page(request: Request, title: str, content: str = Form(...), auth
         return RedirectResponse(url="/login", status_code=303)
     except Exception as e:
         logger.error(f"Error saving page {title} on branch {branch}: {str(e)}")
-        return {"error": f"Failed to save page: {str(e)}"}
+        return {"error": f"Failed to save page"}
 
 
 @router.post("/delete/{title}")
@@ -286,4 +289,4 @@ async def delete_page(request: Request, title: str, branch: str = Form("main"), 
         return RedirectResponse(url="/login", status_code=303)
     except Exception as e:
         logger.error(f"Error deleting page {title} on branch {branch}: {str(e)}")
-        return {"error": f"Failed to delete page: {str(e)}"}
+        return {"error": "Failed to delete page"}

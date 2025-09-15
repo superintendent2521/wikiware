@@ -7,9 +7,10 @@ from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
+from urllib.parse import urlparse, parse_qsl, urlencode, quote
 from ..services.branch_service import BranchService
 from ..database import db_instance
-from ..utils.validation import is_valid_title, is_valid_branch_name
+from ..utils.validation import is_valid_title, is_valid_branch_name, is_safe_branch_parameter, sanitize_referer_url
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
@@ -73,12 +74,14 @@ async def create_branch(
         success = await BranchService.create_branch(title, branch_name, source_branch)
 
         if success:
-            return RedirectResponse(url=f"/page/{title}?branch={branch_name}", status_code=303)
+            safe_branch = branch_name if is_safe_branch_parameter(branch_name) else "main"
+            encoded_title = quote(title, safe="")
+            return RedirectResponse(url=f"/page/{encoded_title}?branch={safe_branch}", status_code=303)
         else:
             return {"error": "Failed to create branch"}
     except Exception as e:
         logger.error(f"Error creating branch {branch_name} for page {title}: {str(e)}")
-        return {"error": f"Failed to create branch: {str(e)}"}
+        return {"error": "Failed to create branch"}
 
 
 @router.post("/set-branch")
@@ -87,24 +90,22 @@ async def set_branch(request: Request, branch: str = Form(...), csrf_protect: Cs
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
-        
-        # In a real application, you would store this in a session or cookie
-        # For now, we'll just redirect back to the referring page with the branch parameter
-        referer = request.headers.get("referer", "/")
-        if "?" in referer:
-            if "branch=" in referer:
-                # Replace existing branch parameter
-                import re
-                referer = re.sub(r'branch=[^&]*', f'branch={branch}', referer)
-            else:
-                # Add branch parameter
-                referer += f"&branch={branch}"
-        else:
-            referer += f"?branch={branch}"
 
-        logger.info(f"Branch set to: {branch}")
-        return RedirectResponse(url=referer, status_code=303)
+        safe_branch = branch if is_safe_branch_parameter(branch) else "main"
+        referer_header = request.headers.get("referer")
+        safe_referer = sanitize_referer_url(str(request.url), referer_header, default="/")
+
+        parsed = urlparse(safe_referer)
+        query_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query_params['branch'] = safe_branch
+        new_query = urlencode(query_params, doseq=True)
+        redirect_target = parsed.path or "/"
+        if new_query:
+            redirect_target = f"{redirect_target}?{new_query}"
+
+        logger.info(f"Branch set to: {safe_branch}")
+        return RedirectResponse(url=redirect_target, status_code=303)
     except Exception as e:
         logger.error(f"Error setting branch to {branch}: {str(e)}")
-        referer = request.headers.get("referer", "/")
-        return RedirectResponse(url=referer, status_code=303)
+        safe_referer = sanitize_referer_url(str(request.url), request.headers.get("referer"), default="/")
+        return RedirectResponse(url=safe_referer, status_code=303)

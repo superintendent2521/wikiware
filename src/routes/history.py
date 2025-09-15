@@ -14,7 +14,7 @@ from ..utils.link_processor import process_internal_links
 from ..utils.sanitizer import sanitize_html
 from ..database import get_pages_collection, get_history_collection, db_instance
 from ..services.branch_service import BranchService
-from ..utils.validation import is_valid_title
+from ..utils.validation import is_valid_title, is_safe_branch_parameter
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
 from datetime import datetime, timezone
@@ -208,10 +208,14 @@ async def restore_version(request: Request, title: str, version_index: int, bran
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
-        
+
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
-        
+
+        if not is_safe_branch_parameter(branch):
+            logger.warning(f"Invalid branch '{branch}' while restoring version for {title}, defaulting to main")
+            branch = "main"
+
         # Sanitize title
         if not is_valid_title(title):
             logger.warning(f"Invalid title for restore: {title} on branch: {branch}")
