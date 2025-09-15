@@ -24,6 +24,21 @@ router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 
+def _build_page_redirect_url(request: Request, title: str, branch: str, **extra_params: str) -> str:
+    """Construct a safe internal URL to the page view with optional query parameters."""
+    safe_branch = branch if branch == "main" or is_safe_branch_parameter(branch) else "main"
+    target_url = request.url_for("get_page", title=title)
+    query_params = {}
+    if safe_branch != "main":
+        query_params["branch"] = safe_branch
+    for key, value in extra_params.items():
+        if value is not None:
+            query_params[key] = value
+    if query_params:
+        target_url = target_url.include_query_params(**query_params)
+    return str(target_url)
+
+
 @router.get("/history/{title}", response_class=HTMLResponse)
 async def page_history(request: Request, response: Response, title: str, branch: str = "main", csrf_protect: CsrfProtect = Depends()):
     """View page history."""
@@ -219,46 +234,35 @@ async def restore_version(request: Request, title: str, version_index: int, bran
         # Sanitize title
         if not is_valid_title(title):
             logger.warning(f"Invalid title for restore: {title} on branch: {branch}")
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{title}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=redirect_target, status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         # Validate version index
         if version_index < 0:
             logger.warning(f"Invalid version index: {version_index} for title: {title} on branch: {branch}")
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{title}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=redirect_target, status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         if not db_instance.is_connected:
             logger.error(f"Database not connected - restoring version: {title} v{version_index} on branch: {branch}")
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{title}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=f"{redirect_target}&error=database_not_available", status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch, error="database_not_available")
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         pages_collection = get_pages_collection()
         history_collection = get_history_collection()
 
         if pages_collection is None or history_collection is None:
             logger.error(f"Database collections not available - restoring version: {title} v{version_index} on branch: {branch}")
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{title}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=f"{redirect_target}&error=database_not_available", status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch, error="database_not_available")
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         page = None
         try:
             if version_index == 0:
                 # Current version - nothing to restore
                 logger.info(f"Attempt to restore current version (no action): {title} v{version_index} on branch: {branch}")
-                return RedirectResponse(url=f"/page/{title}?branch={branch}", status_code=303)
+                redirect_url = _build_page_redirect_url(request, title, branch)
+                return RedirectResponse(url=redirect_url, status_code=303)
             else:
                 # Historical version
                 versions = await history_collection.find({"title": title, "branch": branch}).sort("updated_at", -1).to_list(100)
@@ -266,19 +270,13 @@ async def restore_version(request: Request, title: str, version_index: int, bran
                     page = versions[version_index - 1]
         except Exception as db_error:
             logger.error(f"Database error while fetching version {version_index} for restore {title} on branch {branch}: {str(db_error)}")
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{title}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=f"{redirect_target}&error=database_error", status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch, error="database_error")
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         if not page:
             logger.error(f"Version not found for restore: {title} v{version_index} on branch: {branch}")
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{title}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=f"{redirect_target}&error=version_not_found", status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch, error="version_not_found")
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         try:
             # Save current version to history before restoring
@@ -304,18 +302,13 @@ async def restore_version(request: Request, title: str, version_index: int, bran
             )
         except Exception as db_error:
             logger.error(f"Database error while restoring version {version_index} of {title} on branch {branch}: {str(db_error)}")
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{title}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=f"{redirect_target}&error=restore_failed", status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch, error="restore_failed")
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         logger.info(f"Version restored: {title} v{version_index} on branch: {branch}")
-        return RedirectResponse(url=f"/page/{title}?branch={branch}&restored=true", status_code=303)
+        redirect_url = _build_page_redirect_url(request, title, branch, restored="true")
+        return RedirectResponse(url=redirect_url, status_code=303)
     except Exception as e:
         logger.error(f"Error restoring version {title} v{version_index} on branch {branch}: {str(e)}")
-        # Ensure redirect target is relative and safe
-        redirect_target = f"/page/{title}"
-        if branch != "main":
-            redirect_target += f"?branch={branch}"
-        return RedirectResponse(url=f"{redirect_target}&error=restore_error", status_code=303)
+        redirect_url = _build_page_redirect_url(request, title, branch, error="restore_error")
+        return RedirectResponse(url=redirect_url, status_code=303)

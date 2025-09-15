@@ -22,6 +22,14 @@ router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 
+def _build_user_page_redirect_url(request: Request, username: str, branch: str) -> str:
+    """Build an internal URL for the user page route with optional branch."""
+    target_url = request.url_for("user_page", username=username)
+    if branch != "main":
+        target_url = target_url.include_query_params(branch=branch)
+    return str(target_url)
+
+
 @router.get("/user/{username}", response_class=HTMLResponse)
 async def user_page(request: Request, response: Response, username: str, branch: str = "main", csrf_protect: CsrfProtect = Depends()):
     """View a user's personal page."""
@@ -127,12 +135,8 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
         success = await PageService.update_page(username, content, author, branch)
 
         if success:
-            # Safe redirect: username validated and only used in local path
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/user/{username}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=redirect_target, status_code=303)
+            redirect_url = _build_user_page_redirect_url(request, username, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
         else:
             return {"error": "Failed to save user page"}
     except HTTPException:

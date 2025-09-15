@@ -25,6 +25,14 @@ router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 
+def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
+    """Build an internal URL for the page route with proper encoding."""
+    target_url = request.url_for("get_page", title=title)
+    if branch != "main":
+        target_url = target_url.include_query_params(branch=branch)
+    return str(target_url)
+
+
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request, response: Response, branch: str = "main", csrf_protect: CsrfProtect = Depends()):
     """Home page showing the hardcoded 'Home' page."""
@@ -237,11 +245,8 @@ async def save_page(request: Request, title: str, content: str = Form(...), auth
         success = await PageService.update_page(title, content, author, branch)
 
         if success:
-            # Ensure redirect target is relative and safe
-            redirect_target = f"/page/{title}"
-            if branch != "main":
-                redirect_target += f"?branch={branch}"
-            return RedirectResponse(url=redirect_target, status_code=303)
+            redirect_url = _build_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
         else:
             return {"error": "Failed to save page"}
     except HTTPException:
