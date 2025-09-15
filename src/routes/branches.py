@@ -78,7 +78,7 @@ async def create_branch(
             return {"error": "Failed to create branch"}
     except Exception as e:
         logger.error(f"Error creating branch {branch_name} for page {title}: {str(e)}")
-        return {"error": f"Failed to create branch: {str(e)}"}
+        return {"error": "Failed to create branch"}
 
 
 @router.post("/set-branch")
