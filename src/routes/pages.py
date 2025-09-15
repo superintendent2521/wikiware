@@ -242,7 +242,7 @@ async def save_page(request: Request, title: str, content: str = Form(...), auth
         return RedirectResponse(url="/login", status_code=303)
     except Exception as e:
         logger.error(f"Error saving page {title} on branch {branch}: {str(e)}")
-        return {"error": f"Failed to save page: {str(e)}"}
+        return {"error": f"Failed to save page"}
 
 
 @router.post("/delete/{title}")
