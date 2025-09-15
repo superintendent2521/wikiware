@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
-from urllib.parse import urlparse, parse_qsl, urlencode
+from urllib.parse import urlparse, parse_qsl, urlencode, quote
 from ..services.branch_service import BranchService
 from ..database import db_instance
 from ..utils.validation import is_valid_title, is_valid_branch_name, is_safe_branch_parameter, sanitize_referer_url
@@ -75,7 +75,8 @@ async def create_branch(
 
         if success:
             safe_branch = branch_name if is_safe_branch_parameter(branch_name) else "main"
-            return RedirectResponse(url=f"/page/{title}?branch={safe_branch}", status_code=303)
+            encoded_title = quote(title, safe="")
+            return RedirectResponse(url=f"/page/{encoded_title}?branch={safe_branch}", status_code=303)
         else:
             return {"error": "Failed to create branch"}
     except Exception as e:
