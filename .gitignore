@@ -1,3 +1,5 @@
 __pycache__
 logs/*
 static/uploads/*
+.pytest_cache
+.vscode/*
