@@ -219,7 +219,11 @@ async def restore_version(request: Request, title: str, version_index: int, bran
         # Sanitize title
         if not is_valid_title(title):
             logger.warning(f"Invalid title for restore: {title} on branch: {branch}")
-            return RedirectResponse(url=f"/page/{title}?branch={branch}", status_code=303)
+            # Ensure redirect target is relative and safe
+            redirect_target = f"/page/{title}"
+            if branch != "main":
+                redirect_target += f"?branch={branch}"
+            return RedirectResponse(url=redirect_target, status_code=303)
 
         # Validate version index
         if version_index < 0:

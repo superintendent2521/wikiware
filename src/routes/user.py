@@ -128,7 +128,11 @@ async def save_user_page(request: Request, username: str, content: str = Form(..
 
         if success:
             # Safe redirect: username validated and only used in local path
-            return RedirectResponse(url=f"/user/{username}?branch={branch}&updated=true", status_code=303)
+            # Ensure redirect target is relative and safe
+            redirect_target = f"/user/{username}"
+            if branch != "main":
+                redirect_target += f"?branch={branch}"
+            return RedirectResponse(url=redirect_target, status_code=303)
         else:
             return {"error": "Failed to save user page"}
     except HTTPException:

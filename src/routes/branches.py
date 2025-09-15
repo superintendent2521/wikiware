@@ -75,8 +75,11 @@ async def create_branch(
 
         if success:
             safe_branch = branch_name if is_safe_branch_parameter(branch_name) else "main"
-            encoded_title = quote(title, safe="")
-            return RedirectResponse(url=f"/page/{encoded_title}?branch={safe_branch}", status_code=303)
+            # Ensure redirect target is relative and safe
+            redirect_target = f"/page/{quote(title, safe='')}"
+            if safe_branch != "main":
+                redirect_target += f"?branch={safe_branch}"
+            return RedirectResponse(url=redirect_target, status_code=303)
         else:
             return {"error": "Failed to create branch"}
     except Exception as e:
@@ -96,6 +99,10 @@ async def set_branch(request: Request, branch: str = Form(...), csrf_protect: Cs
         safe_referer = sanitize_referer_url(str(request.url), referer_header, default="/")
 
         parsed = urlparse(safe_referer)
+        if parsed.scheme or parsed.netloc:
+            # External or malformed URL - redirect to home
+            return RedirectResponse(url="/", status_code=303)
+
         query_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
         query_params['branch'] = safe_branch
         new_query = urlencode(query_params, doseq=True)

@@ -237,7 +237,11 @@ async def save_page(request: Request, title: str, content: str = Form(...), auth
         success = await PageService.update_page(title, content, author, branch)
 
         if success:
-            return RedirectResponse(url=f"/page/{title}?branch={branch}&updated=true", status_code=303)
+            # Ensure redirect target is relative and safe
+            redirect_target = f"/page/{title}"
+            if branch != "main":
+                redirect_target += f"?branch={branch}"
+            return RedirectResponse(url=redirect_target, status_code=303)
         else:
             return {"error": "Failed to save page"}
     except HTTPException:
