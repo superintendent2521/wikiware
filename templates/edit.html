@@ -4,6 +4,15 @@
 
 {% block content %}
 <div class="container">
+    {% set is_user = is_user_page|default(False) %}
+    {% if is_user %}
+        {% set edit_action = '/user/' ~ title ~ '/edit' %}
+        {% set view_path = '/user/' ~ title %}
+    {% else %}
+        {% set edit_action = '/edit/' ~ title %}
+        {% set view_path = '/page/' ~ title %}
+    {% endif %}
+    {% set branch_value = branch|default('main') %}
     <link rel="stylesheet" href="{{ url_for('static', path='editor.css') }}">
     <!-- Image Upload Modal -->
     <div id="imageUploadModal" class="modal" style="display: none;">
@@ -39,7 +48,7 @@
     <div class="edit-header">
         <h2>Editing: {{ title }}</h2>
     <div class="edit-actions">
-            <a href="/page/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-eye"></i> View Page</a>
+            <a href="{{ view_path }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-eye"></i> View Page</a>
             <a href="/history/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
             {% if user and user.is_admin %}
             <form action="/delete/{{ title }}" method="post" style="display: inline;">
@@ -89,7 +98,7 @@
 
 
     <div class="edit-form-container">
-        <form id="editForm" action="/edit/{{ title }}" method="post">
+        <form id="editForm" action="{{ edit_action }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="branch" value="{{ branch or 'main' }}">
             <div class="form-group">
@@ -132,7 +141,7 @@
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Page</button>
-                <a href="/page/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
+                <a href="{{ view_path }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
             </div>
         </form>
     </div>

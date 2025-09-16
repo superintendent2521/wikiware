@@ -3,24 +3,294 @@
 {% block title %}{{ username }}'s Page - WikiWare{% endblock %}
 
 {% block content %}
+<style>
+@media (max-width: 960px) {
+    .user-layout {
+        flex-direction: column !important;
+    }
+    .user-layout .page-container,
+    .user-layout .user-stats-panel {
+        flex: 1 1 auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        position: static !important;
+    }
+}
+</style>
 <div class="container">
-    <div class="page-container">
-        <div class="page-header">
-            <h1>{{ username }}'s Page</h1>
-            {% if is_owner %}
-            <div class="page-actions">
-                <a href="/user/{{ username }}/edit" class="btn btn-primary">Edit Page</a>
+    <div class="user-layout" style="display:flex; gap: var(--space-xl, 32px); align-items:flex-start; flex-wrap:wrap;">
+        <div class="page-container" style="flex:1 1 0; min-width:min(100%, 540px);">
+            <div class="page-header">
+                <h1>{{ username }}'s Page</h1>
+                {% if is_owner %}
+                <div class="page-actions">
+                    <a href="/user/{{ username }}/edit" class="btn btn-primary">Edit Page</a>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
-        </div>
 
-        <div class="page-content">
-            {% if page.html_content %}
-            {{ page.html_content|safe }}
-            {% else %}
-            <p>No content available.</p>
-            {% endif %}
+            <div class="page-content">
+                {% if page.html_content %}
+                {{ page.html_content|safe }}
+                {% else %}
+                <p>No content available.</p>
+                {% endif %}
+            </div>
         </div>
+        <aside class="user-stats-panel" aria-live="polite" style="flex:0 0 320px; max-width:100%; background: var(--primary-white, #ffffff); border-radius: var(--border-radius-lg, 12px); box-shadow: var(--box-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08)); padding: var(--space-lg, 24px); display:flex; flex-direction:column; gap: var(--space-md, 16px); position: sticky; top: 120px;">
+            <div class="user-stats-header">
+                <h2>{{ username }}'s Stats</h2>
+                <p style="color: var(--dark-gray, #6c757d); font-size: var(--font-size-sm, 14px); margin:0;">Latest activity snapshot</p>
+            </div>
+            <div class="user-stats-content" id="user-stats-content" style="display:flex; flex-direction:column; gap: var(--space-md, 16px);">
+                <div class="user-stats-loading" style="font-size: var(--font-size-sm, 14px); color: var(--dark-gray, #6c757d);">Loading stats...</div>
+            </div>
+        </aside>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ request.state.csp_nonce }}">
+document.addEventListener('DOMContentLoaded', () => {
+    const statsContainer = document.getElementById('user-stats-content');
+    if (!statsContainer) {
+        return;
+    }
+
+    const layout = document.querySelector('.user-layout');
+    if (layout) {
+        layout.style.display = 'flex';
+        layout.style.alignItems = 'flex-start';
+        layout.style.gap = layout.style.gap || '32px';
+        layout.style.flexWrap = 'wrap';
+    }
+
+    const statsPanel = document.querySelector('.user-stats-panel');
+    if (statsPanel) {
+        statsPanel.style.background = statsPanel.style.background || 'var(--primary-white, #ffffff)';
+        statsPanel.style.borderRadius = 'var(--border-radius-lg, 12px)';
+        statsPanel.style.boxShadow = 'var(--box-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08))';
+        statsPanel.style.display = 'flex';
+        statsPanel.style.flexDirection = 'column';
+        statsPanel.style.gap = 'var(--space-md, 16px)';
+        statsPanel.style.maxWidth = statsPanel.style.maxWidth || '340px';
+    }
+
+    const mainSection = document.querySelector('.user-layout .page-container');
+    if (mainSection) {
+        mainSection.style.flex = '1 1 0';
+    }
+
+    const applyMutedStyle = (element) => {
+        element.style.fontSize = 'var(--font-size-sm, 14px)';
+        element.style.color = 'var(--dark-gray, #6c757d)';
+        element.style.margin = '0';
+    };
+
+    const username = "{{ username }}";
+
+    const buildStatBadge = (label, value) => {
+        const badge = document.createElement('div');
+        badge.className = 'user-stats-badge';
+        badge.style.display = 'flex';
+        badge.style.justifyContent = 'space-between';
+        badge.style.alignItems = 'center';
+        badge.style.padding = 'var(--space-md, 16px)';
+        badge.style.borderRadius = 'var(--border-radius-md, 8px)';
+        badge.style.background = 'linear-gradient(135deg, rgba(52, 152, 219, 0.2), rgba(26, 188, 156, 0.2))';
+        badge.style.color = 'var(--accent-blue-dark, #2980b9)';
+        badge.style.fontWeight = 'var(--font-weight-medium, 500)';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'label';
+        labelSpan.textContent = label;
+        applyMutedStyle(labelSpan);
+
+        const valueSpan = document.createElement('span');
+        valueSpan.className = 'value';
+        valueSpan.textContent = value;
+        valueSpan.style.fontSize = 'var(--font-size-xl, 24px)';
+        valueSpan.style.fontWeight = 'var(--font-weight-bold, 600)';
+        valueSpan.style.color = 'var(--accent-blue-dark, #2980b9)';
+
+        badge.append(labelSpan, valueSpan);
+        return badge;
+    };
+
+    const buildTreeLayout = () => {
+        const container = document.createElement('div');
+        container.className = 'user-stats-tree-block';
+        container.style.display = 'flex';
+        container.style.alignItems = 'stretch';
+        container.style.gap = 'var(--space-md, 16px)';
+
+        const timeline = document.createElement('div');
+        timeline.className = 'user-stats-timeline';
+        timeline.style.position = 'relative';
+        timeline.style.width = '28px';
+
+        const circle = document.createElement('div');
+        circle.className = 'user-stats-circle';
+        circle.style.width = '16px';
+        circle.style.height = '16px';
+        circle.style.borderRadius = '50%';
+        circle.style.background = 'linear-gradient(135deg, rgba(46, 204, 113, 0.85), rgba(26, 188, 156, 0.85))';
+        circle.style.boxShadow = '0 0 0 4px rgba(26, 188, 156, 0.15)';
+        circle.style.margin = '4px auto 0 auto';
+        circle.style.position = 'relative';
+
+        const line = document.createElement('div');
+        line.className = 'user-stats-trunk';
+        line.style.position = 'absolute';
+        line.style.top = '20px';
+        line.style.bottom = '0';
+        line.style.left = '50%';
+        line.style.transform = 'translateX(-50%)';
+        line.style.width = '2px';
+        line.style.background = 'linear-gradient(180deg, rgba(46, 204, 113, 0.5), rgba(52, 152, 219, 0.3))';
+
+        timeline.append(circle, line);
+
+        const content = document.createElement('div');
+        content.className = 'user-stats-tree-content';
+        content.style.flex = '1';
+        content.style.display = 'flex';
+        content.style.flexDirection = 'column';
+        content.style.gap = 'var(--space-md, 16px)';
+
+        const headerRow = document.createElement('div');
+        headerRow.className = 'user-stats-tree-header';
+        headerRow.style.display = 'flex';
+        headerRow.style.alignItems = 'center';
+        headerRow.style.gap = 'var(--space-sm, 12px)';
+        headerRow.style.marginTop = '4px';
+
+        const label = document.createElement('span');
+        label.textContent = 'Most commonly edited pages';
+        label.style.fontWeight = 'var(--font-weight-medium, 500)';
+        label.style.color = 'var(--darker-gray, #495057)';
+
+        const divider = document.createElement('span');
+        divider.style.flex = '1';
+        divider.style.height = '1px';
+        divider.style.background = 'var(--medium-gray, #ced4da)';
+        divider.style.opacity = '0.5';
+
+        headerRow.append(label, divider);
+        content.append(headerRow);
+
+        container.append(timeline, content);
+
+        return { container, contentArea: content, line };
+    };
+
+    const renderPageEdits = (pageEdits) => {
+        const { container, contentArea, line } = buildTreeLayout();
+        statsContainer.appendChild(container);
+
+        if (!pageEdits || Object.keys(pageEdits).length === 0) {
+            line.style.display = 'none';
+            const empty = document.createElement('p');
+            empty.className = 'user-stats-empty';
+            empty.textContent = 'No page edits recorded yet.';
+            applyMutedStyle(empty);
+            contentArea.appendChild(empty);
+            return;
+        }
+
+        const entries = Object.entries(pageEdits)
+            .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+            .slice(0, 5);
+
+        const list = document.createElement('ul');
+        list.className = 'user-stats-list';
+        list.style.listStyle = 'none';
+        list.style.display = 'flex';
+        list.style.flexDirection = 'column';
+        list.style.gap = 'var(--space-sm, 12px)';
+        list.style.margin = '0';
+        list.style.padding = '0';
+
+        entries.forEach(([page, edits], index) => {
+            const item = document.createElement('li');
+            item.style.display = 'flex';
+            item.style.justifyContent = 'space-between';
+            item.style.alignItems = 'center';
+            item.style.background = 'var(--secondary-white, #f8f9fa)';
+            item.style.borderRadius = 'var(--border-radius-md, 8px)';
+            item.style.padding = 'var(--space-sm, 12px) var(--space-md, 16px)';
+            item.style.boxShadow = 'var(--box-shadow-sm, 0 2px 4px rgba(0, 0, 0, 0.05))';
+            item.style.position = 'relative';
+
+            const connector = document.createElement('span');
+            connector.style.position = 'absolute';
+            connector.style.left = '-20px';
+            connector.style.top = '50%';
+            connector.style.width = '20px';
+            connector.style.height = '2px';
+            connector.style.background = 'linear-gradient(90deg, rgba(46, 204, 113, 0.4), rgba(52, 152, 219, 0.4))';
+            connector.style.transform = 'translateY(-50%)';
+            connector.style.opacity = '0.8';
+            item.appendChild(connector);
+
+            const pageName = document.createElement('span');
+            pageName.className = 'page-name';
+            pageName.textContent = page;
+            pageName.style.fontWeight = 'var(--font-weight-medium, 500)';
+            pageName.style.color = 'var(--darker-gray, #495057)';
+            pageName.style.flex = '1';
+
+            const editCount = document.createElement('span');
+            editCount.className = 'edit-count';
+            editCount.textContent = edits;
+            editCount.style.fontWeight = 'var(--font-weight-bold, 600)';
+            editCount.style.color = 'var(--accent-blue-dark, #2980b9)';
+            editCount.style.marginLeft = 'var(--space-md, 16px)';
+
+            item.append(pageName, editCount);
+            list.appendChild(item);
+        });
+
+        contentArea.appendChild(list);
+        line.style.bottom = entries.length > 1 ? '-8px' : '0';
+
+        if (Object.keys(pageEdits).length > entries.length) {
+            const note = document.createElement('p');
+            note.className = 'user-stats-note';
+            note.textContent = 'Showing your 5 most-edited pages.';
+            applyMutedStyle(note);
+            note.style.color = 'var(--accent-blue, #3498db)';
+            note.style.fontStyle = 'italic';
+            contentArea.appendChild(note);
+        }
+    };
+
+    fetch(`/stats/${encodeURIComponent(username)}`)
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error(response.status === 404
+                    ? 'No stats found for this user yet.'
+                    : 'Unable to load stats.');
+            }
+            return response.json();
+        })
+        .then((data) => {
+            statsContainer.innerHTML = '';
+            const totalEdits = data && data.total_edits != null ? data.total_edits : 0;
+            statsContainer.appendChild(buildStatBadge('Total edits', totalEdits));
+            renderPageEdits(data ? data.page_edits : null);
+        })
+        .catch((error) => {
+            statsContainer.innerHTML = '';
+            const errorMessage = document.createElement('p');
+            errorMessage.className = 'user-stats-error';
+            errorMessage.textContent = error.message;
+            applyMutedStyle(errorMessage);
+            errorMessage.style.color = 'var(--error, #e74c3c)';
+            statsContainer.appendChild(errorMessage);
+        });
+});
+</script>
 {% endblock %}

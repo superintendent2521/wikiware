@@ -38,7 +38,7 @@ async def user_page(request: Request, response: Response, username: str, branch:
     csrf_protect.set_csrf_cookie(signed_token, response)
     
     if not db_instance.is_connected:
-        template = templates.TemplateResponse("user.html", {"request": request, "username": username, "content": "", "offline": True, "user": current_user, "is_owner": False, "csrf_token": csrf_token})
+        template = templates.TemplateResponse("user.html", {"request": request, "username": username, "content": "", "offline": True, "user": current_user, "is_owner": False, "csrf_token": csrf_token, "is_user_page": True})
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
 
@@ -91,7 +91,7 @@ async def edit_user_page(request: Request, response: Response, username: str, br
     csrf_protect.set_csrf_cookie(signed_token, response)
     
     if not db_instance.is_connected:
-        template = templates.TemplateResponse("edit.html", {"request": request, "title": username, "content": "", "offline": True, "user": user, "csrf_token": csrf_token})
+        template = templates.TemplateResponse("edit.html", {"request": request, "title": username, "content": "", "offline": True, "user": user, "csrf_token": csrf_token, "is_user_page": True})
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
 
@@ -112,7 +112,8 @@ async def edit_user_page(request: Request, response: Response, username: str, br
         "branch": branch,
         "offline": not db_instance.is_connected,
         "user": user,
-        "csrf_token": csrf_token
+        "csrf_token": csrf_token,
+        "is_user_page": True
     })
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template

@@ -3,14 +3,14 @@ Stats routes for WikiWare.
 Handles statistics display.
 """
 
-from fastapi import APIRouter, Request, Depends, Response
+from fastapi import APIRouter, Request, Depends, Response, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
 from ..services.branch_service import BranchService
 from ..database import db_instance
 from ..config import TEMPLATE_DIR
-from ..stats import get_stats
+from ..stats import get_stats, get_user_edit_stats
 from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
 
@@ -85,3 +85,35 @@ async def stats_page(request: Request, response: Response, branch: str = "main",
 
 # Register the context processor with Jinja2
 templates.env.globals.update(global_stats_context=global_stats_context)
+
+@router.get("/stats/{username}")
+async def get_user_stats(username: str):
+    """
+    Get edit statistics for a specific user.
+    
+    Args:
+        username: Username to get statistics for
+        
+    Returns:
+        dict: User edit statistics or 404 if user not found
+    """
+    try:
+        if not db_instance.is_connected:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get all user stats
+        all_user_stats = await get_user_edit_stats()
+        
+        # Check if user exists
+        if username not in all_user_stats:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Return only the requested user's stats
+        return all_user_stats[username]
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user stats for {username}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
