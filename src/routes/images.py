@@ -76,4 +76,3 @@ async def list_images_api(request: Request):
     """Return JSON list of images; requires authentication."""
     await AuthMiddleware.require_auth(request)
     return JSONResponse(content={"items": _list_images()})
-

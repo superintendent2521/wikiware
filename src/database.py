@@ -34,7 +34,7 @@ class Database:
                 retry_count += 1
                 logger.warning(f"MongoDB server not available. Attempt {retry_count}/{max_retries}. Retrying in 5 seconds...")
                 await asyncio.sleep(5)  # Wait 5 seconds before retrying
-            except Exception as e:
+            except Exception as e:  # IGNORE W0718
                 logger.error(f"Database connection error: {e}")
                 logger.error(f"MongoDB URL: {MONGODB_URL}")
                 self.is_connected = False
@@ -86,7 +86,8 @@ async def create_indexes():
             try:
                 await pages.drop_index("title_1")
                 logger.info("Dropped old unique index on title")
-            except Exception:  # Specify exception type
+            except Exception as e:
+                logger.warning(f"Failed to drop old index on title: {str(e)}")
                 pass  # Index might not exist, that's fine
 
             # Create compound unique index on title and branch
@@ -111,6 +112,9 @@ async def create_indexes():
 
 async def init_database():
     """Initialize database connection and create indexes."""
-    await db_instance.connect()
-    if db_instance.is_connected:
-        await create_indexes()
+    try:
+        await db_instance.connect()
+        if db_instance.is_connected:
+            await create_indexes()
+    except Exception as e:
+        logger.error(f"Error initializing database: {str(e)}")
