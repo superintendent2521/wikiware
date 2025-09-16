@@ -271,6 +271,15 @@ This document provides comprehensive documentation for all API routes in WikiWar
 - **Notes**: 
   - Uses global context processor to inject stats into all templates
 
+### `GET /stats/{username}`
+- **Description**: Displays User Statistics
+- **Authentication**: Public access
+- **Query Parameters**: Username
+- **Response**: Json with total edits and Users top edited pages.
+- **Metrics**:
+  - Total edits
+  - Top edited pages.
+
 ---
 
 ## Logs Routes
