@@ -427,6 +427,22 @@ main {
     line-height: 1.8;
 }
 
+/* Image display within wiki pages */
+.page-content img {
+    float: left;
+    margin: 0 var(--space-lg) var(--space-md) 0;
+    max-width: min(100%, 500px);
+    max-height: 500px;
+    width: auto;
+    height: auto;
+}
+
+.page-content::after {
+    content: "";
+    display: block;
+    clear: both;
+}
+
 /* Wikipedia-like tables in articles */
 .page-content table {
     width: 100%;
@@ -526,7 +542,12 @@ main {
 }
 
 .page-content table img {
+    float: none;
+    display: inline;
+    margin: 0;
     max-width: 100%;
+    max-height: none;
+    width: auto;
     height: auto;
 }
 
