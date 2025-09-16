@@ -6,7 +6,6 @@ Contains business logic for page operations.
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from ..database import get_pages_collection, get_history_collection, get_users_collection, db_instance
-from ..models.page import WikiPage
 from loguru import logger
 
 

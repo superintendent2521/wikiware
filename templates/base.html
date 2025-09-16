@@ -64,17 +64,12 @@
             const toggleButton = document.getElementById('dark-mode-toggle');
             const themeIcon = toggleButton.querySelector('i');
 
-            // Check for saved theme preference or respect OS preference
-            const savedTheme = localStorage.getItem('theme');
-            const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
-
-            // Set initial theme
-            if (savedTheme === 'dark' || (!savedTheme && prefersDarkScheme.matches)) {
-                document.documentElement.setAttribute('data-theme', 'dark');
-                themeIcon.classList.remove('fa-moon');
-                themeIcon.classList.add('fa-sun');
-                toggleButton.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
-            }
+            // Set initial theme to dark mode by default
+            document.documentElement.setAttribute('data-theme', 'dark');
+            themeIcon.classList.remove('fa-moon');
+            themeIcon.classList.add('fa-sun');
+            toggleButton.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+            localStorage.setItem('theme', 'dark');
 
             // Toggle theme when button is clicked
             toggleButton.addEventListener('click', function() {

@@ -35,6 +35,24 @@
   overflow: auto;
   caret-color: currentColor;
 }
+
+
+/* Constrain images in visual editor to match article layout */
+.visual-editor img {
+  float: left;
+  margin: 0 var(--space-lg, 24px) var(--space-md, 16px) 0;
+  max-width: min(100%, 500px);
+  max-height: 500px;
+  width: auto;
+  height: auto;
+}
+
+.visual-editor::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
 .visual-editor:focus {
   outline: 2px solid var(--focus, #6aa9ff);
   outline-offset: 1px;

@@ -3,8 +3,7 @@ Log utility functions for WikiWare.
 Provides core functionality for retrieving and formatting system logs.
 """
 
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timezone
+from typing import Dict, Any, Optional
 from ..database import get_history_collection, get_branches_collection, db_instance
 from loguru import logger
 

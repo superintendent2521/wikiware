@@ -65,7 +65,6 @@ app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(user.router)
 
-# Startup event
 @app.on_event("startup")
 async def startup_event():
     try:

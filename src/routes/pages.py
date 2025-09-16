@@ -6,9 +6,7 @@ Handles page viewing, editing, and saving operations.
 from fastapi import APIRouter, Request, Form, HTTPException, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from typing import Optional
 import markdown
-from ..utils.markdown_extensions import InternalLinkExtension, TableExtensionWrapper
 from ..utils.link_processor import process_internal_links
 from ..utils.sanitizer import sanitize_html
 from ..services.page_service import PageService
