@@ -91,7 +91,7 @@ Utility functions provide reusable helpers across the application.
 - `get_paginated_logs(page: int = 1, limit: int = 50, action_type: Optional[str] = None)`: Get paginated logs
   - Combines edit history and branch creation events
   - Returns structured JSON with pagination metadata
-  - Limits limit to 50 for performance
+  - Limits limit to 50 for performance. Pass `bypass=True` to return all matching entries when needed (use sparingly to avoid heavy queries).
 
 #### `markdown_extensions.py`
 - `InternalLinkExtension`: Markdown extension for `[[Page Title]]` syntax
