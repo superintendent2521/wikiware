@@ -7,9 +7,7 @@ from fastapi import APIRouter, Request, Form, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
-from typing import List, Dict, Any
 import markdown
-from ..utils.markdown_extensions import InternalLinkExtension
 from ..utils.link_processor import process_internal_links
 from ..utils.sanitizer import sanitize_html
 from ..database import get_pages_collection, get_history_collection, db_instance

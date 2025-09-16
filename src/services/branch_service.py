@@ -3,10 +3,9 @@ Branch service layer for WikiWare.
 Contains business logic for branch operations.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List
 from datetime import datetime, timezone
 from ..database import get_pages_collection, get_history_collection, get_branches_collection, db_instance
-from ..models.branch import Branch
 from loguru import logger
 
 

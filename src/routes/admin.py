@@ -8,7 +8,6 @@ from ..middleware.auth_middleware import AuthMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from ..config import TEMPLATE_DIR
-from ..services.user_service import UserService
 from ..database import get_users_collection
 from ..stats import get_stats
 from ..utils.logs import LogUtils

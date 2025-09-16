@@ -1,10 +1,8 @@
 """
 Service for logging page views and edits.
 """
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone
-from ..database import get_history_collection, db_instance
-from ..models.page import WikiPage
+
+from ..database import get_history_collection
 from loguru import logger
 
 

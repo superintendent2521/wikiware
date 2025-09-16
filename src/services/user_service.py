@@ -7,10 +7,9 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 from passlib.context import CryptContext
 from ..database import get_users_collection, db_instance
-from ..models.user import User, UserRegistration
+from ..models.user import UserRegistration
 from loguru import logger
 import secrets
-import hashlib
 from datetime import timedelta
 
 # Password hashing context

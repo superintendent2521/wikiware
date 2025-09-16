@@ -3,16 +3,14 @@ Authentication routes for WikiWare.
 Handles user registration, login, and logout operations.
 """
 
-from fastapi import APIRouter, Request, Form, HTTPException, Response, Depends
+from fastapi import APIRouter, Request, Form, Response, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
-from typing import Optional
 from datetime import datetime, timezone
-import secrets
-from ..utils.validation import is_valid_title, sanitize_redirect_path
+from ..utils.validation import sanitize_redirect_path
 from ..services.user_service import UserService
-from ..models.user import UserRegistration, UserLogin
+from ..models.user import UserRegistration
 from ..config import TEMPLATE_DIR, DEV, SESSION_COOKIE_NAME
 from ..database import db_instance
 from loguru import logger

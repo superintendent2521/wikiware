@@ -3,7 +3,6 @@ Custom Markdown extensions for WikiWare.
 Adds support for [[Page Title]] internal linking syntax and table rendering with color support.
 """
 
-import re
 from markdown.extensions import Extension
 from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString

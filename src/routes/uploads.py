@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
 from fastapi import HTTPException
-import os
 import uuid
 import shutil
 from pathlib import Path
@@ -16,7 +15,6 @@ from ..config import UPLOAD_DIR, MAX_FILE_SIZE, ALLOWED_IMAGE_TYPES
 from ..utils.validation import sanitize_filename
 from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
-import mimetypes
 
 router = APIRouter()
 
