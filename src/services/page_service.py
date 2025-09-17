@@ -304,14 +304,8 @@ class PageService:
     @staticmethod
     async def delete_branch(title: str, branch: str) -> bool:
         """
-        Delete a specific branch from a specific page.
-
-        Args:
-            title: Page title
-            branch: Branch name to delete from the page
-
-        Returns:
-            True if successful, False otherwise
+        Delete a specific branch from a specific page across both collections.
+        Supports either (title, branch) or (page_title, branch_name) schemas.
         """
         logger.info(f"Attempting to delete branch {branch} from page {title}")
         try:
@@ -322,22 +316,64 @@ class PageService:
                 return False
 
             pages_collection = get_pages_collection()
+            branches_collection = get_branches_collection()
             if pages_collection is None:
                 logger.error("Pages collection not available")
                 return False
-
-            result = await pages_collection.delete_one(
-                {"title": title, "branch": branch}
-            )
-            if result.deleted_count > 0:
-                logger.info(f"Branch deleted from page: {branch} from {title}")
-                return True
-            else:
-                logger.warning(
-                    f"Branch not found for deletion: {branch} from page {title}"
-                )
+            if branches_collection is None:
+                logger.error("Branches collection not available")
                 return False
+
+            # Build a schema-tolerant filter for pages
+            pages_filter = {
+                "$and": [
+                    {"$or": [{"title": title}, {"page_title": title}]},
+                    {"$or": [{"branch": branch}, {"branch_name": branch}]},
+                ]
+            }
+
+            # (Optional) preview how many matches exist with each variant for better logs
+            count_title_branch = await pages_collection.count_documents({"title": title, "branch": branch})
+            count_title_branchname = await pages_collection.count_documents({"title": title, "branch_name": branch})
+            count_pagetitle_branch = await pages_collection.count_documents({"page_title": title, "branch": branch})
+            count_pagetitle_branchname = await pages_collection.count_documents({"page_title": title, "branch_name": branch})
+            logger.info(
+                "Pages match counts — "
+                f"(title,branch)={count_title_branch}, "
+                f"(title,branch_name)={count_title_branchname}, "
+                f"(page_title,branch)={count_pagetitle_branch}, "
+                f"(page_title,branch_name)={count_pagetitle_branchname}"
+            )
+
+            # Delete ALL page docs for this (title, branch)
+            page_del_result = await pages_collection.delete_many(pages_filter)
+
+            if page_del_result.deleted_count == 0:
+                logger.warning(
+                    f"No page docs deleted for ({title}, {branch}). "
+                    "Check pages schema and indexes."
+                )
+                # Don't return yet; still attempt branch record delete
+
+            # Delete from branches collection (per your schema example)
+            branch_del_result = await branches_collection.delete_one(
+                {"page_title": title, "branch_name": branch}
+            )
+            if branch_del_result.deleted_count == 0:
+                logger.warning(
+                    f"Branch record not found in branches collection: {branch} for page {title}"
+                )
+
+            if page_del_result.deleted_count > 0:
+                logger.info(
+                    f"Deleted {page_del_result.deleted_count} page doc(s) and "
+                    f"{branch_del_result.deleted_count} branch doc(s) for ({title}, {branch})"
+                )
+                return True
+
+            # If pages weren't deleted but branch was (or wasn't), consider operation incomplete
+            return False
+
         except Exception as e:
             logger.error(f"Error deleting branch {branch} from page {title}: {str(e)}")
             return False
-
