@@ -17,11 +17,11 @@ def is_valid_title(title: str) -> bool:
         return False
 
     # Disallow traversal and path-like prefixes
-    if ".." in title or title.startswith(('/', '\\')):
+    if ".." in title or title.startswith(("/", "\\")):
         return False
 
     # Prevent attempts to inject schemes or special characters that break routing
-    if any(ch in title for ch in (':', '?', '#')):
+    if any(ch in title for ch in (":", "?", "#")):
         return False
 
     return bool(_TITLE_PATTERN.fullmatch(title))
@@ -72,7 +72,9 @@ def sanitize_redirect_path(target: Optional[str], default: str = "/") -> str:
     return f"{path}{query}"
 
 
-def sanitize_referer_url(current_url: str, referer: Optional[str], default: str = "/") -> str:
+def sanitize_referer_url(
+    current_url: str, referer: Optional[str], default: str = "/"
+) -> str:
     """Sanitize a referer header so redirects remain on the same origin."""
     if not referer:
         return default
@@ -84,7 +86,10 @@ def sanitize_referer_url(current_url: str, referer: Optional[str], default: str 
     referer_parsed = urlparse(referer)
     if referer_parsed.scheme or referer_parsed.netloc:
         current_parsed = urlparse(current_url)
-        if (referer_parsed.scheme, referer_parsed.netloc) != (current_parsed.scheme, current_parsed.netloc):
+        if (referer_parsed.scheme, referer_parsed.netloc) != (
+            current_parsed.scheme,
+            current_parsed.netloc,
+        ):
             return default
         candidate = referer_parsed.path or "/"
         if referer_parsed.query:
@@ -97,10 +102,10 @@ def sanitize_referer_url(current_url: str, referer: Optional[str], default: str 
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename to prevent security issues."""
     # Remove path separators and other dangerous characters
-    dangerous_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+    dangerous_chars = ["/", "\\", ":", "*", "?", '"', "<", ">", "|"]
     sanitized = filename
 
     for char in dangerous_chars:
-        sanitized = sanitized.replace(char, '_')
+        sanitized = sanitized.replace(char, "_")
 
     return sanitized

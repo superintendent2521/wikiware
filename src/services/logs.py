@@ -13,4 +13,3 @@ class LogService:
             logger.error("History collection not available")
             return []
         return list(history_collection.find())
-    

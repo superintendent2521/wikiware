@@ -20,7 +20,11 @@ router = APIRouter()
 
 
 @router.post("/upload-image")
-async def upload_image(request: Request, file: UploadFile = File(...), csrf_protect: CsrfProtect = Depends()):
+async def upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+    csrf_protect: CsrfProtect = Depends(),
+):
     """Upload an image file."""
     try:
         # Ensure form is parsed so fastapi-csrf-protect can read csrf_token from body
@@ -33,10 +37,10 @@ async def upload_image(request: Request, file: UploadFile = File(...), csrf_prot
 
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
-        
+
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
-        
+
         # Create uploads directory if it doesn't exist
         upload_path = Path(UPLOAD_DIR)
         upload_path.mkdir(parents=True, exist_ok=True)
@@ -45,7 +49,9 @@ async def upload_image(request: Request, file: UploadFile = File(...), csrf_prot
         if file.content_type not in ALLOWED_IMAGE_TYPES:
             return JSONResponse(
                 status_code=400,
-                content={"error": "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed."}
+                content={
+                    "error": "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed."
+                },
             )
 
         # Read first 256 bytes to check magic numbers
@@ -57,24 +63,32 @@ async def upload_image(request: Request, file: UploadFile = File(...), csrf_prot
             "image/jpeg": b"\xff\xd8\xff",
             "image/png": b"\x89PNG\r\n\x1a\n",
             "image/gif": b"GIF87a",
-            "image/webp": b"RIFF----WEBP"
+            "image/webp": b"RIFF----WEBP",
         }
 
         if not any(header.startswith(magic) for magic in magic_bytes.values()):
             return JSONResponse(
                 status_code=400,
-                content={"error": "Invalid file type. File does not match expected image signature."}
+                content={
+                    "error": "Invalid file type. File does not match expected image signature."
+                },
             )
 
         # Validate file size without loading entire file into memory
-        if hasattr(file, 'size') and file.size is not None and file.size > MAX_FILE_SIZE:
+        if (
+            hasattr(file, "size")
+            and file.size is not None
+            and file.size > MAX_FILE_SIZE
+        ):
             return JSONResponse(
                 status_code=400,
-                content={"error": f"File too large. Maximum file size is {MAX_FILE_SIZE // (1024 * 1024)}MB."}
+                content={
+                    "error": f"File too large. Maximum file size is {MAX_FILE_SIZE // (1024 * 1024)}MB."
+                },
             )
 
         # If file.size is not available, stream and count bytes
-        if not hasattr(file, 'size') or file.size is None:
+        if not hasattr(file, "size") or file.size is None:
             content_length = 0
             while True:
                 chunk = await file.read(8192)
@@ -84,19 +98,31 @@ async def upload_image(request: Request, file: UploadFile = File(...), csrf_prot
                 if content_length > MAX_FILE_SIZE:
                     return JSONResponse(
                         status_code=400,
-                        content={"error": f"File too large. Maximum file size is {MAX_FILE_SIZE // (1024 * 1024)}MB."}
+                        content={
+                            "error": f"File too large. Maximum file size is {MAX_FILE_SIZE // (1024 * 1024)}MB."
+                        },
                     )
             await file.seek(0)
 
         # Generate unique filename
-        original_extension = file.filename.split(".")[-1] if "." in file.filename else ""
+        original_extension = (
+            file.filename.split(".")[-1] if "." in file.filename else ""
+        )
         sanitized_filename = sanitize_filename(file.filename)
-        
+
         # Validate extension after sanitization
-        if original_extension and original_extension.lower() not in ["jpg", "jpeg", "png", "gif", "webp"]:
+        if original_extension and original_extension.lower() not in [
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "webp",
+        ]:
             return JSONResponse(
                 status_code=400,
-                content={"error": "Invalid file extension. Only .jpg, .jpeg, .png, .gif, and .webp are allowed."}
+                content={
+                    "error": "Invalid file extension. Only .jpg, .jpeg, .png, .gif, and .webp are allowed."
+                },
             )
 
         # Map content type to extension for consistency
@@ -104,16 +130,19 @@ async def upload_image(request: Request, file: UploadFile = File(...), csrf_prot
             "image/jpeg": "jpg",
             "image/png": "png",
             "image/gif": "gif",
-            "image/webp": "webp"
+            "image/webp": "webp",
         }
-        file_extension = extension_map.get(file.content_type, original_extension.lower())
+        file_extension = extension_map.get(
+            file.content_type, original_extension.lower()
+        )
 
         # Ensure sanitized filename doesn't contain dangerous patterns
-        if not sanitized_filename or ".." in sanitized_filename or "\0" in sanitized_filename:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Invalid filename."}
-            )
+        if (
+            not sanitized_filename
+            or ".." in sanitized_filename
+            or "\0" in sanitized_filename
+        ):
+            return JSONResponse(status_code=400, content={"error": "Invalid filename."})
 
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
         file_path = upload_path / unique_filename
@@ -126,25 +155,17 @@ async def upload_image(request: Request, file: UploadFile = File(...), csrf_prot
         image_url = f"/static/uploads/{unique_filename}"
         logger.info(f"Image uploaded: {unique_filename}")
         return JSONResponse(
-            status_code=200,
-            content={"url": image_url, "filename": unique_filename}
+            status_code=200, content={"url": image_url, "filename": unique_filename}
         )
     except CsrfProtectError as e:
         logger.error(f"CSRF error uploading image: {e.message}")
-        return JSONResponse(
-            status_code=e.status_code,
-            content={"error": e.message}
-        )
+        return JSONResponse(status_code=e.status_code, content={"error": e.message})
     except HTTPException as e:
         # Authentication errors and similar
         logger.error(f"HTTP error uploading image: {e.detail}")
-        return JSONResponse(
-            status_code=e.status_code,
-            content={"error": e.detail}
-        )
+        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
     except Exception as e:
         logger.error(f"Error uploading image: {str(e)}")
         return JSONResponse(
-            status_code=500,
-            content={"error": "Failed to upload image"}
+            status_code=500, content={"error": "Failed to upload image"}
         )

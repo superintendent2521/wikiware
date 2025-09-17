@@ -9,8 +9,12 @@ from ..database import db_instance
 from loguru import logger
 
 
-_SIMPLE_TOKEN_RE = re.compile(r"\{\{\s*global\.(edits|pages|characters|images|last_updated)\s*\}\}")
-_COLOR_TOKEN_RE = re.compile(r"\{\{\s*global\.color\.(red|green|blue|purple|pink|orange|yellow|gray|cyan)\s*\}\}")
+_SIMPLE_TOKEN_RE = re.compile(
+    r"\{\{\s*global\.(edits|pages|characters|images|last_updated)\s*\}\}"
+)
+_COLOR_TOKEN_RE = re.compile(
+    r"\{\{\s*global\.color\.(red|green|blue|purple|pink|orange|yellow|gray|cyan)\s*\}\}"
+)
 
 
 async def render_template_content(content: str, request: dict = None) -> str:
@@ -36,15 +40,15 @@ async def render_template_content(content: str, request: dict = None) -> str:
         }
 
         color_spans = {
-            'red': "<span class='color-red'></span>",
-            'green': "<span class='color-green'></span>",
-            'blue': "<span class='color-blue'></span>",
-            'purple': "<span class='color-purple'></span>",
-            'pink': "<span class='color-pink'></span>",
-            'orange': "<span class='color-orange'></span>",
-            'yellow': "<span class='color-yellow'></span>",
-            'gray': "<span class='color-gray'></span>",
-            'cyan': "<span class='color-cyan'></span>",
+            "red": "<span class='color-red'></span>",
+            "green": "<span class='color-green'></span>",
+            "blue": "<span class='color-blue'></span>",
+            "purple": "<span class='color-purple'></span>",
+            "pink": "<span class='color-pink'></span>",
+            "orange": "<span class='color-orange'></span>",
+            "yellow": "<span class='color-yellow'></span>",
+            "gray": "<span class='color-gray'></span>",
+            "cyan": "<span class='color-cyan'></span>",
         }
 
         def _replace_simple(m: re.Match) -> str:

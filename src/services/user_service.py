@@ -109,7 +109,7 @@ class UserService:
                 "password_hash": hashed_password,
                 "created_at": datetime.now(timezone.utc),
                 "is_active": True,
-                "is_admin": False
+                "is_admin": False,
             }
 
             # Insert user
@@ -123,7 +123,12 @@ class UserService:
             return None
 
     @staticmethod
-    async def authenticate_user(username: str, password: str, client_ip: str = "unknown", user_agent: str = "unknown") -> Optional[Dict[str, Any]]:
+    async def authenticate_user(
+        username: str,
+        password: str,
+        client_ip: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> Optional[Dict[str, Any]]:
         """
         Authenticate a user by username and password.
 
@@ -142,9 +147,13 @@ class UserService:
                 # Log failed login attempt to dedicated file
                 try:
                     with open("logs/login_failures.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n")
+                        f.write(
+                            f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n"
+                        )
                 except Exception as e:
-                    logger.error(f"Failed to log failed login attempt for {username}: {str(e)}")
+                    logger.error(
+                        f"Failed to log failed login attempt for {username}: {str(e)}"
+                    )
                 return None
 
             # Check if user is active
@@ -153,9 +162,13 @@ class UserService:
                 # Log failed login attempt to dedicated file
                 try:
                     with open("logs/login_failures.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n")
+                        f.write(
+                            f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n"
+                        )
                 except Exception as e:
-                    logger.error(f"Failed to log failed login attempt for {username}: {str(e)}")
+                    logger.error(
+                        f"Failed to log failed login attempt for {username}: {str(e)}"
+                    )
                 return None
 
             # Verify password
@@ -164,9 +177,13 @@ class UserService:
                 # Log failed login attempt to dedicated file
                 try:
                     with open("logs/login_failures.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n")
+                        f.write(
+                            f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n"
+                        )
                 except Exception as e:
-                    logger.error(f"Failed to log failed login attempt for {username}: {str(e)}")
+                    logger.error(
+                        f"Failed to log failed login attempt for {username}: {str(e)}"
+                    )
                 return None
 
             logger.info(f"User authenticated: {username}")
@@ -198,18 +215,21 @@ class UserService:
 
             # Generate a secure random session ID
             session_id = secrets.token_urlsafe(32)
-            
+
             # Create session document
             session_doc = {
                 "session_id": session_id,
                 "user_id": user_id,
                 "created_at": datetime.now(timezone.utc),
-                "expires_at": datetime.now(timezone.utc).replace(second=0, microsecond=0) + timedelta(hours=24)
+                "expires_at": datetime.now(timezone.utc).replace(
+                    second=0, microsecond=0
+                )
+                + timedelta(hours=24),
             }
 
             # Insert session
             await sessions_collection.insert_one(session_doc)
-            
+
             logger.info(f"Session created for user: {user_id}")
             return session_id
         except Exception as e:
@@ -229,7 +249,9 @@ class UserService:
         """
         try:
             if not db_instance.is_connected:
-                logger.warning(f"Database not connected - cannot get session: {session_id}")
+                logger.warning(
+                    f"Database not connected - cannot get session: {session_id}"
+                )
                 return None
 
             sessions_collection = db_instance.get_collection("sessions")
@@ -252,12 +274,12 @@ class UserService:
             now_utc = datetime.now(timezone.utc)
             if expires_at and expires_at > now_utc:
                 return session
-            
+
             # Delete expired session
             if session:
                 await sessions_collection.delete_one({"session_id": session_id})
                 logger.info(f"Expired session deleted: {session_id}")
-            
+
             return None
         except Exception as e:
             logger.error(f"Error getting session {session_id}: {str(e)}")
@@ -276,7 +298,9 @@ class UserService:
         """
         try:
             if not db_instance.is_connected:
-                logger.warning(f"Database not connected - cannot delete session: {session_id}")
+                logger.warning(
+                    f"Database not connected - cannot delete session: {session_id}"
+                )
                 return False
 
             sessions_collection = db_instance.get_collection("sessions")

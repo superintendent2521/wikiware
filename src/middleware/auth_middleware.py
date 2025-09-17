@@ -27,7 +27,11 @@ class AuthMiddleware:
         """
         try:
             # Get session cookie
-            session_id = request.cookies.get(SESSION_COOKIE_NAME) or request.cookies.get("__Host-user_session") or request.cookies.get("user_session")
+            session_id = (
+                request.cookies.get(SESSION_COOKIE_NAME)
+                or request.cookies.get("__Host-user_session")
+                or request.cookies.get("user_session")
+            )
             if not session_id:
                 return None
 
@@ -42,7 +46,7 @@ class AuthMiddleware:
 
             return {
                 "username": user["username"],
-                "is_admin": user.get("is_admin", False)
+                "is_admin": user.get("is_admin", False),
             }
 
         except Exception as e:

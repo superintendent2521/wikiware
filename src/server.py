@@ -9,7 +9,20 @@ from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
 from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
-from .routes import pages, search, history, branches, uploads, stats, logs, auth, admin, images, user
+from .routes import (
+    pages,
+    search,
+    history,
+    branches,
+    uploads,
+    stats,
+    logs,
+    auth,
+    admin,
+    images,
+    user,
+)
+
 # Remove TableExtension import since it's not available in this version
 from loguru import logger
 import os
@@ -19,6 +32,7 @@ from .middleware.security_headers import SecurityHeadersMiddleware
 os.makedirs("logs", exist_ok=True)
 logger.add("logs/wikiware.log", rotation="1 day", retention="7 days", level="INFO")
 logger.add("logs/errors.log", rotation="1 day", retention="7 days", level="ERROR")
+
 
 class CsrfSettings(BaseModel):
     secret_key: str = "asecretkeythatisverylongandsecure"
@@ -34,6 +48,7 @@ class CsrfSettings(BaseModel):
     # Keep token_key for forms elsewhere if needed (ignored when token_location='header')
     token_key: str = "csrf_token"
 
+
 @CsrfProtect.load_config
 def get_csrf_config():
     settings = CsrfSettings()
@@ -41,6 +56,7 @@ def get_csrf_config():
         f"CSRF config: secure={settings.cookie_secure}, httponly={settings.httponly}, samesite={settings.cookie_samesite}, key={settings.cookie_key}"
     )
     return settings
+
 
 # Create FastAPI app
 app = FastAPI(title=APP_TITLE, description=APP_DESCRIPTION)
@@ -65,6 +81,7 @@ app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(user.router)
 
+
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -73,7 +90,9 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Error during application startup: {str(e)}")
 
+
 if __name__ == "__main__":
     import uvicorn
     from .config import HOST, PORT, DEV
+
     uvicorn.run(app, host=HOST, port=PORT, reload=DEV)

@@ -104,5 +104,3 @@ async def get_logs(
     except Exception as e:
         logger.error(f"Error fetching logs: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
-
-

@@ -96,7 +96,9 @@ class LogUtils:
                 current_page = 1
             else:
                 effective_limit = sanitized_limit
-                total_pages = max(1, (total_items + effective_limit - 1) // effective_limit)
+                total_pages = max(
+                    1, (total_items + effective_limit - 1) // effective_limit
+                )
                 if page > total_pages:
                     return {
                         "items": [],
@@ -116,7 +118,11 @@ class LogUtils:
                 history_fetch_limit = history_count if bypass else effective_limit
                 history_items = []
                 if history_fetch_limit > 0:
-                    history_items = await history_cursor.skip(history_skip).limit(history_fetch_limit).to_list(history_fetch_limit)
+                    history_items = (
+                        await history_cursor.skip(history_skip)
+                        .limit(history_fetch_limit)
+                        .to_list(history_fetch_limit)
+                    )
 
                 for item in history_items:
                     items.append(
@@ -128,7 +134,11 @@ class LogUtils:
                             "timestamp": item["updated_at"],
                             "action": "page_edit",
                             "details": {
-                                "content_length": len(item.get("content", "")) if "content" in item else 0
+                                "content_length": (
+                                    len(item.get("content", ""))
+                                    if "content" in item
+                                    else 0
+                                )
                             },
                         }
                     )
@@ -145,7 +155,11 @@ class LogUtils:
                         branches_offset = max(0, offset - len(items))
 
                     if remaining_limit > 0:
-                        branches_items = await branches_cursor.skip(branches_offset).limit(remaining_limit).to_list(remaining_limit)
+                        branches_items = (
+                            await branches_cursor.skip(branches_offset)
+                            .limit(remaining_limit)
+                            .to_list(remaining_limit)
+                        )
 
                         for item in branches_items:
                             items.append(
@@ -156,9 +170,7 @@ class LogUtils:
                                     "branch": item["branch_name"],
                                     "timestamp": item["created_at"],
                                     "action": "branch_create",
-                                    "details": {
-                                        "source_branch": item["created_from"]
-                                    },
+                                    "details": {"source_branch": item["created_from"]},
                                 }
                             )
 

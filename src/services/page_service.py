@@ -5,7 +5,12 @@ Contains business logic for page operations.
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
-from ..database import get_pages_collection, get_history_collection, get_users_collection, db_instance
+from ..database import (
+    get_pages_collection,
+    get_history_collection,
+    get_users_collection,
+    db_instance,
+)
 from loguru import logger
 
 
@@ -26,7 +31,9 @@ class PageService:
         """
         try:
             if not db_instance.is_connected:
-                logger.warning(f"Database not connected - cannot get page: {title} on branch: {branch}")
+                logger.warning(
+                    f"Database not connected - cannot get page: {title} on branch: {branch}"
+                )
                 return None
 
             pages_collection = get_pages_collection()
@@ -41,7 +48,9 @@ class PageService:
             return None
 
     @staticmethod
-    async def create_page(title: str, content: str, author: str = "Anonymous", branch: str = "main") -> bool:
+    async def create_page(
+        title: str, content: str, author: str = "Anonymous", branch: str = "main"
+    ) -> bool:
         """
         Create a new page.
 
@@ -56,7 +65,9 @@ class PageService:
         """
         try:
             if not db_instance.is_connected:
-                logger.error(f"Database not connected - cannot create page: {title} on branch: {branch}")
+                logger.error(
+                    f"Database not connected - cannot create page: {title} on branch: {branch}"
+                )
                 return False
 
             pages_collection = get_pages_collection()
@@ -70,7 +81,7 @@ class PageService:
                 "author": author,
                 "branch": branch,
                 "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc)
+                "updated_at": datetime.now(timezone.utc),
             }
 
             await pages_collection.insert_one(page_data)
@@ -81,7 +92,9 @@ class PageService:
             return False
 
     @staticmethod
-    async def update_page(title: str, content: str, author: str = "Anonymous", branch: str = "main") -> bool:
+    async def update_page(
+        title: str, content: str, author: str = "Anonymous", branch: str = "main"
+    ) -> bool:
         """
         Update an existing page.
 
@@ -96,7 +109,9 @@ class PageService:
         """
         try:
             if not db_instance.is_connected:
-                logger.error(f"Database not connected - cannot update page: {title} on branch: {branch}")
+                logger.error(
+                    f"Database not connected - cannot update page: {title} on branch: {branch}"
+                )
                 return False
 
             pages_collection = get_pages_collection()
@@ -108,7 +123,9 @@ class PageService:
                 return False
 
             # Get existing page
-            existing_page = await pages_collection.find_one({"title": title, "branch": branch})
+            existing_page = await pages_collection.find_one(
+                {"title": title, "branch": branch}
+            )
 
             if existing_page:
                 # Save to history
@@ -118,31 +135,31 @@ class PageService:
                         "content": existing_page["content"],
                         "author": existing_page.get("author", "Anonymous"),
                         "branch": branch,
-                        "updated_at": existing_page["updated_at"]
+                        "updated_at": existing_page["updated_at"],
                     }
                     await history_collection.insert_one(history_item)
 
                 # Update page
                 await pages_collection.update_one(
                     {"title": title, "branch": branch},
-                    {"$set": {
-                        "content": content,
-                        "author": author,
-                        "updated_at": datetime.now(timezone.utc)
-                    }}
+                    {
+                        "$set": {
+                            "content": content,
+                            "author": author,
+                            "updated_at": datetime.now(timezone.utc),
+                        }
+                    },
                 )
 
                 # Update user edit statistics
                 if users_collection is not None and author != "Anonymous":
                     # Increment total edits
                     await users_collection.update_one(
-                        {"username": author},
-                        {"$inc": {"total_edits": 1}}
+                        {"username": author}, {"$inc": {"total_edits": 1}}
                     )
                     # Increment page-specific edits
                     await users_collection.update_one(
-                        {"username": author},
-                        {"$inc": {f"page_edits.{title}": 1}}
+                        {"username": author}, {"$inc": {f"page_edits.{title}": 1}}
                     )
 
                 logger.info(f"Page updated: {title} on branch: {branch} by {author}")
@@ -155,7 +172,7 @@ class PageService:
                     if users_collection is not None:
                         await users_collection.update_one(
                             {"username": author},
-                            {"$inc": {"total_edits": 1, f"page_edits.{title}": 1}}
+                            {"$inc": {"total_edits": 1, f"page_edits.{title}": 1}},
                         )
                 return created
         except Exception as e:
@@ -163,7 +180,9 @@ class PageService:
             return False
 
     @staticmethod
-    async def get_pages_by_branch(branch: str = "main", limit: int = 100) -> List[Dict[str, Any]]:
+    async def get_pages_by_branch(
+        branch: str = "main", limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """
         Get all pages for a specific branch.
 
@@ -176,7 +195,9 @@ class PageService:
         """
         try:
             if not db_instance.is_connected:
-                logger.warning(f"Database not connected - cannot get pages for branch: {branch}")
+                logger.warning(
+                    f"Database not connected - cannot get pages for branch: {branch}"
+                )
                 return []
 
             pages_collection = get_pages_collection()
@@ -184,14 +205,20 @@ class PageService:
                 logger.error("Pages collection not available")
                 return []
 
-            pages = await pages_collection.find({"branch": branch}).sort("updated_at", -1).to_list(limit)
+            pages = (
+                await pages_collection.find({"branch": branch})
+                .sort("updated_at", -1)
+                .to_list(limit)
+            )
             return pages
         except Exception as e:
             logger.error(f"Error getting pages for branch {branch}: {str(e)}")
             return []
 
     @staticmethod
-    async def search_pages(query: str, branch: str = "main", limit: int = 100) -> List[Dict[str, Any]]:
+    async def search_pages(
+        query: str, branch: str = "main", limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """
         Search pages by title or content.
 
@@ -205,7 +232,9 @@ class PageService:
         """
         try:
             if not db_instance.is_connected:
-                logger.warning(f"Database not connected - cannot search pages with query: {query}")
+                logger.warning(
+                    f"Database not connected - cannot search pages with query: {query}"
+                )
                 return []
 
             pages_collection = get_pages_collection()
@@ -213,20 +242,28 @@ class PageService:
                 logger.error("Pages collection not available")
                 return []
 
-            pages = await pages_collection.find({
-                "$and": [
-                    {"branch": branch},
-                    {"$or": [
-                        {"title": {"$regex": query, "$options": "i"}},
-                        {"content": {"$regex": query, "$options": "i"}}
-                    ]}
-                ]
-            }).to_list(limit)
+            pages = await pages_collection.find(
+                {
+                    "$and": [
+                        {"branch": branch},
+                        {
+                            "$or": [
+                                {"title": {"$regex": query, "$options": "i"}},
+                                {"content": {"$regex": query, "$options": "i"}},
+                            ]
+                        },
+                    ]
+                }
+            ).to_list(limit)
 
-            logger.info(f"Search performed: '{query}' on branch '{branch}' - found {len(pages)} results")
+            logger.info(
+                f"Search performed: '{query}' on branch '{branch}' - found {len(pages)} results"
+            )
             return pages
         except Exception as e:
-            logger.error(f"Error searching pages with query '{query}' on branch '{branch}': {str(e)}")
+            logger.error(
+                f"Error searching pages with query '{query}' on branch '{branch}': {str(e)}"
+            )
             return []
 
     @staticmethod
@@ -252,7 +289,9 @@ class PageService:
 
             result = await pages_collection.delete_many({"title": title})
             if result.deleted_count > 0:
-                logger.info(f"Page deleted (all branches): {title} ({result.deleted_count} branches removed)")
+                logger.info(
+                    f"Page deleted (all branches): {title} ({result.deleted_count} branches removed)"
+                )
                 return True
             else:
                 logger.warning(f"Page not found for deletion: {title}")
@@ -275,7 +314,9 @@ class PageService:
         """
         try:
             if not db_instance.is_connected:
-                logger.error(f"Database not connected - cannot delete branch {branch} from page {title}")
+                logger.error(
+                    f"Database not connected - cannot delete branch {branch} from page {title}"
+                )
                 return False
 
             pages_collection = get_pages_collection()
@@ -283,12 +324,16 @@ class PageService:
                 logger.error("Pages collection not available")
                 return False
 
-            result = await pages_collection.delete_one({"title": title, "branch": branch})
+            result = await pages_collection.delete_one(
+                {"title": title, "branch": branch}
+            )
             if result.deleted_count > 0:
                 logger.info(f"Branch deleted from page: {branch} from {title}")
                 return True
             else:
-                logger.warning(f"Branch not found for deletion: {branch} from page {title}")
+                logger.warning(
+                    f"Branch not found for deletion: {branch} from page {title}"
+                )
                 return False
         except Exception as e:
             logger.error(f"Error deleting branch {branch} from page {title}: {str(e)}")

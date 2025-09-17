@@ -25,18 +25,20 @@ def _list_images() -> List[Dict]:
     if not upload_path.exists():
         return []
 
-    image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff'}
+    image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff"}
     items: List[Dict] = []
     for entry in upload_path.iterdir():
         if entry.is_file() and entry.suffix.lower() in image_extensions:
             try:
                 stat = entry.stat()
-                items.append({
-                    "filename": entry.name,
-                    "url": f"/static/uploads/{entry.name}",
-                    "size": stat.st_size,
-                    "modified": int(stat.st_mtime),
-                })
+                items.append(
+                    {
+                        "filename": entry.name,
+                        "url": f"/static/uploads/{entry.name}",
+                        "size": stat.st_size,
+                        "modified": int(stat.st_mtime),
+                    }
+                )
             except Exception as e:
                 logger.warning(f"Failed to stat image {entry}: {e}")
                 continue
@@ -47,7 +49,12 @@ def _list_images() -> List[Dict]:
 
 
 @router.get("/images", response_class=HTMLResponse)
-async def images_library(request: Request, response: Response, q: str = "", csrf_protect: CsrfProtect = Depends()):
+async def images_library(
+    request: Request,
+    response: Response,
+    q: str = "",
+    csrf_protect: CsrfProtect = Depends(),
+):
     """Serve the image library page with optional filename filtering via `q`."""
     # Require authentication (any logged-in user)
     user = await AuthMiddleware.require_auth(request)
@@ -59,14 +66,17 @@ async def images_library(request: Request, response: Response, q: str = "", csrf
         q_lower = q.lower()
         items = [i for i in items if q_lower in i["filename"].lower()]
 
-    template = templates.TemplateResponse("images.html", {
-        "request": request,
-        "user": user,
-        "csrf_token": csrf_token,
-        "offline": not db_instance.is_connected,
-        "query": q,
-        "images": items,
-    })
+    template = templates.TemplateResponse(
+        "images.html",
+        {
+            "request": request,
+            "user": user,
+            "csrf_token": csrf_token,
+            "offline": not db_instance.is_connected,
+            "query": q,
+            "images": items,
+        },
+    )
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
 

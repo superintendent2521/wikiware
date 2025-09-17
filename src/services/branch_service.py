@@ -5,7 +5,12 @@ Contains business logic for branch operations.
 
 from typing import List
 from datetime import datetime, timezone
-from ..database import get_pages_collection, get_history_collection, get_branches_collection, db_instance
+from ..database import (
+    get_pages_collection,
+    get_history_collection,
+    get_branches_collection,
+    db_instance,
+)
 from loguru import logger
 
 
@@ -50,7 +55,9 @@ class BranchService:
         """
         try:
             if not db_instance.is_connected:
-                logger.warning(f"Database not connected - cannot get branches for page: {title}")
+                logger.warning(
+                    f"Database not connected - cannot get branches for page: {title}"
+                )
                 return ["main"]
 
             branches_collection = get_branches_collection()
@@ -60,7 +67,9 @@ class BranchService:
 
             if branches_collection is not None:
                 # Get branches from branches collection
-                branch_docs = await branches_collection.find({"page_title": title}).to_list(100)
+                branch_docs = await branches_collection.find(
+                    {"page_title": title}
+                ).to_list(100)
                 branches.extend([doc["branch_name"] for doc in branch_docs])
 
             # Also check pages collection for any branches
@@ -76,7 +85,9 @@ class BranchService:
             return ["main"]
 
     @staticmethod
-    async def create_branch(title: str, branch_name: str, source_branch: str = "main") -> bool:
+    async def create_branch(
+        title: str, branch_name: str, source_branch: str = "main"
+    ) -> bool:
         """
         Create a new branch for a page.
 
@@ -90,7 +101,9 @@ class BranchService:
         """
         try:
             if not db_instance.is_connected:
-                logger.error(f"Database not connected - cannot create branch: {branch_name} for page: {title}")
+                logger.error(
+                    f"Database not connected - cannot create branch: {branch_name} for page: {title}"
+                )
                 return False
 
             pages_collection = get_pages_collection()
@@ -102,15 +115,23 @@ class BranchService:
                 return False
 
             # Check if branch already exists
-            existing_branch = await branches_collection.find_one({"page_title": title, "branch_name": branch_name})
+            existing_branch = await branches_collection.find_one(
+                {"page_title": title, "branch_name": branch_name}
+            )
             if existing_branch:
-                logger.warning(f"Branch already exists: {branch_name} for page: {title}")
+                logger.warning(
+                    f"Branch already exists: {branch_name} for page: {title}"
+                )
                 return False
 
             # Get source page
-            source_page = await pages_collection.find_one({"title": title, "branch": source_branch})
+            source_page = await pages_collection.find_one(
+                {"title": title, "branch": source_branch}
+            )
             if not source_page:
-                logger.error(f"Source page not found: {title} on branch: {source_branch}")
+                logger.error(
+                    f"Source page not found: {title} on branch: {source_branch}"
+                )
                 return False
 
             # Create branch entry
@@ -118,7 +139,7 @@ class BranchService:
                 "page_title": title,
                 "branch_name": branch_name,
                 "created_at": datetime.now(timezone.utc),
-                "created_from": source_branch
+                "created_from": source_branch,
             }
             await branches_collection.insert_one(branch_data)
 
@@ -133,17 +154,23 @@ class BranchService:
 
             # Copy history to new branch
             if history_collection is not None:
-                source_history = await history_collection.find({"title": title, "branch": source_branch}).to_list(100)
+                source_history = await history_collection.find(
+                    {"title": title, "branch": source_branch}
+                ).to_list(100)
                 for history_item in source_history:
                     new_history_item = history_item.copy()
                     new_history_item.pop("_id", None)
                     new_history_item["branch"] = branch_name
                     await history_collection.insert_one(new_history_item)
 
-            logger.info(f"Branch created: {branch_name} for page: {title} from branch: {source_branch}")
+            logger.info(
+                f"Branch created: {branch_name} for page: {title} from branch: {source_branch}"
+            )
             return True
         except Exception as e:
-            logger.error(f"Error creating branch {branch_name} for page {title}: {str(e)}")
+            logger.error(
+                f"Error creating branch {branch_name} for page {title}: {str(e)}"
+            )
             return False
 
     @staticmethod

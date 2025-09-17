@@ -10,7 +10,12 @@ from fastapi_csrf_protect import CsrfProtect
 from urllib.parse import urlparse, parse_qsl, urlencode
 from ..services.branch_service import BranchService
 from ..database import db_instance
-from ..utils.validation import is_valid_title, is_valid_branch_name, is_safe_branch_parameter, sanitize_referer_url
+from ..utils.validation import (
+    is_valid_title,
+    is_valid_branch_name,
+    is_safe_branch_parameter,
+    sanitize_referer_url,
+)
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
@@ -34,22 +39,43 @@ async def list_branches(request: Request, title: str, branch: str = "main"):
     try:
         if not db_instance.is_connected:
             logger.warning(f"Database not connected - listing branches for: {title}")
-            return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "branch": branch})
+            return templates.TemplateResponse(
+                "edit.html",
+                {
+                    "request": request,
+                    "title": title,
+                    "content": "",
+                    "offline": True,
+                    "branch": branch,
+                },
+            )
 
         branches = await BranchService.get_branches_for_page(title)
 
         logger.info(f"Branches listed for page: {title}")
-        return templates.TemplateResponse("edit.html", {
-            "request": request,
-            "title": title,
-            "content": "",
-            "branches": branches,
-            "offline": not db_instance.is_connected,
-            "branch": branch
-        })
+        return templates.TemplateResponse(
+            "edit.html",
+            {
+                "request": request,
+                "title": title,
+                "content": "",
+                "branches": branches,
+                "offline": not db_instance.is_connected,
+                "branch": branch,
+            },
+        )
     except Exception as e:
         logger.error(f"Error listing branches for {title}: {str(e)}")
-        return templates.TemplateResponse("edit.html", {"request": request, "title": title, "content": "", "offline": True, "branch": branch})
+        return templates.TemplateResponse(
+            "edit.html",
+            {
+                "request": request,
+                "title": title,
+                "content": "",
+                "offline": True,
+                "branch": branch,
+            },
+        )
 
 
 @router.post("/branches/{title}/create")
@@ -58,18 +84,20 @@ async def create_branch(
     title: str,
     branch_name: str = Form(...),
     source_branch: str = Form("main"),
-    csrf_protect: CsrfProtect = Depends()
+    csrf_protect: CsrfProtect = Depends(),
 ):
     """Create a new branch for a page."""
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
-        
+
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
-        
+
         if not db_instance.is_connected:
-            logger.error(f"Database not connected - creating branch: {branch_name} for page: {title}")
+            logger.error(
+                f"Database not connected - creating branch: {branch_name} for page: {title}"
+            )
             return {"error": "Database not available"}
 
         # Validate inputs
@@ -93,7 +121,9 @@ async def create_branch(
 
 
 @router.post("/set-branch")
-async def set_branch(request: Request, branch: str = Form(...), csrf_protect: CsrfProtect = Depends()):
+async def set_branch(
+    request: Request, branch: str = Form(...), csrf_protect: CsrfProtect = Depends()
+):
     """Set the global branch for the session."""
     try:
         # Validate CSRF token
@@ -101,7 +131,9 @@ async def set_branch(request: Request, branch: str = Form(...), csrf_protect: Cs
 
         safe_branch = branch if is_safe_branch_parameter(branch) else "main"
         referer_header = request.headers.get("referer")
-        safe_referer = sanitize_referer_url(str(request.url), referer_header, default="/")
+        safe_referer = sanitize_referer_url(
+            str(request.url), referer_header, default="/"
+        )
 
         parsed = urlparse(safe_referer)
         if parsed.scheme or parsed.netloc:
@@ -109,7 +141,7 @@ async def set_branch(request: Request, branch: str = Form(...), csrf_protect: Cs
             return RedirectResponse(url="/", status_code=303)
 
         query_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
-        query_params['branch'] = safe_branch
+        query_params["branch"] = safe_branch
         new_query = urlencode(query_params, doseq=True)
         redirect_target = parsed.path or "/"
         if new_query:
@@ -119,5 +151,7 @@ async def set_branch(request: Request, branch: str = Form(...), csrf_protect: Cs
         return RedirectResponse(url=redirect_target, status_code=303)
     except Exception as e:
         logger.error(f"Error setting branch to {branch}: {str(e)}")
-        safe_referer = sanitize_referer_url(str(request.url), request.headers.get("referer"), default="/")
+        safe_referer = sanitize_referer_url(
+            str(request.url), request.headers.get("referer"), default="/"
+        )
         return RedirectResponse(url=safe_referer, status_code=303)
