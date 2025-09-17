@@ -92,7 +92,7 @@ async def create_branch(
         await csrf_protect.validate_csrf(request)
 
         # Check if user is authenticated
-        user = await AuthMiddleware.require_auth(request)
+        await AuthMiddleware.require_auth(request)
 
         if not db_instance.is_connected:
             logger.error(

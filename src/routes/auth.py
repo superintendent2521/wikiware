@@ -58,7 +58,6 @@ async def register_user(
         await csrf_protect.validate_csrf(request)
 
         # Log form data for debugging
-        form_data = await request.form()
         logger.info(
             f"CSRF cookie: {request.cookies.get('fastapi-csrf-token', 'NOT FOUND')}"
         )

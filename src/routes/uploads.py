@@ -39,7 +39,7 @@ async def upload_image(
         await csrf_protect.validate_csrf(request)
 
         # Check if user is authenticated
-        user = await AuthMiddleware.require_auth(request)
+        await AuthMiddleware.require_auth(request)
 
         # Create uploads directory if it doesn't exist
         upload_path = Path(UPLOAD_DIR)

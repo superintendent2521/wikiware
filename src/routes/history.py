@@ -162,6 +162,7 @@ async def page_history(
                 "title": title,
                 "versions": [],
                 "error": "An error occurred while loading history",
+                "user": user,
                 "csrf_token": csrf_token_e,
             },
         )
@@ -374,6 +375,7 @@ async def view_version(
                 "title": title,
                 "content": "",
                 "error": "An error occurred while loading version",
+                "user": user,
                 "csrf_token": csrf_token_e,
             },
         )
