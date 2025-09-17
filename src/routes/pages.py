@@ -320,6 +320,10 @@ async def delete_branch(request: Request, title: str, branch: str = Form("main")
         
         if success:
             logger.info(f"Branch deleted from page: {branch} from {title} by admin {user['username']}")
+            # Validate before using in redirect URL
+            if not is_valid_title(title) or not is_safe_branch_parameter(branch):
+                logger.warning(f"Attempted redirect with invalid title '{title}' or branch '{branch}'")
+                return RedirectResponse(url="/", status_code=303)
             return RedirectResponse(url=f"/page/{title}?branch={branch}", status_code=303)
         else:
             logger.warning(f"Branch not found for deletion: {branch} from page {title}")
