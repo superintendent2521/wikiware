@@ -9,6 +9,7 @@ from ..database import (
     get_pages_collection,
     get_history_collection,
     get_users_collection,
+    get_branches_collection,
     db_instance,
 )
 from loguru import logger
@@ -312,6 +313,7 @@ class PageService:
         Returns:
             True if successful, False otherwise
         """
+        logger.info(f"Attempting to delete branch {branch} from page {title}")
         try:
             if not db_instance.is_connected:
                 logger.error(
@@ -338,3 +340,4 @@ class PageService:
         except Exception as e:
             logger.error(f"Error deleting branch {branch} from page {title}: {str(e)}")
             return False
+
