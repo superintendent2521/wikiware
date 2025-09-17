@@ -256,14 +256,14 @@ async def save_page(request: Request, title: str, content: str = Form(...), auth
 
 
 @router.post("/delete/{title}")
-async def delete_page(request: Request, title: str, branch: str = Form("main"), csrf_protect: CsrfProtect = Depends()):
-    """Delete a page."""
+async def delete_page(request: Request, title: str, csrf_protect: CsrfProtect = Depends()):
+    """Delete a page (all branches)."""
     try:
         # Validate CSRF token (reads token from body per config and cookie)
         # Add extra diagnostics in logs to help track issues
         form_data = await request.form()
         csrf_token = form_data.get("csrf_token")
-        logger.debug(f"Delete '{title}' branch '{branch}' csrf_token in form present={bool(csrf_token)}; cookies keys={list(request.cookies.keys())}")
+        logger.debug(f"Delete page '{title}' csrf_token in form present={bool(csrf_token)}; cookies keys={list(request.cookies.keys())}")
         logger.debug(f"CSRF cookie value present={bool(request.cookies.get('fastapi-csrf-token'))}")
         await csrf_protect.validate_csrf(request)
         
@@ -273,27 +273,61 @@ async def delete_page(request: Request, title: str, branch: str = Form("main"), 
             raise HTTPException(status_code=403, detail="Admin privileges required")
 
         if not db_instance.is_connected:
-            logger.error(f"Database not connected - cannot delete page: {title} on branch: {branch}")
+            logger.error(f"Database not connected - cannot delete page: {title}")
             return {"error": "Database not available"}
 
-        # Delete the page
-        pages_collection = get_pages_collection()
-        if pages_collection is None:
-            logger.error("Pages collection not available")
-            return {"error": "Database error"}
-
-        result = await pages_collection.delete_one({"title": title, "branch": branch})
+        # Use PageService to delete the page (all branches)
+        success = await PageService.delete_page(title)
         
-        if result.deleted_count > 0:
-            logger.info(f"Page deleted: {title} on branch: {branch} by admin {user['username']}")
+        if success:
+            logger.info(f"Page deleted (all branches): {title} by admin {user['username']}")
             return RedirectResponse(url="/", status_code=303)
         else:
-            logger.warning(f"Page not found for deletion: {title} on branch: {branch}")
+            logger.warning(f"Page not found for deletion: {title}")
             return {"error": "Page not found"}
             
     except HTTPException:
         # Redirect to login if not authenticated
         return RedirectResponse(url="/login", status_code=303)
     except Exception as e:
-        logger.error(f"Error deleting page {title} on branch {branch}: {str(e)}")
+        logger.error(f"Error deleting page {title}: {str(e)}")
         return {"error": "Failed to delete page"}
+
+
+@router.post("/delete-branch/{title}")
+async def delete_branch(request: Request, title: str, branch: str = Form("main"), csrf_protect: CsrfProtect = Depends()):
+    """Delete a specific branch from a page."""
+    try:
+        # Validate CSRF token (reads token from body per config and cookie)
+        # Add extra diagnostics in logs to help track issues
+        form_data = await request.form()
+        csrf_token = form_data.get("csrf_token")
+        logger.debug(f"Delete branch '{branch}' from page '{title}' csrf_token in form present={bool(csrf_token)}; cookies keys={list(request.cookies.keys())}")
+        logger.debug(f"CSRF cookie value present={bool(request.cookies.get('fastapi-csrf-token'))}")
+        await csrf_protect.validate_csrf(request)
+        
+        # Check if user is authenticated and is an admin
+        user = await AuthMiddleware.require_auth(request)
+        if not user.get("is_admin", False):
+            raise HTTPException(status_code=403, detail="Admin privileges required")
+
+        if not db_instance.is_connected:
+            logger.error(f"Database not connected - cannot delete branch {branch} from page {title}")
+            return {"error": "Database not available"}
+
+        # Use PageService to delete the branch from the page
+        success = await PageService.delete_branch(title, branch)
+        
+        if success:
+            logger.info(f"Branch deleted from page: {branch} from {title} by admin {user['username']}")
+            return RedirectResponse(url=f"/page/{title}?branch={branch}", status_code=303)
+        else:
+            logger.warning(f"Branch not found for deletion: {branch} from page {title}")
+            return {"error": "Branch not found"}
+            
+    except HTTPException:
+        # Redirect to login if not authenticated
+        return RedirectResponse(url="/login", status_code=303)
+    except Exception as e:
+        logger.error(f"Error deleting branch {branch} from page {title}: {str(e)}")
+        return {"error": "Failed to delete branch"}

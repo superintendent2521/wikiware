@@ -228,3 +228,68 @@ class PageService:
         except Exception as e:
             logger.error(f"Error searching pages with query '{query}' on branch '{branch}': {str(e)}")
             return []
+
+    @staticmethod
+    async def delete_page(title: str) -> bool:
+        """
+        Delete all branches of a page (effectively deleting the page entirely).
+
+        Args:
+            title: Page title
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not db_instance.is_connected:
+                logger.error(f"Database not connected - cannot delete page: {title}")
+                return False
+
+            pages_collection = get_pages_collection()
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return False
+
+            result = await pages_collection.delete_many({"title": title})
+            if result.deleted_count > 0:
+                logger.info(f"Page deleted (all branches): {title} ({result.deleted_count} branches removed)")
+                return True
+            else:
+                logger.warning(f"Page not found for deletion: {title}")
+                return False
+        except Exception as e:
+            logger.error(f"Error deleting page {title}: {str(e)}")
+            return False
+
+    @staticmethod
+    async def delete_branch(title: str, branch: str) -> bool:
+        """
+        Delete a specific branch from a specific page.
+
+        Args:
+            title: Page title
+            branch: Branch name to delete from the page
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not db_instance.is_connected:
+                logger.error(f"Database not connected - cannot delete branch {branch} from page {title}")
+                return False
+
+            pages_collection = get_pages_collection()
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return False
+
+            result = await pages_collection.delete_one({"title": title, "branch": branch})
+            if result.deleted_count > 0:
+                logger.info(f"Branch deleted from page: {branch} from {title}")
+                return True
+            else:
+                logger.warning(f"Branch not found for deletion: {branch} from page {title}")
+                return False
+        except Exception as e:
+            logger.error(f"Error deleting branch {branch} from page {title}: {str(e)}")
+            return False

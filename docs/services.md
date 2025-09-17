@@ -77,6 +77,29 @@ Searches pages by title or content using case-insensitive regex matching.
 **Returns:**
 - List of matching page documents
 
+### `delete_page(title: str) -> bool`
+
+Deletes all branches of a page (effectively deleting the page entirely).
+
+**Parameters:**
+- `title`: The title of the page to delete
+
+**Returns:**
+- `True` if all branches of the page were successfully deleted
+- `False` if deletion failed (e.g., page doesn't exist or database connection issues)
+
+### `delete_branch(title: str, branch: str) -> bool`
+
+Deletes a specific branch from a specific page.
+
+**Parameters:**
+- `title`: The title of the page
+- `branch`: The branch name to delete from the page
+
+**Returns:**
+- `True` if the specified branch was successfully deleted
+- `False` if deletion failed (e.g., branch doesn't exist or database connection issues)
+
 ## BranchService
 
 Manages branch operations for version control and collaborative editing.
