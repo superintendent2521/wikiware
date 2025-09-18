@@ -207,14 +207,7 @@ async def login_user(
         user_agent = request.headers.get("user-agent", "unknown")
 
         if not db_instance.is_connected:
-            logger.error("Database not connected - cannot login user")
-            try:
-                with open("logs/login_activity.log", "a", encoding="utf-8") as f:
-                    f.write(
-                        f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent} | db_offline | {request.url.path}\n"
-                    )
-            except Exception:
-                pass
+            logger.error(f"Database not connected - cannot login user: {username} | {client_ip} | {user_agent} | db_offline | {request.url.path}")
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse(
                 "login.html",
@@ -234,14 +227,8 @@ async def login_user(
         )
 
         if not user:
-            # Log failure to activity log with IP and UA
-            try:
-                with open("logs/login_activity.log", "a", encoding="utf-8") as f:
-                    f.write(
-                        f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent} | failure | {request.url.path}\n"
-                    )
-            except Exception:
-                pass
+            # Log failure using unified logger (also writes to file via loguru config)
+            logger.warning(f"Login failed: {username} | {client_ip} | {user_agent} | failure | {request.url.path}")
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse(
                 "login.html",
@@ -283,34 +270,14 @@ async def login_user(
             max_age=3600 * 24 * 7,  # 1 week
         )
 
-        # Log successful login to activity log
-        try:
-            with open("logs/login_activity.log", "a", encoding="utf-8") as f:
-                f.write(
-                    f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent} | success | {request.url.path}\n"
-                )
-        except Exception:
-            pass
-        logger.info(f"User logged in: {username}")
+        # Log successful login using unified logger (also writes to file via loguru config)
+        logger.info(f"User logged in: {username} | {client_ip} | {user_agent} | success | {request.url.path}")
         return response
 
     except Exception as e:
         logger.error(f"Error logging in user {username}: {str(e)}")
-        # Log error to activity log
-        try:
-            xff = request.headers.get("x-forwarded-for")
-            client_ip = (
-                xff.split(",")[0].strip()
-                if xff
-                else (request.client.host if request.client else "unknown")
-            )
-            user_agent = request.headers.get("user-agent", "unknown")
-            with open("logs/login_activity.log", "a", encoding="utf-8") as f:
-                f.write(
-                    f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent} | error | {request.url.path}\n"
-                )
-        except Exception:
-            pass
+        # Log error using unified logger (also writes to file via loguru config)
+        logger.error(f"Login error: {username} | {client_ip} | {user_agent} | error | {request.url.path}")
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
         template = templates.TemplateResponse(
             "login.html",
