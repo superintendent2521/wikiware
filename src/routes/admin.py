@@ -3,13 +3,14 @@ Admin panel routes for WikiWare.
 Only accessible to users with admin: true flag.
 """
 
-from fastapi import APIRouter, Request, Depends, Response
+from fastapi import APIRouter, Request, Depends, Response, Form
 from ..middleware.auth_middleware import AuthMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from ..config import TEMPLATE_DIR
 from ..database import get_users_collection
 from ..stats import get_stats
+from ..services.settings_service import SettingsService
 from ..utils.logs import LogUtils
 from ..database import db_instance
 from fastapi_csrf_protect import CsrfProtect
@@ -50,6 +51,8 @@ async def admin_panel(
     # Get recent logs (last 5)
     recent_logs = await LogUtils.get_paginated_logs(1, 5)
 
+    banner = await SettingsService.get_banner()
+
     # CSRF token for templates (logout form in base.html)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
 
@@ -65,7 +68,52 @@ async def admin_panel(
             "user": user,
             "csrf_token": csrf_token,
             "offline": not db_instance.is_connected,
+            "banner": banner,
+            "banner_levels": ["info", "success", "warning", "danger"],
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
+
+
+
+
+@router.post("/admin/banner")
+async def update_banner(
+    request: Request, csrf_protect: CsrfProtect = Depends()
+):
+    """Update the global banner message from the admin panel."""
+    form = await request.form()
+    await csrf_protect.validate_csrf(request)
+
+    user = await AuthMiddleware.require_auth(request)
+    if not user.get("is_admin", False):
+        return RedirectResponse(url="/", status_code=303)
+
+    message = form.get("banner_message", "").strip()
+    level = form.get("banner_level", "info")
+    is_active = form.get("banner_active") == "on"
+
+    success = await SettingsService.update_banner(
+        message=message,
+        level=level,
+        is_active=is_active,
+    )
+
+    status = "banner_saved" if success else "banner_error"
+    redirect_url = request.url_for("admin_panel")
+    return RedirectResponse(
+        url=f"{redirect_url}?status={status}",
+        status_code=303,
+    )
+
+
+
+
+
+
+
+
+
+
+

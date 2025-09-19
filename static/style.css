@@ -108,6 +108,56 @@ body {
     padding: 0 var(--space-lg);
 }
 
+/* Global announcement banner */
+.global-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-sm) var(--space-xl);
+    font-weight: var(--font-weight-medium);
+    gap: var(--space-sm);
+    text-align: center;
+}
+
+.global-banner__message {
+    max-width: 960px;
+}
+
+.global-banner--info {
+    background: rgba(52, 152, 219, 0.15);
+    color: var(--accent-blue-dark);
+}
+
+.global-banner--success {
+    background: rgba(39, 174, 96, 0.15);
+    color: var(--success-dark);
+}
+
+.global-banner--warning {
+    background: rgba(243, 156, 18, 0.18);
+    color: var(--warning-dark);
+}
+
+.global-banner--danger {
+    background: rgba(231, 76, 60, 0.18);
+    color: var(--error-dark);
+}
+
+[data-theme="dark"] .global-banner--info {
+    background: rgba(52, 152, 219, 0.25);
+}
+
+[data-theme="dark"] .global-banner--success {
+    background: rgba(39, 174, 96, 0.3);
+}
+
+[data-theme="dark"] .global-banner--warning {
+    background: rgba(243, 156, 18, 0.3);
+}
+
+[data-theme="dark"] .global-banner--danger {
+    background: rgba(231, 76, 60, 0.3);
+}
 /* Header and Navigation */
 header {
     background-color: var(--primary-white);
@@ -1641,3 +1691,4 @@ footer p {
         position: static;
     }
 }
+

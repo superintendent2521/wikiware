@@ -16,6 +16,47 @@
         </div>
 
         <div class="admin-card admin-card-wide">
+            <h3><i class="fas fa-bullhorn"></i> Global Announcement Banner</h3>
+            {% if request.query_params.get("status") == "banner_saved" %}
+            <div class="callout callout-success"><i class="fas fa-check-circle"></i> Banner settings saved.</div>
+            {% elif request.query_params.get("status") == "banner_error" %}
+            <div class="callout callout-error"><i class="fas fa-triangle-exclamation"></i> Could not save banner. Check database connectivity.</div>
+            {% endif %}
+            {% if offline %}
+            <div class="callout callout-warning"><i class="fas fa-plug-circle-xmark"></i> Database offline. Updates are disabled until connectivity is restored.</div>
+            {% endif %}
+            <form method="post" action="/admin/banner" class="banner-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label for="banner_message" class="banner-form__label">Message</label>
+                <textarea id="banner_message" name="banner_message" rows="3" placeholder="Share a site-wide update" {% if offline %}disabled{% endif %}>{{ banner.message }}</textarea>
+                <div class="banner-form__row">
+                    <div class="banner-form__field">
+                        <p>Works 90 percent of the time, if it 500s just log out and back in.</p>
+                        <label for="banner_level" class="banner-form__label">Style</label>
+                        <select id="banner_level" name="banner_level" {% if offline %}disabled{% endif %}>
+                            {% for level in banner_levels %}
+                            <option value="{{ level }}" {% if banner.level == level %}selected{% endif %}>{{ level|capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="banner-form__field banner-form__toggle">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="banner_active" {% if banner.is_active %}checked{% endif %} {% if offline %}disabled{% endif %}>
+                            <span>Display banner</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="banner-form__actions">
+                    <button type="submit" class="btn btn-primary" {% if offline %}disabled{% endif %}>
+                        <i class="fas fa-save"></i> Save Banner
+                    </button>
+                    {% if banner.should_display %}
+                    <span class="banner-preview-label">Currently visible ({{ banner.level|capitalize }})</span>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        <div class="admin-card admin-card-wide">
             <h3><i class="fas fa-users"></i> User Management</h3>
             <div class="user-table-container">
                 <table class="user-table">
@@ -109,6 +150,7 @@
 }
 
 .admin-card {
+
     background: var(--primary-white);
     padding: 30px;
     border-radius: 8px;
@@ -283,6 +325,98 @@
 .log-stream-container p:last-child {
     border-bottom: none;
 }
+.callout {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.callout i {
+    color: inherit;
+}
+
+.callout-success {
+    background: rgba(39, 174, 96, 0.15);
+    color: var(--success-dark);
+}
+
+.callout-warning {
+    background: rgba(243, 156, 18, 0.18);
+    color: var(--warning-dark);
+}
+
+.callout-error {
+    background: rgba(231, 76, 60, 0.18);
+    color: var(--error-dark);
+}
+
+.banner-form textarea,
+.banner-form select {
+    width: 100%;
+    margin-top: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--medium-gray);
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-sm);
+    background: var(--secondary-white);
+    color: var(--darker-gray);
+}
+
+.banner-form textarea {
+    resize: vertical;
+    min-height: 110px;
+}
+
+.banner-form__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+}
+
+.banner-form__field {
+    flex: 1;
+    min-width: 200px;
+}
+
+.banner-form__label {
+    font-weight: var(--font-weight-medium);
+    display: block;
+}
+
+.banner-form__toggle {
+    display: flex;
+    align-items: flex-end;
+}
+
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-weight: var(--font-weight-medium);
+}
+
+.banner-form__actions {
+    margin-top: var(--space-md);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.banner-preview-label {
+    font-size: var(--font-size-sm);
+    color: var(--dark-gray);
+}
+
+.banner-form :disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
 </style>
 
 <script nonce="{{ request.state.csp_nonce }}">
@@ -341,3 +475,4 @@ function connectWebSocket() {
 }
 </script>
 {% endblock %}
+

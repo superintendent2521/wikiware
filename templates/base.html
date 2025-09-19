@@ -50,6 +50,14 @@
         </nav>
     </header>
 
+
+    {% set banner = request.state.global_banner %}
+    {% if banner and banner.should_display %}
+    <div class="global-banner global-banner--{{ banner.level }}" role="status" aria-live="polite">
+        <span class="global-banner__message">{{ banner.message }}</span>
+    </div>
+    {% endif %}
+
     <main>
         {% block content %}{% endblock %}
     </main>
@@ -172,3 +180,4 @@
     {% block scripts %}{% endblock %}
 </body>
 </html>
+

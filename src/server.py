@@ -3,7 +3,7 @@ Main FastAPI application for WikiWare.
 This is the refactored, modular version with separated concerns.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
@@ -23,6 +23,7 @@ from .routes import (
     user,
 )
 from .services import log_streamer
+from .services.settings_service import SettingsService
 
 from loguru import logger
 import os
@@ -68,6 +69,18 @@ app.mount("/help", StaticFiles(directory=HELP_STATIC_DIR), name="help")
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
 
+@app.middleware("http")
+async def inject_global_banner(request: Request, call_next):
+    """Attach the global announcement banner to request state for templates."""
+    try:
+        banner = await SettingsService.get_banner()
+    except Exception as exc:
+        logger.error(f"Failed to load global banner: {exc}")
+        banner = SettingsService._banner_cache
+    request.state.global_banner = banner
+    response = await call_next(request)
+    return response
+
 # Include route modules
 app.include_router(pages.router)
 app.include_router(search.router)
@@ -99,3 +112,4 @@ if __name__ == "__main__":
     from .config import HOST, PORT, DEV
 
     uvicorn.run(app, host=HOST, port=PORT, reload=DEV)
+
