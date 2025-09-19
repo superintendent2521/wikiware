@@ -70,8 +70,10 @@
                 <button type="submit" class="btn btn-danger" onclick="return confirm('{{ delete_confirm }}')"><i class="fas fa-trash"></i> {{ delete_label }}</button>
             </form>
             {% endif %}
-            <a href="/?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
-        </div>
+            {% if page.title != 'Home' %}
+                <a href="/?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
+            {% endif %}
+            </div>
     </div>
 
 
