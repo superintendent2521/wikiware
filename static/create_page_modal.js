@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const pageTitleInput = document.getElementById('pageTitle');
     
     // Get create button and branch data
-    const createBtn = document.getElementById('createNewPageBtn');
+    const createBtn = document.getElementById('createPageBtn');
     const branch = createBtn ? createBtn.getAttribute('data-branch') : 'main';
     
     // Hide modal initially
