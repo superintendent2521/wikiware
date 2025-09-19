@@ -22,8 +22,8 @@ from .routes import (
     images,
     user,
 )
+from .services import log_streamer
 
-# Remove TableExtension import since it's not available in this version
 from loguru import logger
 import os
 from .middleware.security_headers import SecurityHeadersMiddleware
@@ -80,7 +80,10 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(user.router)
-
+# From Utils, because its a service, not a route
+app.include_router(log_streamer.router)
+# Initilize log streaming.
+log_streamer.setup_log_streaming(app, add_file_sink=False)
 
 @app.on_event("startup")
 async def startup_event():
