@@ -109,6 +109,30 @@ Utility functions provide reusable helpers across the application.
 - `is_valid_branch_name(branch_name: str)`: Validate branch name (no "..", no "/", no "\", not reserved)
 - `sanitize_filename(filename: str)`: Sanitize uploaded filenames (replace dangerous chars with underscores)
 
+# Log Streaming Service
+
+This module provides **real-time log streaming** from [Loguru](https://github.com/Delgan/loguru) to connected WebSocket clients.  
+It exposes a WebSocket endpoint (`/ws/logs`) and integrates into a FastAPI application lifecycle with proper startup/shutdown handling.  
+
+The service is designed to be initialized **once per application** via `setup_log_streaming()`.
+
+---
+
+## Features
+
+- **WebSocket endpoint** (`/ws/logs`) for clients to receive log messages in real time.
+- **Background dispatcher** that forwards Loguru messages to all active WebSocket clients.
+- **Optional file sink** for persistent logging to rotating files.
+- **Thread-safe async queue** (`asyncio.Queue`) for moving log messages from Loguru sinks to the dispatcher loop.
+- **Graceful shutdown** of dispatcher task on application termination.
+- **Simple public handle** (`stream_log.loguru`) to access Loguru logging functions.
+
+---
+
+
+
+
+
 ## Development Workflow
 
 ### Setting Up
