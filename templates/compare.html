@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Compare Versions of {{ title }} - WikiWare{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if compare_error %}
+    <div class="alert alert-error">
+        <strong>Error:</strong> {{ compare_error }}
+    </div>
+    {% endif %}
+
+    <div class="page-header">
+        <h2>Compare Versions of {{ title }}</h2>
+        <div class="page-actions">
+            <a href="/history/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-primary"><i class="fas fa-history"></i> View History</a>
+            <a href="/page/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-eye"></i> View Current</a>
+            <a href="/edit/{{ title }}?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit Page</a>
+            <a href="/?branch={{ branch or 'main' }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
+        </div>
+    </div>
+
+    {% if branch %}
+    <div class="branch-info">
+        <p><strong>Current Branch:</strong> {{ branch }}</p>
+    </div>
+    {% endif %}
+
+    {% if versions and versions|length > 1 %}
+    <div class="history-compare compare-page-form">
+        <form action="/history/{{ title }}/compare" method="get" class="compare-form">
+            <input type="hidden" name="branch" value="{{ branch or 'main' }}">
+            <div class="compare-select-group">
+                <label for="compare-from">Compare</label>
+                <select id="compare-from" name="from_version">
+                    {% for version in versions %}
+                        <option value="{{ version.index }}" {% if from_version == version.index %}selected{% endif %}>
+                            Version {{ version.display_number }} — {{ version.author }} ({{ version.updated_at_display }})
+                        </option>
+                    {% endfor %}
+                </select>
+                <span class="compare-separator">to</span>
+                <select id="compare-to" name="to_version">
+                    {% for version in versions %}
+                        <option value="{{ version.index }}" {% if to_version == version.index %}selected{% endif %}>
+                            Version {{ version.display_number }} — {{ version.author }} ({{ version.updated_at_display }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-small btn-secondary"><i class="fas fa-not-equal"></i> Compare</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if from_meta and to_meta %}
+    <div class="compare-summary">
+        <div class="compare-card">
+            <h3>Version {{ from_meta.display_number }}</h3>
+            <p><strong>Author:</strong> {{ from_meta.author }}</p>
+            <p><strong>Date:</strong> {{ from_meta.updated_at_display }}</p>
+            {% if not from_meta.is_current %}
+            <form action="/restore/{{ title }}/{{ from_meta.index }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="branch" value="{{ branch or 'main' }}">
+                <button type="submit" class="btn btn-small btn-warning"
+                        onclick="return confirm('Restore version {{ from_meta.display_number }}?')"><i class="fas fa-undo"></i> Restore This Version</button>
+            </form>
+            {% else %}
+            <span class="current-version-label">Current version</span>
+            {% endif %}
+        </div>
+        <div class="compare-card">
+            <h3>Version {{ to_meta.display_number }}</h3>
+            <p><strong>Author:</strong> {{ to_meta.author }}</p>
+            <p><strong>Date:</strong> {{ to_meta.updated_at_display }}</p>
+            {% if not to_meta.is_current %}
+            <form action="/restore/{{ title }}/{{ to_meta.index }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="branch" value="{{ branch or 'main' }}">
+                <button type="submit" class="btn btn-small btn-warning"
+                        onclick="return confirm('Restore version {{ to_meta.display_number }}?')"><i class="fas fa-undo"></i> Restore This Version</button>
+            </form>
+            {% else %}
+            <span class="current-version-label">Current version</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="diff-container">
+        {% if diff_html %}
+        {{ diff_html | safe }}
+        {% elif not compare_error %}
+        <p>No differences to display. Select two different versions to compare.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

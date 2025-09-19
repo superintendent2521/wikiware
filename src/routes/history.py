@@ -8,6 +8,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
 import markdown
+from difflib import HtmlDiff
+from typing import Any, Dict, List, Optional
 from ..utils.link_processor import process_internal_links
 from ..utils.sanitizer import sanitize_html
 from ..database import get_pages_collection, get_history_collection, db_instance
@@ -39,6 +41,117 @@ def _build_page_redirect_url(
     if query_params:
         target_url = target_url.include_query_params(**query_params)
     return str(target_url)
+
+
+async def _fetch_versions_for_history(
+    title: str,
+    branch: str,
+    *,
+    limit: int = 100,
+    pages_collection=None,
+    history_collection=None,
+) -> List[Dict[str, Any]]:
+    """Fetch current page and historical versions ordered newest first."""
+
+    if pages_collection is None:
+        pages_collection = get_pages_collection()
+    if history_collection is None:
+        history_collection = get_history_collection()
+
+    versions: List[Dict[str, Any]] = []
+
+    try:
+        if pages_collection is not None:
+            current = await pages_collection.find_one({"title": title, "branch": branch})
+            if current:
+                versions.append(current)
+
+        remaining = max(0, limit - len(versions))
+
+        if remaining > 0 and history_collection is not None:
+            history_cursor = (
+                history_collection.find({"title": title, "branch": branch})
+                .sort("updated_at", -1)
+                .limit(remaining)
+            )
+            history_versions = await history_cursor.to_list(remaining)
+            versions.extend(history_versions)
+
+        return versions
+    except Exception as db_error:
+        logger.error(
+            f"Database error while fetching version list for {title} on branch {branch}: {str(db_error)}"
+        )
+        raise
+
+
+async def _get_version_by_index(
+    title: str,
+    branch: str,
+    version_index: int,
+    *,
+    pages_collection=None,
+    history_collection=None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch a single version document by index (0=current, 1+ history)."""
+
+    if version_index < 0:
+        return None
+
+    if pages_collection is None:
+        pages_collection = get_pages_collection()
+    if history_collection is None:
+        history_collection = get_history_collection()
+
+    try:
+        if version_index == 0:
+            if pages_collection is None:
+                return None
+            return await pages_collection.find_one({"title": title, "branch": branch})
+
+        if history_collection is None:
+            return None
+
+        cursor = (
+            history_collection.find({"title": title, "branch": branch})
+            .sort("updated_at", -1)
+            .skip(version_index - 1)
+            .limit(1)
+        )
+        results = await cursor.to_list(1)
+        return results[0] if results else None
+    except Exception as db_error:
+        logger.error(
+            f"Database error while fetching version {version_index} for {title} on branch {branch}: {str(db_error)}"
+        )
+        raise
+
+
+def _build_version_entries(versions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Attach metadata (display number, author, timestamps) to versions."""
+
+    total_versions = len(versions)
+    entries: List[Dict[str, Any]] = []
+
+    for idx, doc in enumerate(versions):
+        updated_at = doc.get("updated_at")
+        if isinstance(updated_at, datetime):
+            updated_at_display = updated_at.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            updated_at_display = str(updated_at) if updated_at is not None else "Unknown"
+
+        entries.append(
+            {
+                "index": idx,
+                "display_number": max(1, total_versions - idx),
+                "author": doc.get("author", "Anonymous"),
+                "updated_at_display": updated_at_display,
+                "document": doc,
+                "is_current": idx == 0,
+            }
+        )
+
+    return entries
 
 
 @router.get("/history/{title}", response_class=HTMLResponse)
@@ -99,22 +212,14 @@ async def page_history(
         versions = []
 
         try:
-            if history_collection is not None:
-                # Get history versions for the specific branch
-                versions = (
-                    await history_collection.find({"title": title, "branch": branch})
-                    .sort("updated_at", -1)
-                    .to_list(100)
-                )
-                # Get current version
-                if pages_collection is not None:
-                    current = await pages_collection.find_one(
-                        {"title": title, "branch": branch}
-                    )
-                    if current:
-                        versions.insert(
-                            0, current
-                        )  # Add current version at the beginning
+            versions_raw = await _fetch_versions_for_history(
+                title,
+                branch,
+                limit=100,
+                pages_collection=pages_collection,
+                history_collection=history_collection,
+            )
+            versions = _build_version_entries(versions_raw)
         except Exception as db_error:
             logger.error(
                 f"Database error while fetching history for {title} on branch {branch}: {str(db_error)}"
@@ -123,17 +228,24 @@ async def page_history(
                 "history.html",
                 {
                     "request": request,
-                    "title": title,
-                    "versions": [],
-                    "error": "Database error occurred",
-                    "user": user,
-                    "csrf_token": csrf_token,
-                },
-            )
+                "title": title,
+                "versions": [],
+                "error": "Database error occurred",
+                "user": user,
+                "csrf_token": csrf_token,
+            },
+        )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
 
         logger.info(f"History viewed: {title} on branch: {branch}")
+        compare_defaults: Optional[Dict[str, Optional[int]]] = None
+        if len(versions) > 1:
+            compare_defaults = {
+                "from_index": versions[1]["index"],
+                "to_index": versions[0]["index"],
+            }
+
         template = templates.TemplateResponse(
             "history.html",
             {
@@ -145,6 +257,7 @@ async def page_history(
                 "branches": branches,
                 "user": user,
                 "csrf_token": csrf_token,
+                "compare_defaults": compare_defaults,
             },
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
@@ -163,6 +276,196 @@ async def page_history(
                 "versions": [],
                 "error": "An error occurred while loading history",
                 "user": user,
+                "csrf_token": csrf_token_e,
+            },
+        )
+        if signed_token_e:
+            csrf_protect.set_csrf_cookie(signed_token_e, template)
+        return template
+
+
+@router.get("/history/{title}/compare", response_class=HTMLResponse)
+async def compare_versions(
+    request: Request,
+    response: Response,
+    title: str,
+    branch: str = "main",
+    from_version: int = 1,
+    to_version: int = 0,
+    csrf_protect: CsrfProtect = Depends(),
+):
+    """Compare two versions of a page and render a side-by-side diff."""
+
+    try:
+        user = await AuthMiddleware.get_current_user(request)
+        csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+
+        if not is_valid_title(title):
+            logger.warning(f"Invalid title for comparison: {title} on branch: {branch}")
+            redirect_url = _build_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
+
+        if not db_instance.is_connected:
+            logger.warning(
+                f"Database not connected - comparing versions: {title} on branch: {branch}"
+            )
+            template = templates.TemplateResponse(
+                "compare.html",
+                {
+                    "request": request,
+                    "title": title,
+                    "branch": branch,
+                    "versions": [],
+                    "compare_error": "Database not available",
+                    "user": user,
+                    "csrf_token": csrf_token,
+                },
+            )
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
+
+        pages_collection = get_pages_collection()
+        history_collection = get_history_collection()
+
+        if pages_collection is None and history_collection is None:
+            logger.error(
+                f"Database collections not available - comparing versions: {title} on branch: {branch}"
+            )
+            template = templates.TemplateResponse(
+                "compare.html",
+                {
+                    "request": request,
+                    "title": title,
+                    "branch": branch,
+                    "versions": [],
+                    "compare_error": "Database not available",
+                    "user": user,
+                    "csrf_token": csrf_token,
+                },
+            )
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
+
+        branches = await BranchService.get_available_branches()
+
+        try:
+            versions_raw = await _fetch_versions_for_history(
+                title,
+                branch,
+                limit=100,
+                pages_collection=pages_collection,
+                history_collection=history_collection,
+            )
+            version_entries = _build_version_entries(versions_raw)
+        except Exception as db_error:
+            logger.error(
+                f"Database error while preparing comparison for {title} on branch {branch}: {str(db_error)}"
+            )
+            template = templates.TemplateResponse(
+                "compare.html",
+                {
+                    "request": request,
+                    "title": title,
+                    "branch": branch,
+                    "versions": [],
+                    "compare_error": "Database error occurred",
+                    "user": user,
+                    "csrf_token": csrf_token,
+                },
+            )
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
+
+        compare_error: Optional[str] = None
+        diff_html: Optional[str] = None
+        from_meta: Optional[Dict[str, Any]] = None
+        to_meta: Optional[Dict[str, Any]] = None
+
+        version_lookup = {entry["index"]: entry for entry in version_entries}
+
+        if len(version_entries) < 2:
+            compare_error = "Not enough versions to compare."
+        elif from_version == to_version:
+            compare_error = "Select two different versions to compare."
+        elif from_version not in version_lookup or to_version not in version_lookup:
+            compare_error = "Selected versions could not be found."
+        else:
+            try:
+                from_page = await _get_version_by_index(
+                    title,
+                    branch,
+                    from_version,
+                    pages_collection=pages_collection,
+                    history_collection=history_collection,
+                )
+                to_page = await _get_version_by_index(
+                    title,
+                    branch,
+                    to_version,
+                    pages_collection=pages_collection,
+                    history_collection=history_collection,
+                )
+            except Exception as db_error:
+                logger.error(
+                    f"Database error while fetching comparison versions for {title} on branch {branch}: {str(db_error)}"
+                )
+                compare_error = "Database error occurred while fetching versions."
+                from_page = None
+                to_page = None
+
+            if from_page and to_page:
+                from_meta = version_lookup[from_version]
+                to_meta = version_lookup[to_version]
+
+                diff_builder = HtmlDiff(wrapcolumn=80)
+                diff_html = diff_builder.make_table(
+                    from_page.get("content", "").splitlines(),
+                    to_page.get("content", "").splitlines(),
+                    f"Version {from_meta['display_number']}",
+                    f"Version {to_meta['display_number']}",
+                    context=True,
+                    numlines=3,
+                )
+            elif compare_error is None:
+                compare_error = "One or both selected versions could not be found."
+
+        template = templates.TemplateResponse(
+            "compare.html",
+            {
+                "request": request,
+                "title": title,
+                "branch": branch,
+                "versions": version_entries,
+                "from_version": from_version,
+                "to_version": to_version,
+                "from_meta": from_meta,
+                "to_meta": to_meta,
+                "diff_html": diff_html,
+                "compare_error": compare_error,
+                "branches": branches,
+                "user": user,
+                "csrf_token": csrf_token,
+            },
+        )
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
+    except Exception as e:
+        logger.error(
+            f"Error comparing versions for {title} on branch {branch}: {str(e)}"
+        )
+        try:
+            csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
+        except Exception:
+            csrf_token_e, signed_token_e = "", ""
+        template = templates.TemplateResponse(
+            "compare.html",
+            {
+                "request": request,
+                "title": title,
+                "branch": branch,
+                "versions": [],
+                "compare_error": "An error occurred while preparing the comparison.",
+                "user": locals().get("user"),
                 "csrf_token": csrf_token_e,
             },
         )
@@ -268,20 +571,13 @@ async def view_version(
 
         page = None
         try:
-            if version_index == 0:
-                # Current version
-                page = await pages_collection.find_one(
-                    {"title": title, "branch": branch}
-                )
-            else:
-                # Historical version
-                versions = (
-                    await history_collection.find({"title": title, "branch": branch})
-                    .sort("updated_at", -1)
-                    .to_list(100)
-                )
-                if version_index - 1 < len(versions):
-                    page = versions[version_index - 1]
+            page = await _get_version_by_index(
+                title,
+                branch,
+                version_index,
+                pages_collection=pages_collection,
+                history_collection=history_collection,
+            )
         except Exception as db_error:
             logger.error(
                 f"Database error while fetching version {version_index} for {title} on branch {branch}: {str(db_error)}"
@@ -441,24 +737,21 @@ async def restore_version(
             )
             return RedirectResponse(url=redirect_url, status_code=303)
 
-        page = None
+        if version_index == 0:
+            logger.info(
+                f"Attempt to restore current version (no action): {title} v{version_index} on branch: {branch}"
+            )
+            redirect_url = _build_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
+
         try:
-            if version_index == 0:
-                # Current version - nothing to restore
-                logger.info(
-                    f"Attempt to restore current version (no action): {title} v{version_index} on branch: {branch}"
-                )
-                redirect_url = _build_page_redirect_url(request, title, branch)
-                return RedirectResponse(url=redirect_url, status_code=303)
-            else:
-                # Historical version
-                versions = (
-                    await history_collection.find({"title": title, "branch": branch})
-                    .sort("updated_at", -1)
-                    .to_list(100)
-                )
-                if version_index - 1 < len(versions):
-                    page = versions[version_index - 1]
+            page = await _get_version_by_index(
+                title,
+                branch,
+                version_index,
+                pages_collection=pages_collection,
+                history_collection=history_collection,
+            )
         except Exception as db_error:
             logger.error(
                 f"Database error while fetching version {version_index} for restore {title} on branch {branch}: {str(db_error)}"
