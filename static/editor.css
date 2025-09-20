@@ -71,6 +71,40 @@
   pointer-events: auto;
 }
 
+#wikiLinkModal .modal-content {
+  max-width: 420px;
+}
+
+#wikiLinkModal .form-group {
+  margin-bottom: 12px;
+}
+
+#wikiLinkModal .form-group label {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+#wikiLinkModal .form-group input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#wikiLinkModal .modal-actions {
+  justify-content: flex-end;
+}
+
+#wikiLinkStatus {
+  min-height: 1.25em;
+  margin-bottom: 8px;
+}
+
+[data-theme="dark"] #wikiLinkModal .form-group input {
+  background: #1f1f1f;
+  color: #f1f1f1;
+  border: 1px solid #404040;
+}
+
 /* Constrain images in visual editor to match article layout */
 .visual-editor img {
   float: left;

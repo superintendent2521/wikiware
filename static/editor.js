@@ -293,6 +293,7 @@
       const form = qs(opts.formSelector);
       const buttons = () => qsa('[data-cmd]', toolbar);
       const toggleRawBtn = toolbar ? toolbar.querySelector('#toggleRawBtn') : null;
+      const wikiLinkBtn = toolbar ? toolbar.querySelector('#insertWikiLinkBtn') : null;
       const toolbarButtonsAll = () => toolbar ? qsa('button', toolbar) : [];
       let isRawMode = false;
 
@@ -312,6 +313,73 @@
         }
         toggleRawBtn.setAttribute('aria-pressed', isRawMode ? 'true' : 'false');
         toggleRawBtn.classList.toggle('active', isRawMode);
+      }
+
+
+      function dispatchEditorInput() {
+        if (!editor) return;
+        try {
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (_) {
+          const evt = document.createEvent('Event');
+          evt.initEvent('input', true, false);
+          editor.dispatchEvent(evt);
+        }
+      }
+
+      function insertSnippet(snippet) {
+        if (!snippet) return;
+        if (isRawMode && textarea) {
+          textarea.focus();
+          const start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : textarea.value.length;
+          const end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : start;
+          const value = textarea.value || '';
+          textarea.value = value.slice(0, start) + snippet + value.slice(end);
+          const pos = start + snippet.length;
+          if (typeof textarea.setSelectionRange === 'function') {
+            textarea.setSelectionRange(pos, pos);
+          }
+          try {
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (_) {
+            const evt = document.createEvent('Event');
+            evt.initEvent('input', true, false);
+            textarea.dispatchEvent(evt);
+          }
+          return;
+        }
+        if (!editor) return;
+        editor.focus();
+        let didInsert = false;
+        try {
+          if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+            didInsert = document.execCommand('insertText', false, snippet);
+          } else {
+            didInsert = document.execCommand('insertText', false, snippet);
+          }
+        } catch (_) {
+          didInsert = false;
+        }
+        if (!didInsert) {
+          const range = getRange();
+          if (range) {
+            range.deleteContents();
+            const textNode = document.createTextNode(snippet);
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+            range.collapse(true);
+            const sel = window.getSelection();
+            if (sel) {
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          } else {
+            editor.appendChild(document.createTextNode(snippet));
+          }
+        }
+        dispatchEditorInput();
+        captureSelection();
+        updateToolbarState();
       }
 
       function setRawMode(enabled) {
@@ -595,6 +663,35 @@
         updateToggleButtonLabel();
       }
 
+      function requestWikiLinkModal() {
+        const detail = { handled: false };
+        try {
+          const evt = new CustomEvent('wikiLink:open', { bubbles: true, cancelable: false, detail });
+          document.dispatchEvent(evt);
+        } catch (_) {
+          if (typeof document.createEvent === 'function') {
+            const evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('wikiLink:open', true, false, detail);
+            document.dispatchEvent(evt);
+          }
+        }
+        return detail.handled;
+      }
+
+      if (wikiLinkBtn) {
+        wikiLinkBtn.addEventListener('click', () => {
+          if (wikiLinkBtn.disabled) return;
+          const handled = requestWikiLinkModal();
+          if (handled) return;
+          const page = prompt("Wiki page name (required)");
+          if (!page) return;
+          const trimmedPage = page.trim();
+          if (!trimmedPage) return;
+          let branch = prompt("Branch name (optional)");
+          WikiEditor.insertWikiLink({ page: trimmedPage, branch });
+        });
+      }
+
       // Link creation
       const linkBtn = qs('#createLinkBtn');
       if (linkBtn) linkBtn.addEventListener('click', () => {
@@ -662,6 +759,17 @@
 
       WikiEditor.captureSelection = captureSelection;
       WikiEditor.restoreSelection = restoreSavedSelection;
+      WikiEditor.insertWikiLink = function ({ page, branch } = {}) {
+        const pageName = (page || '').trim();
+        if (!pageName) return false;
+        const branchName = (branch || '').trim();
+        let snippet = '[[ ' + pageName;
+        if (branchName) snippet += ':' + branchName;
+        snippet += ' ]]';
+        insertSnippet(snippet);
+        return true;
+      };
+      WikiEditor.requestWikiLinkModal = requestWikiLinkModal;
 
       // Initial state
       updateToolbarState();
