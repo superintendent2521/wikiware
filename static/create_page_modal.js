@@ -73,6 +73,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Redirect to edit page with the new title
-        window.location.href = `/edit/${encodeURIComponent(pageTitle)}?branch=${encodeURIComponent(encodeURIComponent(branch))}`;
+        window.location.href = `/edit/${encodeURIComponent(pageTitle)}?branch=main`;
         });
 });

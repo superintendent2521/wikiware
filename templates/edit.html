@@ -20,21 +20,39 @@
     <link rel="stylesheet" href="{{ url_for('static', path='editor.css') }}">
     <!-- Image Upload Modal -->
     <div id="imageUploadModal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h3>Upload Image</h3>
-            <form id="imageUploadForm">
-                <div class="form-group">
-                    <label for="imageFile">Select Image:</label>
-                    <input type="file" id="imageFile" name="image" accept="image/*">
+        <div class="modal-content image-modal">
+            <span class="close" aria-label="Close">&times;</span>
+            <div class="image-modal-header">
+                <h3 class="image-modal-title">Images</h3>
+                <div class="image-modal-tabs">
+                    <button type="button" class="btn btn-secondary btn-small image-modal-tab" data-tab="library">Browse Library</button>
                 </div>
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Upload Image</button>
-                    <a href="/images" target="_blank" class="btn btn-secondary">Browse Images</a>
-                    <button type="button" class="btn btn-secondary" id="cancelUpload">Cancel</button>
+            </div>
+            <div id="imageModalUploadSection" class="image-modal-section">
+                <form id="imageUploadForm">
+                    <div class="form-group">
+                        <label for="imageFile">Select Image:</label>
+                        <input type="file" id="imageFile" name="image" accept="image/*">
+                    </div>
+                    <div class="form-actions modal-actions">
+                        <button type="submit" class="btn btn-primary">Upload Image</button>
+                        <button type="button" class="btn btn-secondary" id="cancelUpload">Cancel</button>
+                    </div>
+                </form>
+                <div id="uploadStatus"></div>
+            </div>
+            <div id="imageModalLibrarySection" class="image-modal-section" hidden>
+                <div class="image-library-controls">
+                    <input type="search" id="imageLibrarySearch" class="form-control" placeholder="Search images by filename">
+                    <button type="button" class="btn btn-secondary btn-small" id="refreshImageLibraryBtn">Refresh</button>
                 </div>
-            </form>
-            <div id="uploadStatus"></div>
+                <div id="imageLibraryStatus" class="image-library-status"></div>
+                <div id="imageLibraryList" class="image-library-grid" role="list"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="backToUploadBtn">Back to Upload</button>
+                    <button type="button" class="btn btn-secondary" id="cancelLibrary">Close</button>
+                </div>
+            </div>
         </div>
     </div>
     {% if request.query_params.get('restored') %}
@@ -206,118 +224,235 @@
                 initialMarkdown: document.getElementById('content').value || ''
             });
         }
-        // Image upload modal elements
+
+        // Image modal elements
         const modal = document.getElementById('imageUploadModal');
         const insertImageBtn = document.getElementById('insertImageBtn');
-        const closeBtn = document.querySelector('.modal .close');
+        const closeBtn = document.querySelector('#imageUploadModal .close');
         const cancelUpload = document.getElementById('cancelUpload');
+        const cancelLibrary = document.getElementById('cancelLibrary');
+        const backToUploadBtn = document.getElementById('backToUploadBtn');
         const imageUploadForm = document.getElementById('imageUploadForm');
         const uploadStatus = document.getElementById('uploadStatus');
         const contentTextarea = document.getElementById('content');
-        const showUploadStatus = (message, type) => {
-            while (uploadStatus.firstChild) {
-                uploadStatus.removeChild(uploadStatus.firstChild);
-            }
-            if (!message) {
-                return;
-            }
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-' + type;
-            alert.textContent = message;
-            uploadStatus.appendChild(alert);
-        };
+        const imageModalUploadSection = document.getElementById('imageModalUploadSection');
+        const imageModalLibrarySection = document.getElementById('imageModalLibrarySection');
+        const tabButtons = Array.from(document.querySelectorAll('.image-modal-tab'));
+        const imageLibrarySearch = document.getElementById('imageLibrarySearch');
+        const refreshImageLibraryBtn = document.getElementById('refreshImageLibraryBtn');
+        const imageLibraryList = document.getElementById('imageLibraryList');
+        const imageLibraryStatus = document.getElementById('imageLibraryStatus');
 
-        // Show modal when insert image button is clicked
-        insertImageBtn.addEventListener('click', function() {
+        let imageLibraryItems = [];
+        let imageLibraryLoaded = false;
+
+        function showSection(section) {
+            const target = section === 'library' ? 'library' : 'upload';
+            const showLibrary = target === 'library';
+            if (imageModalUploadSection) imageModalUploadSection.hidden = showLibrary;
+            if (imageModalLibrarySection) imageModalLibrarySection.hidden = !showLibrary;
+            tabButtons.forEach((btn) => {
+                const btnTarget = btn.getAttribute('data-tab');
+                btn.classList.toggle('active', btnTarget === target);
+            });
+            if (showLibrary) {
+                loadImageLibrary();
+                if (imageLibrarySearch) {
+                    requestAnimationFrame(() => {
+                        try {
+                            imageLibrarySearch.focus({ preventScroll: true });
+                        } catch (_) {
+                            imageLibrarySearch.focus();
+                        }
+                    });
+                }
+            }
+        }
+
+        function resetLibraryState() {
+            if (imageLibrarySearch) imageLibrarySearch.value = '';
+            if (imageLibraryStatus) imageLibraryStatus.innerHTML = '';
+            if (imageLibraryList) imageLibraryList.innerHTML = '';
+        }
+
+        function hideModal() {
+            if (!modal) return;
+            modal.style.display = 'none';
+            showSection('upload');
+            if (imageUploadForm) imageUploadForm.reset();
+            if (uploadStatus) uploadStatus.innerHTML = '';
+            resetLibraryState();
+        }
+
+        function showModal(section = 'upload') {
+            if (!modal) return;
+            if (window.WikiEditor && typeof window.WikiEditor.captureSelection === 'function') {
+                window.WikiEditor.captureSelection();
+            }
+            showSection(section);
             modal.style.display = 'block';
-        });
-        
-        // Close modal when close button is clicked
-        closeBtn.addEventListener('click', function() {
-            modal.style.display = 'none';
-        });
-        
-        // Close modal when cancel button is clicked
-        cancelUpload.addEventListener('click', function() {
-            modal.style.display = 'none';
-        });
-        
-        // Close modal when clicking outside of modal content
-        window.addEventListener('click', function(event) {
-            if (event.target === modal) {
-                modal.style.display = 'none';
+        }
+
+        function insertImageIntoEditor(src, filename) {
+            if (!src) return;
+            if (window.WikiEditor) {
+                if (typeof window.WikiEditor.restoreSelection === 'function') {
+                    window.WikiEditor.restoreSelection();
+                }
+                if (typeof window.WikiEditor.insertImage === 'function') {
+                    window.WikiEditor.insertImage({ src, alt: filename || '' });
+                    return;
+                }
             }
-        });
-        
-        // Handle image upload form submission
-        imageUploadForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const fileInput = document.getElementById('imageFile');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                showUploadStatus('Please select an image file.', 'error');
+            if (contentTextarea) {
+                const imageMarkdown = '![' + (filename || '') + '](' + src + ')';
+                const startPos = contentTextarea.selectionStart || 0;
+                const endPos = contentTextarea.selectionEnd || 0;
+                const content = contentTextarea.value || '';
+                contentTextarea.value = content.substring(0, startPos) + imageMarkdown + content.substring(endPos);
+            }
+        }
+
+        function renderLibrary(filterTerm) {
+            if (!imageLibraryList) return;
+            const inputValue = filterTerm !== undefined ? filterTerm : (imageLibrarySearch ? imageLibrarySearch.value : '');
+            const term = inputValue.trim().toLowerCase();
+            const filtered = term
+                ? imageLibraryItems.filter((item) => (item.filename || '').toLowerCase().includes(term))
+                : imageLibraryItems.slice();
+            imageLibraryList.innerHTML = '';
+            if (!filtered.length) {
+                if (imageLibraryStatus) {
+                    imageLibraryStatus.innerHTML = '<div class="alert alert-info">No images found.</div>';
+                }
                 return;
             }
-            
-            // Create FormData object
-            const formData = new FormData();
-            formData.append('file', file);
-            // Include CSRF token (kept in body for backward-compat, but we send header too)
-            let csrfToken = '';
+            if (imageLibraryStatus) imageLibraryStatus.innerHTML = '';
+            filtered.forEach((item) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'image-library-item';
+                const thumb = document.createElement('img');
+                thumb.src = item.url;
+                thumb.alt = item.filename || '';
+                thumb.loading = 'lazy';
+                const label = document.createElement('span');
+                label.textContent = item.filename || '';
+                button.appendChild(thumb);
+                button.appendChild(label);
+                button.addEventListener('click', () => {
+                    insertImageIntoEditor(item.url, item.filename);
+                    hideModal();
+                });
+                imageLibraryList.appendChild(button);
+            });
+        }
+
+        async function loadImageLibrary(force = false) {
+            if (!imageLibraryList) return;
+            if (imageLibraryLoaded && !force) {
+                renderLibrary();
+                return;
+            }
+            if (imageLibraryStatus) {
+                imageLibraryStatus.innerHTML = '<div class="alert alert-info">Loading images...</div>';
+            }
+            imageLibraryList.innerHTML = '';
             try {
-                const csrfInput = document.querySelector('input[name="csrf_token"]');
-                if (csrfInput && csrfInput.value) {
-                    csrfToken = csrfInput.value;
-                    formData.append('csrf_token', csrfToken);
+                const response = await fetch('/api/images', { credentials: 'same-origin' });
+                if (!response.ok) {
+                    throw new Error('Unable to fetch images.');
                 }
-            } catch (_) { /* no-op */ }
-            
-            // Upload image
-            showUploadStatus('Uploading...', 'info');
-            
-            fetch('/upload-image', {
-                method: 'POST',
-                headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
-                // Ensure session cookies are sent for auth
-                credentials: 'same-origin',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    showUploadStatus(data.error, 'error');
-                } else {
-                    // Insert image into visual editor if available, otherwise into textarea as markdown
-                    if (window.WikiEditor && typeof window.WikiEditor.insertImage === 'function') {
-                        window.WikiEditor.insertImage({ src: data.url, alt: data.filename });
-                    } else {
-                        const imageMarkdown = '![' + data.filename + '](' + data.url + ')';
-                        const startPos = contentTextarea.selectionStart;
-                        const endPos = contentTextarea.selectionEnd;
-                        const content = contentTextarea.value;
-                        const newContent = content.substring(0, startPos) + imageMarkdown + content.substring(endPos);
-                        contentTextarea.value = newContent;
-                    }
-
-                    // Close modal
-                    modal.style.display = 'none';
-
-                    // Clear form
-                    imageUploadForm.reset();
-                    showUploadStatus('Image uploaded successfully!', 'success');
-                    
-                    // Clear status after 2 seconds
-                    setTimeout(() => {
-                        showUploadStatus('', '');
-                    }, 2000);
+                const data = await response.json();
+                imageLibraryItems = Array.isArray(data.items) ? data.items : [];
+                imageLibraryLoaded = true;
+                renderLibrary();
+            } catch (error) {
+                if (imageLibraryStatus) {
+                    imageLibraryStatus.innerHTML = '<div class="alert alert-error">Error loading images: ' + error.message + '</div>';
                 }
-            })
-            .catch(error => {
-                showUploadStatus('Error uploading image: ' + error.message, 'error');
+            }
+        }
+
+        if (insertImageBtn) {
+            insertImageBtn.addEventListener('click', () => showModal('upload'));
+        }
+        if (closeBtn) closeBtn.addEventListener('click', hideModal);
+        if (cancelUpload) cancelUpload.addEventListener('click', hideModal);
+        if (cancelLibrary) cancelLibrary.addEventListener('click', hideModal);
+        if (backToUploadBtn) backToUploadBtn.addEventListener('click', () => showSection('upload'));
+        tabButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const target = btn.getAttribute('data-tab') || 'upload';
+                showSection(target);
             });
         });
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                hideModal();
+            }
+        });
+        if (refreshImageLibraryBtn) {
+            refreshImageLibraryBtn.addEventListener('click', () => loadImageLibrary(true));
+        }
+        if (imageLibrarySearch) {
+            imageLibrarySearch.addEventListener('input', () => {
+                renderLibrary(imageLibrarySearch.value || '');
+            });
+        }
+
+        if (imageUploadForm) {
+            imageUploadForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const fileInput = document.getElementById('imageFile');
+                const file = fileInput ? fileInput.files[0] : null;
+                if (!file) {
+                    if (uploadStatus) {
+                        uploadStatus.innerHTML = '<div class="alert alert-error">Please select an image file.</div>';
+                    }
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', file);
+                let csrfToken = '';
+                try {
+                    const csrfInput = document.querySelector('input[name="csrf_token"]');
+                    if (csrfInput && csrfInput.value) {
+                        csrfToken = csrfInput.value;
+                        formData.append('csrf_token', csrfToken);
+                    }
+                } catch (_) { /* no-op */ }
+
+                if (uploadStatus) {
+                    uploadStatus.innerHTML = '<div class="alert alert-info">Uploading...</div>';
+                }
+
+                fetch('/upload-image', {
+                    method: 'POST',
+                    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+                    credentials: 'same-origin',
+                    body: formData
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.error) {
+                            if (uploadStatus) {
+                                uploadStatus.innerHTML = '<div class="alert alert-error">' + data.error + '</div>';
+                            }
+                            return;
+                        }
+                        insertImageIntoEditor(data.url, data.filename);
+                        imageLibraryLoaded = false;
+                        hideModal();
+                    })
+                    .catch((error) => {
+                        if (uploadStatus) {
+                            uploadStatus.innerHTML = '<div class="alert alert-error">Error uploading image: ' + error.message + '</div>';
+                        }
+                    });
+            });
+        }
     });
 </script>
 {% endblock %}
