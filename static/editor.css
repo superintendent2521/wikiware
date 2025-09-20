@@ -37,6 +37,74 @@
 }
 
 
+/* Raw Markdown textarea */
+.raw-editor {
+  display: none;
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid var(--border-color, #c9c9c9);
+  border-radius: 6px;
+  padding: 10px;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  background: #ffffff;
+  color: #111111;
+}
+.raw-editor.is-visible {
+  display: block;
+}
+[data-theme="dark"] .raw-editor {
+  background: #121212;
+  color: #f1f1f1;
+  border-color: #404040;
+}
+
+.editor-toolbar.raw-mode .btn {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.editor-toolbar.raw-mode #toggleRawBtn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#wikiLinkModal .modal-content {
+  max-width: 420px;
+}
+
+#wikiLinkModal .form-group {
+  margin-bottom: 12px;
+}
+
+#wikiLinkModal .form-group label {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+#wikiLinkModal .form-group input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#wikiLinkModal .modal-actions {
+  justify-content: flex-end;
+}
+
+#wikiLinkStatus {
+  min-height: 1.25em;
+  margin-bottom: 8px;
+}
+
+[data-theme="dark"] #wikiLinkModal .form-group input {
+  background: #1f1f1f;
+  color: #f1f1f1;
+  border: 1px solid #404040;
+}
+
 /* Constrain images in visual editor to match article layout */
 .visual-editor img {
   float: left;

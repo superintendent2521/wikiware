@@ -18,6 +18,29 @@
     {% set delete_label = 'Delete Page' if is_main_branch else 'Delete Branch Page' %}
     {% set delete_confirm = 'Are you sure you want to delete ' ~ ('this page' if is_main_branch else 'this branch page') ~ '? This action cannot be undone.' %}
     <link rel="stylesheet" href="{{ url_for('static', path='editor.css') }}">
+    <!-- Wiki Link Modal -->
+    <div id="wikiLinkModal" class="modal" style="display: none;">
+        <div class="modal-content wiki-link-modal">
+            <span class="close" aria-label="Close">&times;</span>
+            <h3 class="modal-title">Insert Wiki Link</h3>
+            <form id="wikiLinkForm" class="wiki-link-form">
+                <div class="form-group">
+                    <label for="wikiLinkPage">Page name<span aria-hidden="true">*</span></label>
+                    <input type="text" id="wikiLinkPage" name="page" class="form-control" required placeholder="e.g. Project Overview">
+                </div>
+                <div class="form-group">
+                    <label for="wikiLinkBranch">Branch (optional)</label>
+                    <input type="text" id="wikiLinkBranch" name="branch" class="form-control" placeholder="e.g. draft">
+                </div>
+                <div id="wikiLinkStatus" class="wiki-link-status" role="status"></div>
+                <div class="form-actions modal-actions">
+                    <button type="submit" class="btn btn-primary">Insert Link</button>
+                    <button type="button" id="wikiLinkCancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Image Upload Modal -->
     <div id="imageUploadModal" class="modal" style="display: none;">
         <div class="modal-content image-modal">
@@ -168,6 +191,7 @@
                     <button type="button" data-cmd="insertUnorderedList" class="btn btn-secondary btn-small" title="Bulleted List"><i class="fas fa-list-ul"></i></button>
                     <button type="button" data-cmd="insertOrderedList" class="btn btn-secondary btn-small" title="Numbered List"><i class="fas fa-list-ol"></i></button>
                     <button type="button" id="createLinkBtn" class="btn btn-secondary btn-small" title="Insert Link"><i class="fas fa-link"></i></button>
+                    <button type="button" id="insertWikiLinkBtn" class="btn btn-secondary btn-small" title="Insert wiki link"><i class="fas fa-book"></i> Wiki Link</button>
                     <span class="sep"></span>
                     <button type="button" id="insertTableBtn" class="btn btn-secondary btn-small" title="Insert Table"><i class="fas fa-table"></i> Table</button>
                     <div class="table-tools">
@@ -180,9 +204,14 @@
                     <button type="button" id="insertImageBtn" class="btn btn-secondary btn-small" title="Insert Image">
                         <i class="fas fa-image"></i> Image
                     </button>
+                    <span class="sep"></span>
+                    <button type="button" id="toggleRawBtn" class="btn btn-secondary btn-small" title="Toggle raw Markdown view">
+                        <i class="fas fa-code"></i> Raw Markdown
+                    </button>
                 </div>
+
                 <div id="visual-editor" class="visual-editor" contenteditable="true"></div>
-                <textarea id="content" name="content" rows="20" style="display:none;">{{ content }}</textarea>
+                <textarea id="content" name="content" rows="20" class="raw-editor" style="display:none;">{{ content }}</textarea>
             </div>
 
             <div class="form-actions">
@@ -391,6 +420,9 @@
             if (event.target === modal) {
                 hideModal();
             }
+            if (event.target === wikiLinkModal) {
+                hideWikiLinkModal();
+            }
         });
         if (refreshImageLibraryBtn) {
             refreshImageLibraryBtn.addEventListener('click', () => loadImageLibrary(true));
@@ -453,6 +485,100 @@
                     });
             });
         }
+        // Wiki link modal elements
+        const wikiLinkBtn = document.getElementById('insertWikiLinkBtn');
+        const wikiLinkModal = document.getElementById('wikiLinkModal');
+        const wikiLinkForm = document.getElementById('wikiLinkForm');
+        const wikiLinkPageInput = document.getElementById('wikiLinkPage');
+        const wikiLinkBranchInput = document.getElementById('wikiLinkBranch');
+        const wikiLinkCancelBtn = document.getElementById('wikiLinkCancel');
+        const wikiLinkStatus = document.getElementById('wikiLinkStatus');
+        const wikiLinkCloseBtn = wikiLinkModal ? wikiLinkModal.querySelector('.close') : null;
+
+        function clearWikiLinkStatus() {
+            if (wikiLinkStatus) wikiLinkStatus.innerHTML = '';
+        }
+
+        function resetWikiLinkForm() {
+            if (wikiLinkForm) wikiLinkForm.reset();
+            clearWikiLinkStatus();
+        }
+
+        function hideWikiLinkModal() {
+            if (!wikiLinkModal) return;
+            wikiLinkModal.style.display = 'none';
+            wikiLinkModal.setAttribute('aria-hidden', 'true');
+            resetWikiLinkForm();
+        }
+
+        function showWikiLinkModal(event) {
+            const detail = event && event.detail && typeof event.detail === 'object' ? event.detail : null;
+            if (!wikiLinkModal) return;
+            if (wikiLinkBtn && wikiLinkBtn.disabled) return;
+            if (detail) detail.handled = true;
+            resetWikiLinkForm();
+            wikiLinkModal.style.display = 'block';
+            wikiLinkModal.setAttribute('aria-hidden', 'false');
+            if (wikiLinkPageInput) {
+                requestAnimationFrame(() => {
+                    try {
+                        wikiLinkPageInput.focus({ preventScroll: true });
+                    } catch (_) {
+                        wikiLinkPageInput.focus();
+                    }
+                });
+            }
+        }
+
+        function submitWikiLink(event) {
+            event.preventDefault();
+            const editorApi = window.WikiEditor;
+            if (!editorApi || typeof editorApi.insertWikiLink !== 'function') {
+                hideWikiLinkModal();
+                return;
+            }
+            const page = wikiLinkPageInput ? wikiLinkPageInput.value.trim() : '';
+            const branchValue = wikiLinkBranchInput ? wikiLinkBranchInput.value.trim() : '';
+            if (!page) {
+                if (wikiLinkStatus) {
+                    wikiLinkStatus.innerHTML = '<div class="alert alert-error">Page name is required.</div>';
+                }
+                if (wikiLinkPageInput) wikiLinkPageInput.focus();
+                return;
+            }
+            const inserted = editorApi.insertWikiLink({ page, branch: branchValue });
+            if (!inserted) {
+                if (wikiLinkStatus) {
+                    wikiLinkStatus.innerHTML = '<div class="alert alert-error">Unable to insert link. Please try again.</div>';
+                }
+                return;
+            }
+            hideWikiLinkModal();
+        }
+
+        hideWikiLinkModal();
+
+        if (wikiLinkForm) {
+            wikiLinkForm.addEventListener('submit', submitWikiLink);
+        }
+        if (wikiLinkCancelBtn) {
+            wikiLinkCancelBtn.addEventListener('click', hideWikiLinkModal);
+        }
+        if (wikiLinkCloseBtn) {
+            wikiLinkCloseBtn.addEventListener('click', hideWikiLinkModal);
+        }
+        document.addEventListener('wikiLink:open', showWikiLinkModal);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                if (modal && modal.style.display === 'block') {
+                    hideModal();
+                }
+                if (wikiLinkModal && wikiLinkModal.style.display === 'block') {
+                    hideWikiLinkModal();
+                }
+            }
+        });
+
     });
 </script>
 {% endblock %}

@@ -292,8 +292,134 @@
       const toolbar = qs(opts.toolbarSelector);
       const form = qs(opts.formSelector);
       const buttons = () => qsa('[data-cmd]', toolbar);
+      const toggleRawBtn = toolbar ? toolbar.querySelector('#toggleRawBtn') : null;
+      const wikiLinkBtn = toolbar ? toolbar.querySelector('#insertWikiLinkBtn') : null;
+      const toolbarButtonsAll = () => toolbar ? qsa('button', toolbar) : [];
+      let isRawMode = false;
+
+      function setToolbarDisabled(disabled) {
+        toolbarButtonsAll().forEach(btn => {
+          if (!btn || btn === toggleRawBtn) return;
+          btn.disabled = !!disabled;
+        });
+      }
+
+      function updateToggleButtonLabel() {
+        if (!toggleRawBtn) return;
+        if (isRawMode) {
+          toggleRawBtn.innerHTML = '<i class="fas fa-pen-to-square"></i> Visual Editor';
+        } else {
+          toggleRawBtn.innerHTML = '<i class="fas fa-code"></i> Raw Markdown';
+        }
+        toggleRawBtn.setAttribute('aria-pressed', isRawMode ? 'true' : 'false');
+        toggleRawBtn.classList.toggle('active', isRawMode);
+      }
+
+
+      function dispatchEditorInput() {
+        if (!editor) return;
+        try {
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (_) {
+          const evt = document.createEvent('Event');
+          evt.initEvent('input', true, false);
+          editor.dispatchEvent(evt);
+        }
+      }
+
+      function insertSnippet(snippet) {
+        if (!snippet) return;
+        if (isRawMode && textarea) {
+          textarea.focus();
+          const start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : textarea.value.length;
+          const end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : start;
+          const value = textarea.value || '';
+          textarea.value = value.slice(0, start) + snippet + value.slice(end);
+          const pos = start + snippet.length;
+          if (typeof textarea.setSelectionRange === 'function') {
+            textarea.setSelectionRange(pos, pos);
+          }
+          try {
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (_) {
+            const evt = document.createEvent('Event');
+            evt.initEvent('input', true, false);
+            textarea.dispatchEvent(evt);
+          }
+          return;
+        }
+        if (!editor) return;
+        editor.focus();
+        let didInsert = false;
+        try {
+          if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+            didInsert = document.execCommand('insertText', false, snippet);
+          } else {
+            didInsert = document.execCommand('insertText', false, snippet);
+          }
+        } catch (_) {
+          didInsert = false;
+        }
+        if (!didInsert) {
+          const range = getRange();
+          if (range) {
+            range.deleteContents();
+            const textNode = document.createTextNode(snippet);
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+            range.collapse(true);
+            const sel = window.getSelection();
+            if (sel) {
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          } else {
+            editor.appendChild(document.createTextNode(snippet));
+          }
+        }
+        dispatchEditorInput();
+        captureSelection();
+        updateToolbarState();
+      }
+
+      function setRawMode(enabled) {
+        if (!textarea || !editor) return;
+        if (enabled === isRawMode) {
+          updateToggleButtonLabel();
+          setToolbarDisabled(enabled);
+          return;
+        }
+        isRawMode = !!enabled;
+        setToolbarDisabled(isRawMode);
+        if (toolbar) {
+          toolbar.classList.toggle('raw-mode', isRawMode);
+        }
+        if (isRawMode) {
+          textarea.value = htmlToMd(editor);
+          textarea.style.display = 'block';
+          textarea.classList.add('is-visible');
+          editor.style.display = 'none';
+          lastSelectionRange = null;
+          textarea.focus();
+        } else {
+          const markdown = textarea.value;
+          try {
+            editor.innerHTML = mdToHtml(markdown);
+          } catch (error) {
+            editor.textContent = markdown;
+          }
+          textarea.style.display = 'none';
+          textarea.classList.remove('is-visible');
+          editor.style.display = '';
+          updateToolbarState();
+          editor.focus();
+        }
+        updateToggleButtonLabel();
+      }
+
 
       function captureSelection() {
+        if (isRawMode) return;
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
         const range = sel.getRangeAt(0);
@@ -304,6 +430,7 @@
       }
 
       function restoreSavedSelection() {
+        if (isRawMode) return false;
         if (!lastSelectionRange || !lastSelectionEditor) return false;
         if (!document.contains(lastSelectionEditor)) {
           lastSelectionRange = null;
@@ -332,6 +459,10 @@
       }
 
       function updateToolbarState() {
+        if (isRawMode) {
+          clearActive();
+          return;
+        }
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
         let node = sel.anchorNode;
@@ -501,6 +632,10 @@
       // Toolbar actions via execCommand
       qsa('[data-cmd]', toolbar).forEach(btn => {
         btn.addEventListener('click', () => {
+          if (isRawMode) {
+            if (textarea) textarea.focus();
+            return;
+          }
           const cmd = btn.getAttribute('data-cmd');
           const val = (btn.getAttribute('data-value') || '').toUpperCase();
           editor.focus();
@@ -523,6 +658,40 @@
           updateToolbarState();
         });
       });
+      if (toggleRawBtn) {
+        toggleRawBtn.addEventListener('click', () => setRawMode(!isRawMode));
+        updateToggleButtonLabel();
+      }
+
+      function requestWikiLinkModal() {
+        const detail = { handled: false };
+        try {
+          const evt = new CustomEvent('wikiLink:open', { bubbles: true, cancelable: false, detail });
+          document.dispatchEvent(evt);
+        } catch (_) {
+          if (typeof document.createEvent === 'function') {
+            const evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('wikiLink:open', true, false, detail);
+            document.dispatchEvent(evt);
+          }
+        }
+        return detail.handled;
+      }
+
+      if (wikiLinkBtn) {
+        wikiLinkBtn.addEventListener('click', () => {
+          if (wikiLinkBtn.disabled) return;
+          const handled = requestWikiLinkModal();
+          if (handled) return;
+          const page = prompt("Wiki page name (required)");
+          if (!page) return;
+          const trimmedPage = page.trim();
+          if (!trimmedPage) return;
+          let branch = prompt("Branch name (optional)");
+          WikiEditor.insertWikiLink({ page: trimmedPage, branch });
+        });
+      }
+
       // Link creation
       const linkBtn = qs('#createLinkBtn');
       if (linkBtn) linkBtn.addEventListener('click', () => {
@@ -565,7 +734,7 @@
       // Sync on submit: serialize editor HTML to Markdown
       if (form) {
         form.addEventListener('submit', (e) => {
-          const md = htmlToMd(editor);
+          const md = isRawMode ? textarea.value : htmlToMd(editor);
           textarea.value = md;
           // Simple required validation since hidden textarea isn't required
           if (!md.trim()) {
@@ -578,6 +747,7 @@
 
       // Keep toolbar state and selection in sync with editor activity
       function handleEditorInteraction() {
+        if (isRawMode) return;
         captureSelection();
         updateToolbarState();
       }
@@ -589,6 +759,17 @@
 
       WikiEditor.captureSelection = captureSelection;
       WikiEditor.restoreSelection = restoreSavedSelection;
+      WikiEditor.insertWikiLink = function ({ page, branch } = {}) {
+        const pageName = (page || '').trim();
+        if (!pageName) return false;
+        const branchName = (branch || '').trim();
+        let snippet = '[[ ' + pageName;
+        if (branchName) snippet += ':' + branchName;
+        snippet += ' ]]';
+        insertSnippet(snippet);
+        return true;
+      };
+      WikiEditor.requestWikiLinkModal = requestWikiLinkModal;
 
       // Initial state
       updateToolbarState();
