@@ -96,3 +96,115 @@
   border-color: #404040;
 }
 [data-theme="dark"] .visual-editor:empty:before { color: #9ca3af; }
+
+/* Image modal enhancements */
+.image-modal {
+  max-width: 640px;
+}
+
+.image-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.image-modal-title {
+  margin: 0;
+}
+
+.image-modal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.image-modal-tab.active {
+  background-color: var(--primary, #3b82f6);
+  color: #ffffff;
+}
+
+.image-modal-section {
+  margin-top: 8px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.image-library-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.image-library-controls .form-control {
+  flex: 1 1 220px;
+}
+
+.image-library-status {
+  min-height: 1.2em;
+  margin-bottom: 8px;
+}
+
+.image-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.image-library-item {
+  border: 1px solid var(--border-color, #c9c9c9);
+  border-radius: 6px;
+  background: var(--primary-white, #ffffff);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.image-library-item:hover,
+.image-library-item:focus {
+  border-color: var(--focus, #6aa9ff);
+  box-shadow: var(--box-shadow-sm, 0 2px 4px rgba(0,0,0,0.05));
+  outline: none;
+}
+
+.image-library-item img {
+  max-width: 100%;
+  max-height: 110px;
+  object-fit: contain;
+  background: #f8f8f8;
+  border-radius: 4px;
+}
+
+.image-library-item span {
+  font-size: 0.85rem;
+  color: var(--dark-gray, #444444);
+  text-align: center;
+  word-break: break-word;
+}
+
+[data-theme="dark"] .image-library-item {
+  background: #1f1f1f;
+  border-color: #404040;
+}
+
+[data-theme="dark"] .image-library-item span {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .image-library-item img {
+  background: #111111;
+}
