@@ -23,7 +23,7 @@ APP_DESCRIPTION = "A simple wiki software"
 
 # File upload settings
 UPLOAD_DIR = "static/uploads"
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 
 # Logging settings
