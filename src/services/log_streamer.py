@@ -30,9 +30,8 @@ _INSTALLED = False  # guard so we don't double-add sinks
 async def _authenticate_websocket(websocket: WebSocket) -> bool:
     """Validate the WebSocket handshake using the session cookie."""
     session_id = (
-        websocket.cookies.get(SESSION_COOKIE_NAME)
-        or websocket.cookies.get("__Host-user_session")
-        or websocket.cookies.get("user_session")
+        websocket.cookies.get("user_session")  # Development cookie name
+        or websocket.cookies.get("__Host-user_session")  # Production cookie name
     )
     if not session_id:
         logger.warning("Rejected log stream connection: missing session cookie")
@@ -43,7 +42,7 @@ async def _authenticate_websocket(websocket: WebSocket) -> bool:
     try:
         user = await UserService.get_user_by_session(session_id)
     except Exception as exc:
-        logger.warning(f"Error validating log stream session: {exc}")
+        logger.warning(f"Error validating log stream session: {exc}", exc_info=True)
         return False
     if not user or not user.get("is_active", True):
         logger.warning("Rejected log stream connection: invalid or inactive user")

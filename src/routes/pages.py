@@ -46,12 +46,10 @@ async def _is_user_page_title(title: str) -> bool:
     """Return True if the title matches an existing user's personal page."""
     if not title or not db_instance.is_connected:
         return False
-
     users_collection = db_instance.get_collection("users")
     if users_collection is None:
         return False
-
-    # Perform a single case-insensitive search, which is what the calling code requires.
+    # Perform a single case-insensitive query for the username.
     regex = {"$regex": f"^{re.escape(title)}$", "$options": "i"}
     user_doc = await users_collection.find_one({"username": regex})
     return user_doc is not None
