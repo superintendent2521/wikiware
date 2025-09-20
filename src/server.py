@@ -27,6 +27,7 @@ from .services.settings_service import SettingsService
 
 from loguru import logger
 import os
+import secrets
 from .middleware.security_headers import SecurityHeadersMiddleware
 
 # Configure loguru
@@ -34,9 +35,14 @@ os.makedirs("logs", exist_ok=True)
 logger.add("logs/wikiware.log", rotation="1 day", retention="7 days", level="INFO")
 logger.add("logs/errors.log", rotation="1 day", retention="7 days", level="ERROR")
 
+_CSRF_SECRET = os.getenv("CSRF_SECRET_KEY")
+if not _CSRF_SECRET:
+    _CSRF_SECRET = secrets.token_urlsafe(64)
+    logger.warning("CSRF_SECRET_KEY not set; generated ephemeral secret key for this process")
+
 
 class CsrfSettings(BaseModel):
-    secret_key: str = "asecretkeythatisverylongandsecure"
+    secret_key: str
     cookie_samesite: str = "lax"
     # Use env override so local HTTP works by default; set CSRF_COOKIE_SECURE=true in prod
     cookie_secure: bool = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
@@ -52,7 +58,7 @@ class CsrfSettings(BaseModel):
 
 @CsrfProtect.load_config
 def get_csrf_config():
-    settings = CsrfSettings()
+    settings = CsrfSettings(secret_key=_CSRF_SECRET)
     logger.info(
         f"CSRF config: secure={settings.cookie_secure}, httponly={settings.httponly}, samesite={settings.cookie_samesite}, key={settings.cookie_key}"
     )
@@ -112,4 +118,3 @@ if __name__ == "__main__":
     from .config import HOST, PORT, DEV
 
     uvicorn.run(app, host=HOST, port=PORT, reload=DEV)
-

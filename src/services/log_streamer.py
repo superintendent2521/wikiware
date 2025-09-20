@@ -10,8 +10,12 @@ from __future__ import annotations
 import asyncio
 from typing import Set, Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from loguru import logger
+
+from ..config import SESSION_COOKIE_NAME
+from ..database import db_instance
+from .user_service import UserService
 
 router = APIRouter()
 
@@ -23,6 +27,31 @@ _DISPATCHER_TASK: Optional[asyncio.Task] = None
 _INSTALLED = False  # guard so we don't double-add sinks
 
 
+async def _authenticate_websocket(websocket: WebSocket) -> bool:
+    """Validate the WebSocket handshake using the session cookie."""
+    session_id = (
+        websocket.cookies.get(SESSION_COOKIE_NAME)
+        or websocket.cookies.get("__Host-user_session")
+        or websocket.cookies.get("user_session")
+    )
+    if not session_id:
+        logger.warning("Rejected log stream connection: missing session cookie")
+        return False
+    if not db_instance.is_connected:
+        logger.warning("Rejected log stream connection: database unavailable")
+        return False
+    try:
+        user = await UserService.get_user_by_session(session_id)
+    except Exception as exc:
+        logger.warning(f"Error validating log stream session: {exc}")
+        return False
+    if not user or not user.get("is_active", True):
+        logger.warning("Rejected log stream connection: invalid or inactive user")
+        return False
+    logger.debug(f"Authenticated log stream client: {user.get('username', 'unknown')}")
+    return True
+
+
 @router.websocket("/ws/logs")
 async def logs_ws(websocket: WebSocket):
     """Handle WebSocket connections for real-time log streaming.
@@ -31,6 +60,10 @@ async def logs_ws(websocket: WebSocket):
     keep-alive messages. When the connection is closed (either by client or error),
     removes the socket from the connected set.
     """
+    if not await _authenticate_websocket(websocket):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required")
+        return
+
     await websocket.accept()
     _CONNECTED.add(websocket)
     try:

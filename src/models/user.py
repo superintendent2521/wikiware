@@ -2,7 +2,7 @@
 User data models and validation for WikiWare.
 """
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 from datetime import datetime, timezone
 import re
 
@@ -12,12 +12,10 @@ class User(BaseModel):
 
     username: str
     password_hash: str
-    created_at: datetime = datetime.now(timezone.utc)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
     is_admin: bool = False
-    page_edits: dict = (
-        {}
-    )  # Dictionary to track edits per page: {"page_title": edit_count}
+    page_edits: dict = Field(default_factory=dict)  # Dictionary to track edits per page: {"page_title": edit_count}
     total_edits: int = 0  # Total number of edits by this user
 
     @validator("username")

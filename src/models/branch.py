@@ -2,7 +2,7 @@
 Branch data models and validation for WikiWare.
 """
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 from typing import Optional
 from datetime import datetime, timezone
 from ..utils.validation import is_valid_title, is_valid_branch_name
@@ -13,7 +13,7 @@ class Branch(BaseModel):
 
     page_title: str
     branch_name: str
-    created_at: datetime = datetime.now(timezone.utc)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_from: Optional[str] = "main"
 
     @validator("page_title")

@@ -77,8 +77,6 @@ async def stats_page(
 
         # Get statistics
         stats = await get_stats()
-
-        logger.info("Stats page viewed")
         template = templates.TemplateResponse(
             "stats.html",
             {
