@@ -47,14 +47,11 @@ async def _is_user_page_title(title: str) -> bool:
     if not title or not db_instance.is_connected:
         return False
 
-    user_doc = await UserService.get_user_by_username(title)
-    if user_doc:
-        return True
-
     users_collection = db_instance.get_collection("users")
     if users_collection is None:
         return False
 
+    # Perform a single case-insensitive search, which is what the calling code requires.
     regex = {"$regex": f"^{re.escape(title)}$", "$options": "i"}
     user_doc = await users_collection.find_one({"username": regex})
     return user_doc is not None
