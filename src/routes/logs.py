@@ -72,7 +72,7 @@ async def get_logs(
 
         if bypass_flag:
             await AuthMiddleware.require_auth(request)
-            csrf_protect.validate_csrf_in_cookies(request)
+            await csrf_protect.validate_csrf(request)
             logger.info(
                 "Fetching logs (bypass): page={} limit={} action_type={}",
                 incoming_page,

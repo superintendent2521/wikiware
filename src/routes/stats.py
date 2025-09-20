@@ -96,6 +96,8 @@ async def stats_page(
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
+    except HTTPException as exc:
+        raise exc
     except Exception as e:
         logger.error(f"Error viewing stats page: {str(e)}")
         try:
