@@ -30,9 +30,10 @@ _INSTALLED = False  # guard so we don't double-add sinks
 async def _authenticate_websocket(websocket: WebSocket) -> bool:
     """Validate the WebSocket handshake using the session cookie."""
     session_id = (
-        websocket.cookies.get("user_session")  # Development cookie name
-        or websocket.cookies.get("__Host-user_session")  # Production cookie name
-    )
+            websocket.cookies.get(SESSION_COOKIE_NAME)
+            or websocket.cookies.get("__Host-user_session")
+            or websocket.cookies.get("user_session")
+        )
     if not session_id:
         logger.warning("Rejected log stream connection: missing session cookie")
         return False
