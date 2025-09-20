@@ -180,9 +180,14 @@
                     <button type="button" id="insertImageBtn" class="btn btn-secondary btn-small" title="Insert Image">
                         <i class="fas fa-image"></i> Image
                     </button>
+                    <span class="sep"></span>
+                    <button type="button" id="toggleRawBtn" class="btn btn-secondary btn-small" title="Toggle raw Markdown view">
+                        <i class="fas fa-code"></i> Raw Markdown
+                    </button>
                 </div>
+
                 <div id="visual-editor" class="visual-editor" contenteditable="true"></div>
-                <textarea id="content" name="content" rows="20" style="display:none;">{{ content }}</textarea>
+                <textarea id="content" name="content" rows="20" class="raw-editor" style="display:none;">{{ content }}</textarea>
             </div>
 
             <div class="form-actions">

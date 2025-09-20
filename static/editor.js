@@ -292,8 +292,66 @@
       const toolbar = qs(opts.toolbarSelector);
       const form = qs(opts.formSelector);
       const buttons = () => qsa('[data-cmd]', toolbar);
+      const toggleRawBtn = toolbar ? toolbar.querySelector('#toggleRawBtn') : null;
+      const toolbarButtonsAll = () => toolbar ? qsa('button', toolbar) : [];
+      let isRawMode = false;
+
+      function setToolbarDisabled(disabled) {
+        toolbarButtonsAll().forEach(btn => {
+          if (!btn || btn === toggleRawBtn) return;
+          btn.disabled = !!disabled;
+        });
+      }
+
+      function updateToggleButtonLabel() {
+        if (!toggleRawBtn) return;
+        if (isRawMode) {
+          toggleRawBtn.innerHTML = '<i class="fas fa-pen-to-square"></i> Visual Editor';
+        } else {
+          toggleRawBtn.innerHTML = '<i class="fas fa-code"></i> Raw Markdown';
+        }
+        toggleRawBtn.setAttribute('aria-pressed', isRawMode ? 'true' : 'false');
+        toggleRawBtn.classList.toggle('active', isRawMode);
+      }
+
+      function setRawMode(enabled) {
+        if (!textarea || !editor) return;
+        if (enabled === isRawMode) {
+          updateToggleButtonLabel();
+          setToolbarDisabled(enabled);
+          return;
+        }
+        isRawMode = !!enabled;
+        setToolbarDisabled(isRawMode);
+        if (toolbar) {
+          toolbar.classList.toggle('raw-mode', isRawMode);
+        }
+        if (isRawMode) {
+          textarea.value = htmlToMd(editor);
+          textarea.style.display = 'block';
+          textarea.classList.add('is-visible');
+          editor.style.display = 'none';
+          lastSelectionRange = null;
+          textarea.focus();
+        } else {
+          const markdown = textarea.value;
+          try {
+            editor.innerHTML = mdToHtml(markdown);
+          } catch (error) {
+            editor.textContent = markdown;
+          }
+          textarea.style.display = 'none';
+          textarea.classList.remove('is-visible');
+          editor.style.display = '';
+          updateToolbarState();
+          editor.focus();
+        }
+        updateToggleButtonLabel();
+      }
+
 
       function captureSelection() {
+        if (isRawMode) return;
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
         const range = sel.getRangeAt(0);
@@ -304,6 +362,7 @@
       }
 
       function restoreSavedSelection() {
+        if (isRawMode) return false;
         if (!lastSelectionRange || !lastSelectionEditor) return false;
         if (!document.contains(lastSelectionEditor)) {
           lastSelectionRange = null;
@@ -332,6 +391,10 @@
       }
 
       function updateToolbarState() {
+        if (isRawMode) {
+          clearActive();
+          return;
+        }
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
         let node = sel.anchorNode;
@@ -501,6 +564,10 @@
       // Toolbar actions via execCommand
       qsa('[data-cmd]', toolbar).forEach(btn => {
         btn.addEventListener('click', () => {
+          if (isRawMode) {
+            if (textarea) textarea.focus();
+            return;
+          }
           const cmd = btn.getAttribute('data-cmd');
           const val = (btn.getAttribute('data-value') || '').toUpperCase();
           editor.focus();
@@ -523,6 +590,11 @@
           updateToolbarState();
         });
       });
+      if (toggleRawBtn) {
+        toggleRawBtn.addEventListener('click', () => setRawMode(!isRawMode));
+        updateToggleButtonLabel();
+      }
+
       // Link creation
       const linkBtn = qs('#createLinkBtn');
       if (linkBtn) linkBtn.addEventListener('click', () => {
@@ -565,7 +637,7 @@
       // Sync on submit: serialize editor HTML to Markdown
       if (form) {
         form.addEventListener('submit', (e) => {
-          const md = htmlToMd(editor);
+          const md = isRawMode ? textarea.value : htmlToMd(editor);
           textarea.value = md;
           // Simple required validation since hidden textarea isn't required
           if (!md.trim()) {
@@ -578,6 +650,7 @@
 
       // Keep toolbar state and selection in sync with editor activity
       function handleEditorInteraction() {
+        if (isRawMode) return;
         captureSelection();
         updateToolbarState();
       }
