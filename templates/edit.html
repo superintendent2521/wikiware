@@ -214,7 +214,19 @@
         const imageUploadForm = document.getElementById('imageUploadForm');
         const uploadStatus = document.getElementById('uploadStatus');
         const contentTextarea = document.getElementById('content');
-        
+        const showUploadStatus = (message, type) => {
+            while (uploadStatus.firstChild) {
+                uploadStatus.removeChild(uploadStatus.firstChild);
+            }
+            if (!message) {
+                return;
+            }
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-' + type;
+            alert.textContent = message;
+            uploadStatus.appendChild(alert);
+        };
+
         // Show modal when insert image button is clicked
         insertImageBtn.addEventListener('click', function() {
             modal.style.display = 'block';
@@ -245,7 +257,7 @@
             const file = fileInput.files[0];
             
             if (!file) {
-                uploadStatus.innerHTML = '<div class="alert alert-error">Please select an image file.</div>';
+                showUploadStatus('Please select an image file.', 'error');
                 return;
             }
             
@@ -263,7 +275,7 @@
             } catch (_) { /* no-op */ }
             
             // Upload image
-            uploadStatus.innerHTML = '<div class="alert alert-info">Uploading...</div>';
+            showUploadStatus('Uploading...', 'info');
             
             fetch('/upload-image', {
                 method: 'POST',
@@ -275,7 +287,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    uploadStatus.innerHTML = '<div class="alert alert-error">' + data.error + '</div>';
+                    showUploadStatus(data.error, 'error');
                 } else {
                     // Insert image into visual editor if available, otherwise into textarea as markdown
                     if (window.WikiEditor && typeof window.WikiEditor.insertImage === 'function') {
@@ -294,16 +306,16 @@
 
                     // Clear form
                     imageUploadForm.reset();
-                    uploadStatus.innerHTML = '<div class="alert alert-success">Image uploaded successfully!</div>';
+                    showUploadStatus('Image uploaded successfully!', 'success');
                     
                     // Clear status after 2 seconds
                     setTimeout(() => {
-                        uploadStatus.innerHTML = '';
+                        showUploadStatus('', '');
                     }, 2000);
                 }
             })
             .catch(error => {
-                uploadStatus.innerHTML = '<div class="alert alert-error">Error uploading image: ' + error.message + '</div>';
+                showUploadStatus('Error uploading image: ' + error.message, 'error');
             });
         });
     });
