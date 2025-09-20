@@ -35,6 +35,9 @@
     return null;
   }
 
+  let lastSelectionRange = null;
+  let lastSelectionEditor = null;
+
   // Minimal Markdown -> HTML renderer for preview/editing
   function mdToHtml(md) {
     // Normalize line endings
@@ -290,6 +293,35 @@
       const form = qs(opts.formSelector);
       const buttons = () => qsa('[data-cmd]', toolbar);
 
+      function captureSelection() {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const range = sel.getRangeAt(0);
+        const ancestor = range.commonAncestorContainer;
+        if (!ancestor || !editor.contains(ancestor)) return;
+        lastSelectionEditor = editor;
+        lastSelectionRange = range.cloneRange();
+      }
+
+      function restoreSavedSelection() {
+        if (!lastSelectionRange || !lastSelectionEditor) return false;
+        if (!document.contains(lastSelectionEditor)) {
+          lastSelectionRange = null;
+          lastSelectionEditor = null;
+          return false;
+        }
+        try {
+          lastSelectionEditor.focus({ preventScroll: true });
+        } catch (_) {
+          lastSelectionEditor.focus();
+        }
+        const sel = window.getSelection();
+        if (!sel) return false;
+        sel.removeAllRanges();
+        sel.addRange(lastSelectionRange.cloneRange());
+        return true;
+      }
+
       function clearActive() {
         buttons().forEach(b => b.classList.remove('active'));
       }
@@ -328,6 +360,135 @@
           if (document.queryCommandState('insertUnorderedList')) setActive('[data-cmd="insertUnorderedList"]');
           if (document.queryCommandState('insertOrderedList')) setActive('[data-cmd="insertOrderedList"]');
         } catch (_) { /* some browsers may restrict queryCommandState */ }
+      }
+
+      const NON_WHITESPACE_RE = /[^\s\u00A0\u200B]/;
+
+      function hasTextContent(value) {
+        return NON_WHITESPACE_RE.test(value || '');
+      }
+
+      function isWhitespaceTextNode(node) {
+        return node && node.nodeType === Node.TEXT_NODE && !hasTextContent(node.textContent);
+      }
+
+      function createWalker() {
+        return document.createTreeWalker(
+          editor,
+          NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT
+        );
+      }
+
+      function getPreviousNode(range) {
+        const walker = createWalker();
+        const { startContainer, startOffset } = range;
+        let candidate = null;
+
+        if (startContainer.nodeType === Node.TEXT_NODE) {
+          const before = (startContainer.textContent || '').slice(0, startOffset);
+          if (hasTextContent(before)) return 'TEXT';
+          walker.currentNode = startContainer;
+          candidate = walker.previousNode();
+        } else if (startOffset > 0) {
+          candidate = startContainer.childNodes[startOffset - 1];
+          while (candidate && candidate.nodeType === Node.ELEMENT_NODE && candidate.lastChild) {
+            candidate = candidate.lastChild;
+          }
+          if (candidate) walker.currentNode = candidate;
+        } else {
+          walker.currentNode = startContainer;
+          candidate = walker.previousNode();
+        }
+
+        while (candidate && isWhitespaceTextNode(candidate)) {
+          walker.currentNode = candidate;
+          candidate = walker.previousNode();
+        }
+
+        if (candidate && candidate.nodeType === Node.TEXT_NODE) {
+          return hasTextContent(candidate.textContent) ? 'TEXT' : null;
+        }
+
+        return candidate || null;
+      }
+
+      function getNextNode(range) {
+        const walker = createWalker();
+        const { startContainer, startOffset } = range;
+        let candidate = null;
+
+        if (startContainer.nodeType === Node.TEXT_NODE) {
+          const len = startContainer.textContent ? startContainer.textContent.length : 0;
+          const after = (startContainer.textContent || '').slice(startOffset, len);
+          if (hasTextContent(after)) return 'TEXT';
+          walker.currentNode = startContainer;
+          candidate = walker.nextNode();
+        } else if (startOffset < startContainer.childNodes.length) {
+          candidate = startContainer.childNodes[startOffset];
+          while (candidate && candidate.nodeType === Node.ELEMENT_NODE && candidate.firstChild) {
+            candidate = candidate.firstChild;
+          }
+          if (candidate) walker.currentNode = candidate;
+        } else {
+          walker.currentNode = startContainer;
+          candidate = walker.nextNode();
+        }
+
+        while (candidate && isWhitespaceTextNode(candidate)) {
+          walker.currentNode = candidate;
+          candidate = walker.nextNode();
+        }
+
+        if (candidate && candidate.nodeType === Node.TEXT_NODE) {
+          return hasTextContent(candidate.textContent) ? 'TEXT' : null;
+        }
+
+        return candidate || null;
+      }
+
+      function removeAdjacentImage(range, direction) {
+        const { startContainer, startOffset } = range;
+        const target = direction === 'backward' ? getPreviousNode(range) : getNextNode(range);
+        if (!target || target === 'TEXT') return false;
+        if (target.nodeType !== Node.ELEMENT_NODE || target.nodeName !== 'IMG') return false;
+
+        const selection = window.getSelection();
+        const caretRange = range.cloneRange();
+
+        target.remove();
+
+        try {
+          if (startContainer.nodeType === Node.TEXT_NODE) {
+            const text = startContainer.textContent || '';
+            const newOffset = Math.min(startOffset, text.length);
+            caretRange.setStart(startContainer, newOffset);
+          } else {
+            const container = startContainer;
+            const childCount = container.childNodes.length;
+            const baseOffset = Math.min(startOffset, childCount);
+            const newOffset = direction === 'backward' ? Math.max(0, baseOffset - 1) : baseOffset;
+            caretRange.setStart(container, newOffset);
+          }
+          caretRange.collapse(true);
+        } catch (_) {
+          caretRange.selectNodeContents(editor);
+          caretRange.collapse(direction === 'backward');
+        }
+
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(caretRange);
+        }
+
+        try {
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (_) {
+          const evt = document.createEvent('Event');
+          evt.initEvent('input', true, false);
+          editor.dispatchEvent(evt);
+        }
+        updateToolbarState();
+        return true;
       }
 
       // Render initial content
@@ -386,6 +547,21 @@
       if (addColBtn) addColBtn.addEventListener('click', () => addCol(+1));
       if (delColBtn) delColBtn.addEventListener('click', () => delCol());
 
+      // Ensure Backspace/Delete can remove images, including those nested in tables.
+      editor.addEventListener('keydown', (ev) => {
+        if (ev.defaultPrevented) return;
+        if (ev.key !== 'Backspace' && ev.key !== 'Delete') return;
+        if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+        const range = getRange();
+        if (!range || !range.collapsed) return;
+        const container = range.startContainer;
+        if (container !== editor && !editor.contains(container)) return;
+        const direction = ev.key === 'Backspace' ? 'backward' : 'forward';
+        if (removeAdjacentImage(range.cloneRange(), direction)) {
+          ev.preventDefault();
+        }
+      });
+
       // Sync on submit: serialize editor HTML to Markdown
       if (form) {
         form.addEventListener('submit', (e) => {
@@ -400,19 +576,36 @@
         });
       }
 
-      // Keep toolbar state in sync with selection changes inside the editor
+      // Keep toolbar state and selection in sync with editor activity
+      function handleEditorInteraction() {
+        captureSelection();
+        updateToolbarState();
+      }
+
       ['keyup','mouseup','mouseleave','input','focus'].forEach(ev => {
-        editor.addEventListener(ev, updateToolbarState);
+        editor.addEventListener(ev, handleEditorInteraction);
       });
-      document.addEventListener('selectionchange', updateToolbarState);
+      document.addEventListener('selectionchange', handleEditorInteraction);
+
+      WikiEditor.captureSelection = captureSelection;
+      WikiEditor.restoreSelection = restoreSavedSelection;
 
       // Initial state
       updateToolbarState();
     },
     insertImage({ src, alt }) {
+      if (!src) return;
+      if (typeof WikiEditor.restoreSelection === 'function') {
+        WikiEditor.restoreSelection();
+      }
       const img = document.createElement('img');
-      img.src = src; img.alt = alt || '';
+      img.src = src;
+      img.alt = alt || '';
       insertNodeAtSelection(img);
+      const range = getRange();
+      if (range) {
+        lastSelectionRange = range.cloneRange();
+      }
     }
   };
 
