@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, Form, HTTPException, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import markdown
+import re
 from ..utils.link_processor import process_internal_links
 from urllib.parse import quote
 from ..utils.sanitizer import sanitize_html
@@ -17,6 +18,7 @@ from ..utils.validation import is_valid_title, is_safe_branch_parameter
 from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
 from ..stats import get_stats
+from ..services.user_service import UserService
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
@@ -31,6 +33,31 @@ def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
         target_url = target_url.include_query_params(branch=branch)
     return str(target_url)
 
+
+def _build_user_page_redirect_url(request: Request, username: str, branch: str) -> str:
+    """Build the user page URL while keeping branch parameters safe."""
+    target_url = request.url_for("user_page", username=username)
+    if branch != "main" and is_safe_branch_parameter(branch):
+        target_url = target_url.include_query_params(branch=branch)
+    return str(target_url)
+
+
+async def _is_user_page_title(title: str) -> bool:
+    """Return True if the title matches an existing user's personal page."""
+    if not title or not db_instance.is_connected:
+        return False
+
+    user_doc = await UserService.get_user_by_username(title)
+    if user_doc:
+        return True
+
+    users_collection = db_instance.get_collection("users")
+    if users_collection is None:
+        return False
+
+    regex = {"$regex": f"^{re.escape(title)}$", "$options": "i"}
+    user_doc = await users_collection.find_one({"username": regex})
+    return user_doc is not None
 
 @router.get("/", response_class=HTMLResponse)
 async def home(
@@ -233,6 +260,14 @@ async def edit_page(
     try:
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
+
+        if await _is_user_page_title(title) and user["username"].casefold() != title.casefold():
+            logger.warning(
+                f"User {user['username']} attempted to edit personal page {title} via generic editor"
+            )
+            redirect_url = _build_user_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
+
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
         # Ensure CSRF cookie is set on the actual response object we return
 
@@ -339,6 +374,13 @@ async def save_page(
     try:
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
+
+        if await _is_user_page_title(title) and user["username"].casefold() != title.casefold():
+            logger.warning(
+                f"User {user['username']} attempted to save personal page {title} via generic editor"
+            )
+            redirect_url = _build_user_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         if not db_instance.is_connected:
             logger.error(
