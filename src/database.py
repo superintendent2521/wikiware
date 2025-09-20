@@ -44,7 +44,6 @@ class Database:
                 await asyncio.sleep(5)  # Wait 5 seconds before retrying
             except Exception as e:  # IGNORE W0718
                 logger.error(f"Database connection error: {e}")
-                logger.error(f"MongoDB URL: {MONGODB_URL}")
                 self.is_connected = False
                 return  # Don't retry on other errors
 

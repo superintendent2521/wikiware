@@ -19,7 +19,17 @@ def required_env(name: str) -> Any:
 
 
 port = int(required_env("PORT"))
-dev = required_env("DEV")
+dev_raw = required_env("DEV")
+DEV_TRUTHY_VALUES = {"1", "true", "yes", "on"}
+DEV_FALSEY_VALUES = {"0", "false", "no", "off"}
+
+normalized_dev = dev_raw.strip().lower()
+if not normalized_dev:
+    raise RuntimeError("Environment variable 'DEV' must not be blank. Expected true/false, 1/0, yes/no, or on/off.")
+if normalized_dev not in (DEV_TRUTHY_VALUES | DEV_FALSEY_VALUES):
+    raise RuntimeError("Environment variable 'DEV' must be one of: true/false, 1/0, yes/no, on/off")
+
+dev = normalized_dev in DEV_TRUTHY_VALUES
 
 try:
     print(port, dev, os.getcwd())

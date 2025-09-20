@@ -25,8 +25,8 @@ async def register_form(
 ):
     """Show user registration form."""
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-    logger.info(f"Generated CSRF token: {csrf_token}")
-    logger.info(f"Generated signed token: {signed_token}")
+    logger.debug("Generated CSRF token for registration form")
+    logger.debug("Generated signed CSRF token for registration form")
     # Attach CSRF cookie to the actual response being returned
     template = templates.TemplateResponse(
         "register.html",
@@ -37,9 +37,7 @@ async def register_form(
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
-    logger.info(
-        f"CSRF cookie set in response: {template.headers.get('set-cookie', 'NOT FOUND')}"
-    )
+    logger.debug("CSRF cookie attached to registration response")
     return template
 
 
@@ -57,10 +55,6 @@ async def register_user(
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
 
-        # Log form data for debugging
-        logger.info(
-            f"CSRF cookie: {request.cookies.get('fastapi-csrf-token', 'NOT FOUND')}"
-        )
 
         if not db_instance.is_connected:
             logger.error("Database not connected - cannot register user")
