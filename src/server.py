@@ -3,10 +3,13 @@ Main FastAPI application for WikiWare.
 This is the refactored, modular version with separated concerns.
 """
 
+import os
+import secrets
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
+from loguru import logger
 from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
 from .routes import (
@@ -24,10 +27,6 @@ from .routes import (
 )
 from .services import log_streamer
 from .services.settings_service import SettingsService
-
-from loguru import logger
-import os
-import secrets
 from .middleware.security_headers import SecurityHeadersMiddleware
 from .utils.template_env import get_templates
 
@@ -63,7 +62,8 @@ class CsrfSettings(BaseModel):
 def get_csrf_config():
     settings = CsrfSettings(secret_key=_CSRF_SECRET)
     logger.info(
-        f"CSRF config: secure={settings.cookie_secure}, httponly={settings.httponly}, samesite={settings.cookie_samesite}, key={settings.cookie_key}"
+        f"CSRF config: secure={settings.cookie_secure}, httponly={settings.httponly}"
+        f", samesite={settings.cookie_samesite}, key={settings.cookie_key}"
     )
     return settings
 

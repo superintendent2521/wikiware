@@ -2,9 +2,9 @@
 Page data models and validation for WikiWare.
 """
 
-from pydantic import BaseModel, Field, validator
 from typing import Optional
 from datetime import datetime, timezone
+from pydantic import BaseModel, Field, validator
 from ..utils.validation import is_valid_title
 
 

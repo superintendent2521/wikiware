@@ -3,15 +3,15 @@ Admin panel routes for WikiWare.
 Only accessible to users with admin: true flag.
 """
 
-from fastapi import APIRouter, Request, Depends, Response, Form
-from ..middleware.auth_middleware import AuthMiddleware
+from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from ..database import get_users_collection
-from ..stats import get_stats
-from ..services.settings_service import SettingsService
-from ..utils.logs import LogUtils
-from ..database import db_instance
 from fastapi_csrf_protect import CsrfProtect
+
+from ..database import db_instance, get_users_collection
+from ..middleware.auth_middleware import AuthMiddleware
+from ..services.settings_service import SettingsService
+from ..stats import get_stats
+from ..utils.logs import LogUtils
 from ..utils.template_env import get_templates
 
 router = APIRouter()

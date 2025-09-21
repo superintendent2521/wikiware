@@ -3,12 +3,12 @@ Authentication middleware for WikiWare.
 Handles session validation and user context.
 """
 
-from fastapi import Request, HTTPException
 from typing import Optional, Dict, Any
+from fastapi import Request, HTTPException
+from loguru import logger
 from ..services.user_service import UserService
 from ..config import SESSION_COOKIE_NAME
 from ..database import db_instance
-from loguru import logger
 
 
 class AuthMiddleware:

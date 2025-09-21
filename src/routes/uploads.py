@@ -3,18 +3,19 @@ Upload routes for WikiWare.
 Handles file upload operations.
 """
 
-from fastapi import APIRouter, UploadFile, File, Request, Depends
+import shutil
+from pathlib import Path
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
-from fastapi import HTTPException
-import uuid
-import shutil
-from pathlib import Path
-from ..config import UPLOAD_DIR, MAX_FILE_SIZE, ALLOWED_IMAGE_TYPES
-from ..utils.validation import sanitize_filename
-from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
+
+from ..config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
+from ..middleware.auth_middleware import AuthMiddleware
+from ..utils.validation import sanitize_filename
 
 router = APIRouter()
 

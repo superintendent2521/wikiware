@@ -5,13 +5,13 @@ Contains business logic for branch operations.
 
 from typing import List
 from datetime import datetime, timezone
+from loguru import logger
 from ..database import (
     get_pages_collection,
     get_history_collection,
     get_branches_collection,
     db_instance,
 )
-from loguru import logger
 
 
 class BranchService:

@@ -3,23 +3,24 @@ History routes for WikiWare.
 Handles page version history and restoration.
 """
 
-from fastapi import APIRouter, Request, Form, Depends, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi_csrf_protect import CsrfProtect
-import markdown
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from difflib import HtmlDiff
 from typing import Any, Dict, List, Optional
+
+import markdown
+from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi_csrf_protect import CsrfProtect
+from loguru import logger
+
+from ..database import db_instance, get_history_collection, get_pages_collection
+from ..middleware.auth_middleware import AuthMiddleware
+from ..services.branch_service import BranchService
 from ..utils.link_processor import process_internal_links
 from ..utils.sanitizer import sanitize_html
-from ..database import get_pages_collection, get_history_collection, db_instance
-from ..services.branch_service import BranchService
-from ..utils.validation import is_valid_title, is_safe_branch_parameter
-from ..middleware.auth_middleware import AuthMiddleware
 from ..utils.template_env import get_templates
-
-from datetime import datetime, timezone
-from loguru import logger
-from dataclasses import dataclass, field
+from ..utils.validation import is_safe_branch_parameter, is_valid_title
 
 router = APIRouter()
 templates = get_templates()

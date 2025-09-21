@@ -1,6 +1,6 @@
-from dotenv import load_dotenv
 import os
 import asyncio
+from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ServerSelectionTimeoutError
 from loguru import logger
@@ -39,7 +39,8 @@ class Database:
             except ServerSelectionTimeoutError:
                 retry_count += 1
                 logger.warning(
-                    f"MongoDB server not available. Attempt {retry_count}/{max_retries}. Retrying in 5 seconds..."
+                    f"MongoDB server not available. Attempt {retry_count}/{max_retries}."
+                    "Retrying in 5 seconds... Server Offline?"
                 )
                 await asyncio.sleep(5)  # Wait 5 seconds before retrying
             except Exception as e:  # IGNORE W0718

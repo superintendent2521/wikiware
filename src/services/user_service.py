@@ -2,15 +2,14 @@
 User service layer for WikiWare.
 Contains business logic for user operations.
 """
-
+import secrets
+from datetime import timedelta
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timezone
 from passlib.context import CryptContext
+from loguru import logger
 from ..database import get_users_collection, db_instance
 from ..models.user import UserRegistration
-from loguru import logger
-import secrets
-from datetime import timedelta
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
@@ -144,46 +143,19 @@ class UserService:
             user = await UserService.get_user_by_username(username)
             if not user:
                 logger.warning(f"User not found: {username}")
-                # Log failed login attempt to dedicated file
-                try:
-                    with open("logs/login_failures.log", "a", encoding="utf-8") as f:
-                        f.write(
-                            f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n"
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to log failed login attempt for {username}: {str(e)}"
-                    )
+                logger.warning(f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}") # pylint: disable=C0301
                 return None
 
             # Check if user is active
             if not user.get("is_active", True):
                 logger.warning(f"User account is inactive: {username}")
-                # Log failed login attempt to dedicated file
-                try:
-                    with open("logs/login_failures.log", "a", encoding="utf-8") as f:
-                        f.write(
-                            f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n"
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to log failed login attempt for {username}: {str(e)}"
-                    )
+                logger.warning(f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}") # pylint: disable=C0301
                 return None
 
             # Verify password
             if not UserService.verify_password(password, user["password_hash"]):
                 logger.warning(f"Invalid password for user: {username}")
-                # Log failed login attempt to dedicated file
-                try:
-                    with open("logs/login_failures.log", "a", encoding="utf-8") as f:
-                        f.write(
-                            f"{datetime.now(timezone.utc)} | {username} | {client_ip} | {user_agent}\n"
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to log failed login attempt for {username}: {str(e)}"
-                    )
+                logger.warning(f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}") # pylint: disable=C0301
                 return None
 
             logger.info(f"User authenticated: {username}")

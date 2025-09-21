@@ -5,6 +5,7 @@ Contains business logic for page operations.
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
+from loguru import logger
 from ..database import (
     get_pages_collection,
     get_history_collection,
@@ -12,7 +13,6 @@ from ..database import (
     get_branches_collection,
     db_instance,
 )
-from loguru import logger
 
 
 class PageService:

@@ -1,9 +1,8 @@
 """
 Service for logging page views and edits.
 """
-
-from ..database import get_history_collection
 from loguru import logger
+from ..database import get_history_collection
 
 
 class LogService:

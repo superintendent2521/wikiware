@@ -27,7 +27,7 @@ def parse_bool_env(name: str) -> bool:
     normalized = raw_value.strip().lower()
     if not normalized:
         raise RuntimeError(
-            f"Environment variable '{name}' must not be blank. Expected true/false, 1/0, yes/no, or on/off."
+            f"Environment variable '{name}' must not be blank. Expected true/false"
         )
     if normalized in DEV_TRUTHY_VALUES:
         return True

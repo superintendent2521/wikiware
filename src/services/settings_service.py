@@ -14,6 +14,7 @@ from ..database import db_instance
 
 @dataclass(frozen=True)
 class Banner:
+    """Represent the global announcement banner settings."""
     message: str
     level: str = "info"
     is_active: bool = False

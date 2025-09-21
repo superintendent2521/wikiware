@@ -134,7 +134,8 @@ def setup_log_streaming(app, *, add_file_sink: bool = False) -> None:
                         logger.debug("Client disconnected during log streaming")
                         _CONNECTED.discard(ws)
                     except Exception as e:
-                        # Log other exceptions (e.g., network errors) but avoid catching WebSocketDisconnect twice
+                        # Log other exceptions (e.g., network errors)
+                        # but avoid catching WebSocketDisconnect twice
                         logger.warning(f"Failed to send log to client: {e}")
                         _CONNECTED.discard(ws)
 

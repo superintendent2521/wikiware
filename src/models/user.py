@@ -2,9 +2,10 @@
 User data models and validation for WikiWare.
 """
 
-from pydantic import BaseModel, Field, validator
 from datetime import datetime, timezone
 import re
+
+from pydantic import BaseModel, Field, validator
 
 
 class User(BaseModel):
