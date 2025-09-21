@@ -3,7 +3,7 @@ User service layer for WikiWare.
 Contains business logic for user operations.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timezone
 from passlib.context import CryptContext
 from ..database import get_users_collection, db_instance
@@ -191,6 +191,54 @@ class UserService:
         except Exception as e:
             logger.error(f"Error authenticating user {username}: {str(e)}")
             return None
+
+    @staticmethod
+    async def change_password(
+        username: str,
+        current_password: str,
+        new_password: str,
+    ) -> Tuple[bool, str]:
+        """Change a user's password after verifying the current password."""
+        try:
+            if not db_instance.is_connected:
+                logger.error("Database not connected - cannot change password")
+                return False, "offline"
+
+            users_collection = get_users_collection()
+            if users_collection is None:
+                logger.error("Users collection not available")
+                return False, "users_collection_missing"
+
+            user = await UserService.get_user_by_username(username)
+            if not user:
+                logger.warning(f"User not found for password change: {username}")
+                return False, "user_not_found"
+
+            if not UserService.verify_password(current_password, user["password_hash"]):
+                logger.warning(f"Invalid current password for user: {username}")
+                return False, "invalid_current_password"
+
+            new_hash = UserService.hash_password(new_password)
+
+            result = await users_collection.update_one(
+                {"_id": user["_id"]},
+                {
+                    "$set": {
+                        "password_hash": new_hash,
+                        "password_changed_at": datetime.now(timezone.utc),
+                    }
+                },
+            )
+
+            if result.modified_count == 1 or result.matched_count == 1:
+                logger.info(f"Password updated for user: {username}")
+                return True, ""
+
+            logger.error(f"Failed to update password for user: {username}")
+            return False, "update_failed"
+        except Exception as e:
+            logger.error(f"Error changing password for {username}: {str(e)}")
+            return False, "error"
 
     @staticmethod
     async def create_session(user_id: str) -> Optional[str]:

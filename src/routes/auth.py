@@ -12,6 +12,7 @@ from ..services.user_service import UserService
 from ..models.user import UserRegistration
 from ..config import DEV, SESSION_COOKIE_NAME
 from ..database import db_instance
+from ..middleware.auth_middleware import AuthMiddleware
 from ..utils.template_env import get_templates
 
 from loguru import logger
@@ -28,7 +29,6 @@ async def register_form(
     """Show user registration form."""
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     logger.debug("Generated CSRF token for registration form")
-    logger.debug("Generated signed CSRF token for registration form")
     # Attach CSRF cookie to the actual response being returned
     template = templates.TemplateResponse(
         "register.html",
@@ -277,6 +277,94 @@ async def login_user(
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
 
+
+@router.get("/account/password", response_class=HTMLResponse)
+async def change_password_form(
+    request: Request,
+    response: Response,
+    csrf_protect: CsrfProtect = Depends(),
+):
+    """Display the password change form for authenticated users."""
+    user = await AuthMiddleware.get_current_user(request)
+    if not user:
+        logger.debug("Unauthenticated user attempted to access password change form")
+        return RedirectResponse(url="/login?next=/account/password", status_code=303)
+
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    template = templates.TemplateResponse(
+        "password_reset.html",
+        {
+            "request": request,
+            "offline": not db_instance.is_connected,
+            "csrf_token": csrf_token,
+            "user": user,
+        },
+    )
+    csrf_protect.set_csrf_cookie(signed_token, template)
+    return template
+
+
+@router.post("/account/password", response_class=HTMLResponse)
+async def change_password(
+    request: Request,
+    response: Response,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    csrf_protect: CsrfProtect = Depends(),
+):
+    """Handle password change submissions."""
+    user = await AuthMiddleware.get_current_user(request)
+    if not user:
+        logger.debug("Unauthenticated user attempted to change password")
+        return RedirectResponse(url="/login?next=/account/password", status_code=303)
+
+    await csrf_protect.validate_csrf(request)
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+
+    context = {
+        "request": request,
+        "offline": not db_instance.is_connected,
+        "csrf_token": csrf_token,
+        "user": user,
+    }
+
+    if not db_instance.is_connected:
+        context["error"] = "Password changes are temporarily unavailable."
+        template = templates.TemplateResponse("password_reset.html", context)
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
+
+    if new_password != confirm_password:
+        context["error"] = "New passwords do not match."
+        template = templates.TemplateResponse("password_reset.html", context)
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
+
+    success, reason = await UserService.change_password(
+        user["username"], current_password, new_password
+    )
+
+    if success:
+        context["success"] = "Password updated successfully."
+        logger.info(f"Password changed for user: {user['username']}")
+    else:
+        error_messages = {
+            "offline": "Password changes are temporarily unavailable.",
+            "users_collection_missing": "Password changes are temporarily unavailable.",
+            "user_not_found": "Account not found.",
+            "invalid_current_password": "Current password is incorrect.",
+            "update_failed": "Could not update password. Please try again.",
+            "error": "An unexpected error occurred. Please try again.",
+        }
+        context["error"] = error_messages.get(
+            reason, "An unexpected error occurred. Please try again."
+        )
+        logger.warning(f"Failed password change for user {user['username']}: {reason}")
+
+    template = templates.TemplateResponse("password_reset.html", context)
+    csrf_protect.set_csrf_cookie(signed_token, template)
+    return template
 
 @router.post("/logout")
 async def logout_user(
