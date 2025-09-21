@@ -3,11 +3,14 @@ Main FastAPI application for WikiWare.
 This is the refactored, modular version with separated concerns.
 """
 
+import os
+import secrets
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
-from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
+from loguru import logger
+from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
 from .routes import (
     pages,
@@ -24,19 +27,24 @@ from .routes import (
 )
 from .services import log_streamer
 from .services.settings_service import SettingsService
-
-from loguru import logger
-import os
 from .middleware.security_headers import SecurityHeadersMiddleware
+from .utils.template_env import get_templates
 
 # Configure loguru
 os.makedirs("logs", exist_ok=True)
 logger.add("logs/wikiware.log", rotation="1 day", retention="7 days", level="INFO")
 logger.add("logs/errors.log", rotation="1 day", retention="7 days", level="ERROR")
 
+_CSRF_SECRET = os.getenv("CSRF_SECRET_KEY")
+if not _CSRF_SECRET:
+    _CSRF_SECRET = secrets.token_urlsafe(64)
+    logger.warning(
+        "CSRF_SECRET_KEY not set; generated ephemeral secret key for this process"
+    )
+
 
 class CsrfSettings(BaseModel):
-    secret_key: str = "asecretkeythatisverylongandsecure"
+    secret_key: str
     cookie_samesite: str = "lax"
     # Use env override so local HTTP works by default; set CSRF_COOKIE_SECURE=true in prod
     cookie_secure: bool = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
@@ -52,15 +60,20 @@ class CsrfSettings(BaseModel):
 
 @CsrfProtect.load_config
 def get_csrf_config():
-    settings = CsrfSettings()
+    settings = CsrfSettings(secret_key=_CSRF_SECRET)
     logger.info(
-        f"CSRF config: secure={settings.cookie_secure}, httponly={settings.httponly}, samesite={settings.cookie_samesite}, key={settings.cookie_key}"
+        f"CSRF config: secure={settings.cookie_secure}, httponly={settings.httponly}"
+        f", samesite={settings.cookie_samesite}, key={settings.cookie_key}"
     )
     return settings
 
 
 # Create FastAPI app
-app = FastAPI(title=APP_TITLE, description=APP_DESCRIPTION)
+app = FastAPI(title=NAME, description=APP_DESCRIPTION)
+
+
+templates = get_templates()
+logger.info(NAME)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -68,6 +81,7 @@ app.mount("/help", StaticFiles(directory=HELP_STATIC_DIR), name="help")
 
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
+
 
 @app.middleware("http")
 async def inject_global_banner(request: Request, call_next):
@@ -80,6 +94,7 @@ async def inject_global_banner(request: Request, call_next):
     request.state.global_banner = banner
     response = await call_next(request)
     return response
+
 
 # Include route modules
 app.include_router(pages.router)
@@ -98,6 +113,7 @@ app.include_router(log_streamer.router)
 # Initilize log streaming.
 log_streamer.setup_log_streaming(app, add_file_sink=False)
 
+
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -112,4 +128,3 @@ if __name__ == "__main__":
     from .config import HOST, PORT, DEV
 
     uvicorn.run(app, host=HOST, port=PORT, reload=DEV)
-

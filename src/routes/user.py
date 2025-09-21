@@ -3,22 +3,24 @@ Page routes for WikiWare.
 Handles user-specific page viewing, editing, and saving operations.
 """
 
-from fastapi import APIRouter, Request, Form, HTTPException, Depends, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 import markdown
-from ..utils.link_processor import process_internal_links
-from ..utils.sanitizer import sanitize_html
-from ..services.page_service import PageService
-from ..database import db_instance
-from ..utils.validation import is_valid_title, is_safe_branch_parameter
-from ..config import TEMPLATE_DIR
-from ..middleware.auth_middleware import AuthMiddleware
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
+from ..database import db_instance
+from ..middleware.auth_middleware import AuthMiddleware
+from ..services.page_service import PageService
+from ..utils.link_processor import process_internal_links
+from ..utils.sanitizer import sanitize_html
+from ..utils.template_env import get_templates
+from ..utils.validation import is_safe_branch_parameter, is_valid_title
+
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 def _build_user_page_redirect_url(request: Request, username: str, branch: str) -> str:
@@ -173,6 +175,7 @@ async def save_user_page(
     username: str,
     content: str = Form(...),
     branch: str = Form("main"),
+    edit_summary: str = Form(...),
 ):
     """Save user page changes."""
     try:
@@ -203,7 +206,9 @@ async def save_user_page(
         author = user["username"]
 
         # Save the page
-        success = await PageService.update_page(username, content, author, branch)
+        success = await PageService.update_page(
+            username, content, author, branch, edit_summary=edit_summary
+        )
 
         if success:
             redirect_url = _build_user_page_redirect_url(request, username, branch)

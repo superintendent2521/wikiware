@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DEV_TRUTHY_VALUES = {"1", "true", "yes", "on"}
+DEV_FALSEY_VALUES = {"0", "false", "no", "off"}
+
 
 def required_env(name: str) -> Any:
     """Get required environment variable or raise error."""
@@ -18,8 +21,27 @@ def required_env(name: str) -> Any:
     return value
 
 
+def parse_bool_env(name: str) -> bool:
+    """Parse an environment variable into a strict boolean."""
+    raw_value = required_env(name)
+    normalized = raw_value.strip().lower()
+    if not normalized:
+        raise RuntimeError(
+            f"Environment variable '{name}' must not be blank. Expected true/false"
+        )
+    if normalized in DEV_TRUTHY_VALUES:
+        return True
+    if normalized in DEV_FALSEY_VALUES:
+        return False
+    raise RuntimeError(
+        f"Environment variable '{name}' must be one of: true/false, 1/0, yes/no, on/off"
+    )
+
+
 port = int(required_env("PORT"))
-dev = required_env("DEV")
+dev = parse_bool_env("DEV")
+# Normalize DEV for child processes that read the environment directly.
+os.environ["DEV"] = "true" if dev else "false"
 
 try:
     print(port, dev, os.getcwd())

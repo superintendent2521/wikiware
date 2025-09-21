@@ -3,20 +3,24 @@ Authentication routes for WikiWare.
 Handles user registration, login, and logout operations.
 """
 
-from fastapi import APIRouter, Request, Form, Response, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from fastapi_csrf_protect import CsrfProtect
 from datetime import datetime, timezone
-from ..utils.validation import sanitize_redirect_path
-from ..services.user_service import UserService
-from ..models.user import UserRegistration
-from ..config import TEMPLATE_DIR, DEV, SESSION_COOKIE_NAME
-from ..database import db_instance
+
+from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
+from ..config import DEV, SESSION_COOKIE_NAME
+from ..database import db_instance
+from ..middleware.auth_middleware import AuthMiddleware
+from ..models.user import UserRegistration
+from ..services.user_service import UserService
+from ..utils.template_env import get_templates
+from ..utils.validation import sanitize_redirect_path
+
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 @router.get("/register", response_class=HTMLResponse)
@@ -25,8 +29,7 @@ async def register_form(
 ):
     """Show user registration form."""
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-    logger.info(f"Generated CSRF token: {csrf_token}")
-    logger.info(f"Generated signed token: {signed_token}")
+    logger.debug("Generated CSRF token for registration form")
     # Attach CSRF cookie to the actual response being returned
     template = templates.TemplateResponse(
         "register.html",
@@ -37,9 +40,7 @@ async def register_form(
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
-    logger.info(
-        f"CSRF cookie set in response: {template.headers.get('set-cookie', 'NOT FOUND')}"
-    )
+    logger.debug("CSRF cookie attached to registration response")
     return template
 
 
@@ -56,12 +57,6 @@ async def register_user(
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
-
-        # Log form data for debugging
-        logger.info(
-            f"CSRF cookie: {request.cookies.get('fastapi-csrf-token', 'NOT FOUND')}"
-        )
-
         if not db_instance.is_connected:
             logger.error("Database not connected - cannot register user")
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
@@ -76,7 +71,6 @@ async def register_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-
         # Check if passwords match
         if password != confirm_password:
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
@@ -91,13 +85,10 @@ async def register_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-
         # Create user registration model
         user_data = UserRegistration(username=username, password=password)
-
         # Create user
         user = await UserService.create_user(user_data)
-
         if not user:
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse(
@@ -111,7 +102,6 @@ async def register_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-
         # Create session
         session_id = await UserService.create_session(user["username"])
         if not session_id:
@@ -127,7 +117,6 @@ async def register_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-
         # Set secure session cookie
         response = RedirectResponse(url="/", status_code=303)
         response.set_cookie(
@@ -139,10 +128,8 @@ async def register_user(
             path="/",
             max_age=3600 * 24 * 7,  # 1 week
         )
-
         logger.info(f"User registered and logged in: {username}")
         return response
-
     except Exception as e:
         logger.error(f"Error registering user {username}: {str(e)}")
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
@@ -196,7 +183,6 @@ async def login_user(
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
         safe_next = sanitize_redirect_path(next)
-
         # Extract client IP and User-Agent for logging
         xff = request.headers.get("x-forwarded-for")
         client_ip = (
@@ -205,9 +191,10 @@ async def login_user(
             else (request.client.host if request.client else "unknown")
         )
         user_agent = request.headers.get("user-agent", "unknown")
-
         if not db_instance.is_connected:
-            logger.error(f"Database not connected - cannot login user: {username} | {client_ip} | {user_agent} | db_offline | {request.url.path}")
+            logger.error(
+                f"Database not connected - cannot login user: {username} | {client_ip} | {user_agent} | db_offline | {request.url.path}"
+            )
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse(
                 "login.html",
@@ -220,15 +207,15 @@ async def login_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-
         # Authenticate user
         user = await UserService.authenticate_user(
             username, password, client_ip=client_ip, user_agent=user_agent
         )
-
         if not user:
             # Log failure using unified logger (also writes to file via loguru config)
-            logger.warning(f"Login failed: {username} | {client_ip} | {user_agent} | failure | {request.url.path}")
+            logger.warning(
+                f"Login failed: {username} | {client_ip} | {user_agent} | failure | {request.url.path}"
+            )
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse(
                 "login.html",
@@ -241,7 +228,6 @@ async def login_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-
         # Create session
         session_id = await UserService.create_session(user["username"])
         if not session_id:
@@ -257,7 +243,6 @@ async def login_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-
         # Set secure session cookie
         response = RedirectResponse(url=safe_next, status_code=303)
         response.set_cookie(
@@ -269,15 +254,17 @@ async def login_user(
             path="/",
             max_age=3600 * 24 * 7,  # 1 week
         )
-
         # Log successful login using unified logger (also writes to file via loguru config)
-        logger.info(f"User logged in: {username} | {client_ip} | {user_agent} | success | {request.url.path}")
+        logger.info(
+            f"User logged in: {username} | {client_ip} | {user_agent} | success | {request.url.path}"
+        )
         return response
-
     except Exception as e:
         logger.error(f"Error logging in user {username}: {str(e)}")
         # Log error using unified logger (also writes to file via loguru config)
-        logger.error(f"Login error: {username} | {client_ip} | {user_agent} | error | {request.url.path}")
+        logger.error(
+            f"Login error: {username} | {client_ip} | {user_agent} | error | {request.url.path}"
+        )
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
         template = templates.TemplateResponse(
             "login.html",
@@ -292,6 +279,92 @@ async def login_user(
         return template
 
 
+@router.get("/account/password", response_class=HTMLResponse)
+async def change_password_form(
+    request: Request,
+    csrf_protect: CsrfProtect = Depends(),
+):
+    """Display the password change form for authenticated users."""
+    user = await AuthMiddleware.get_current_user(request)
+    if not user:
+        logger.debug("Unauthenticated user attempted to access password change form")
+        return RedirectResponse(url="/login?next=/account/password", status_code=303)
+
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    template = templates.TemplateResponse(
+        "password_reset.html",
+        {
+            "request": request,
+            "offline": not db_instance.is_connected,
+            "csrf_token": csrf_token,
+            "user": user,
+        },
+    )
+    csrf_protect.set_csrf_cookie(signed_token, template)
+    return template
+
+
+@router.post("/account/password", response_class=HTMLResponse)
+async def change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    csrf_protect: CsrfProtect = Depends(),
+):
+    """Handle password change submissions."""
+    user = await AuthMiddleware.get_current_user(request)
+    if not user:
+        logger.debug("Unauthenticated user attempted to change password")
+        return RedirectResponse(url="/login?next=/account/password", status_code=303)
+
+    await csrf_protect.validate_csrf(request)
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+
+    context = {
+        "request": request,
+        "offline": not db_instance.is_connected,
+        "csrf_token": csrf_token,
+        "user": user,
+    }
+
+    if not db_instance.is_connected:
+        context["error"] = "Password changes are temporarily unavailable."
+        template = templates.TemplateResponse("password_reset.html", context)
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
+
+    if new_password != confirm_password:
+        context["error"] = "New passwords do not match."
+        template = templates.TemplateResponse("password_reset.html", context)
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
+
+    success, reason = await UserService.change_password(
+        user["username"], current_password, new_password
+    )
+
+    if success:
+        context["success"] = "Password updated successfully."
+        logger.info(f"Password changed for user: {user['username']}")
+    else:
+        error_messages = {
+            "offline": "Password changes are temporarily unavailable.",
+            "users_collection_missing": "Password changes are temporarily unavailable.",
+            "user_not_found": "Account not found.",
+            "invalid_current_password": "Current password is incorrect.",
+            "update_failed": "Could not update password. Please try again.",
+            "error": "An unexpected error occurred. Please try again.",
+        }
+        context["error"] = error_messages.get(
+            reason, "An unexpected error occurred. Please try again."
+        )
+        logger.warning(f"Failed password change for user {user['username']}: {reason}")
+
+    template = templates.TemplateResponse("password_reset.html", context)
+    csrf_protect.set_csrf_cookie(signed_token, template)
+    return template
+
 @router.post("/logout")
 async def logout_user(
     request: Request, response: Response, csrf_protect: CsrfProtect = Depends()
@@ -304,11 +377,9 @@ async def logout_user(
             or request.cookies.get("__Host-user_session")
             or request.cookies.get("user_session")
         )
-
         # Delete session from database if it exists
         if session_id:
             await UserService.delete_session(session_id)
-
         # Clear session cookie
         response = RedirectResponse(url="/", status_code=303)
         response.delete_cookie(
@@ -318,7 +389,6 @@ async def logout_user(
             samesite="Lax",
             path="/",
         )
-
         logger.info("User logged out")
         return response
     except Exception as e:

@@ -3,25 +3,27 @@ Branch routes for WikiWare.
 Handles branch management operations.
 """
 
-from fastapi import APIRouter, Request, Form, Depends
+from urllib.parse import parse_qsl, urlencode, urlparse
+
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
-from urllib.parse import urlparse, parse_qsl, urlencode
-from ..services.branch_service import BranchService
-from ..database import db_instance
-from ..utils.validation import (
-    is_valid_title,
-    is_valid_branch_name,
-    is_safe_branch_parameter,
-    sanitize_referer_url,
-)
-from ..config import TEMPLATE_DIR
-from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
 
+from ..database import db_instance
+from ..middleware.auth_middleware import AuthMiddleware
+from ..services.branch_service import BranchService
+from ..utils.template_env import get_templates
+from ..utils.validation import (
+    is_safe_branch_parameter,
+    is_valid_branch_name,
+    is_valid_title,
+    sanitize_referer_url,
+)
+
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:

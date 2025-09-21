@@ -3,25 +3,29 @@ Page routes for WikiWare.
 Handles page viewing, editing, and saving operations.
 """
 
-from fastapi import APIRouter, Request, Form, HTTPException, Depends, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-import markdown
-from ..utils.link_processor import process_internal_links
+import re
 from urllib.parse import quote
-from ..utils.sanitizer import sanitize_html
-from ..services.page_service import PageService
-from ..services.branch_service import BranchService
-from ..database import db_instance
-from ..utils.validation import is_valid_title, is_safe_branch_parameter
-from ..config import TEMPLATE_DIR
-from ..middleware.auth_middleware import AuthMiddleware
-from ..stats import get_stats
+
+import markdown
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
+from ..database import db_instance
+from ..middleware.auth_middleware import AuthMiddleware
+from ..services.branch_service import BranchService
+from ..services.page_service import PageService
+from ..services.user_service import UserService
+from ..stats import get_stats
+from ..utils.link_processor import process_internal_links
+from ..utils.sanitizer import sanitize_html
+from ..utils.template_env import get_templates
+from ..utils.validation import is_safe_branch_parameter, is_valid_title
+
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
@@ -30,6 +34,27 @@ def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
     if branch != "main":
         target_url = target_url.include_query_params(branch=branch)
     return str(target_url)
+
+
+def _build_user_page_redirect_url(request: Request, username: str, branch: str) -> str:
+    """Build the user page URL while keeping branch parameters safe."""
+    target_url = request.url_for("user_page", username=username)
+    if branch != "main" and is_safe_branch_parameter(branch):
+        target_url = target_url.include_query_params(branch=branch)
+    return str(target_url)
+
+
+async def _is_user_page_title(title: str) -> bool:
+    """Return True if the title matches an existing user's personal page."""
+    if not title or not db_instance.is_connected:
+        return False
+    users_collection = db_instance.get_collection("users")
+    if users_collection is None:
+        return False
+    # Perform a single case-insensitive query for the username.
+    regex = {"$regex": f"^{re.escape(title)}$", "$options": "i"}
+    user_doc = await users_collection.find_one({"username": regex})
+    return user_doc is not None
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -233,6 +258,17 @@ async def edit_page(
     try:
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
+
+        if (
+            await _is_user_page_title(title)
+            and user["username"].casefold() != title.casefold()
+        ):
+            logger.warning(
+                f"User {user['username']} attempted to edit personal page {title} via generic editor"
+            )
+            redirect_url = _build_user_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
+
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
         # Ensure CSRF cookie is set on the actual response object we return
 
@@ -334,11 +370,22 @@ async def save_page(
     content: str = Form(...),
     author: str = Form("Anonymous"),
     branch: str = Form("main"),
+    edit_summary: str = Form(...),
 ):
     """Save page changes."""
     try:
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
+
+        if (
+            await _is_user_page_title(title)
+            and user["username"].casefold() != title.casefold()
+        ):
+            logger.warning(
+                f"User {user['username']} attempted to save personal page {title} via generic editor"
+            )
+            redirect_url = _build_user_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
 
         if not db_instance.is_connected:
             logger.error(
@@ -357,7 +404,9 @@ async def save_page(
         author = user["username"]
 
         # Save the page
-        success = await PageService.update_page(title, content, author, branch)
+        success = await PageService.update_page(
+            title, content, author, branch, edit_summary=edit_summary
+        )
 
         if success:
             redirect_url = _build_page_redirect_url(request, title, branch)
@@ -460,7 +509,9 @@ async def delete_branch(
             )
             # Validate before using in redirect URL
             if not is_valid_title(title) or not is_safe_branch_parameter(branch):
-                logger.warning(f"Attempted redirect with invalid title '{title}' or branch '{branch}'")
+                logger.warning(
+                    f"Attempted redirect with invalid title '{title}' or branch '{branch}'"
+                )
                 return RedirectResponse(url="/", status_code=303)
             safe_title = quote(title, safe="")
             safe_branch = quote(branch, safe="")

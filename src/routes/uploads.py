@@ -3,18 +3,19 @@ Upload routes for WikiWare.
 Handles file upload operations.
 """
 
-from fastapi import APIRouter, UploadFile, File, Request, Depends
+import shutil
+from pathlib import Path
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
-from fastapi import HTTPException
-import uuid
-import shutil
-from pathlib import Path
-from ..config import UPLOAD_DIR, MAX_FILE_SIZE, ALLOWED_IMAGE_TYPES
-from ..utils.validation import sanitize_filename
-from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
+
+from ..config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
+from ..middleware.auth_middleware import AuthMiddleware
+from ..utils.validation import sanitize_filename
 
 router = APIRouter()
 
@@ -59,14 +60,23 @@ async def upload_image(
         await file.seek(0)
 
         # Check magic numbers for image types
-        magic_bytes = {
-            "image/jpeg": b"\xff\xd8\xff",
-            "image/png": b"\x89PNG\r\n\x1a\n",
-            "image/gif": b"GIF87a",
-            "image/webp": b"RIFF----WEBP",
-        }
+        def _matches_magic_signature(content_type: str, data: bytes) -> bool:
+            if content_type == "image/webp":
+                return (
+                    len(data) >= 12
+                    and data.startswith(b"RIFF")
+                    and data[8:12] == b"WEBP"
+                )
+            if content_type == "image/gif":
+                return data.startswith(b"GIF87a") or data.startswith(b"GIF89a")
+            magic_prefixes = {
+                "image/jpeg": b"\xff\xd8\xff",
+                "image/png": b"\x89PNG\r\n\x1a\n",
+            }
+            expected = magic_prefixes.get(content_type)
+            return expected is not None and data.startswith(expected)
 
-        if not any(header.startswith(magic) for magic in magic_bytes.values()):
+        if not _matches_magic_signature(file.content_type, header):
             return JSONResponse(
                 status_code=400,
                 content={

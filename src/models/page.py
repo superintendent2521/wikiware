@@ -2,9 +2,9 @@
 Page data models and validation for WikiWare.
 """
 
-from pydantic import BaseModel, validator
 from typing import Optional
 from datetime import datetime, timezone
+from pydantic import BaseModel, Field, validator
 from ..utils.validation import is_valid_title
 
 
@@ -15,8 +15,8 @@ class WikiPage(BaseModel):
     content: str
     author: Optional[str] = "Anonymous"
     branch: Optional[str] = "main"
-    created_at: datetime = datetime.now(timezone.utc)
-    updated_at: datetime = datetime.now(timezone.utc)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @validator("title")
     def validate_title(cls, v):

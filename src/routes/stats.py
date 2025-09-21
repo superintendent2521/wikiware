@@ -3,19 +3,20 @@ Stats routes for WikiWare.
 Handles statistics display.
 """
 
-from fastapi import APIRouter, Request, Depends, Response, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
-from ..services.branch_service import BranchService
-from ..database import db_instance
-from ..config import TEMPLATE_DIR
-from ..stats import get_stats, get_user_edit_stats
-from ..middleware.auth_middleware import AuthMiddleware
 from loguru import logger
 
+from ..database import db_instance
+from ..middleware.auth_middleware import AuthMiddleware
+from ..services.branch_service import BranchService
+from ..stats import get_stats, get_user_edit_stats
+from ..utils.template_env import get_templates
+
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 # Context processor to inject global stats into all templates
@@ -77,8 +78,6 @@ async def stats_page(
 
         # Get statistics
         stats = await get_stats()
-
-        logger.info("Stats page viewed")
         template = templates.TemplateResponse(
             "stats.html",
             {
@@ -98,6 +97,8 @@ async def stats_page(
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
+    except HTTPException as exc:
+        raise exc
     except Exception as e:
         logger.error(f"Error viewing stats page: {str(e)}")
         try:

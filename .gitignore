@@ -3,3 +3,4 @@ logs/*
 static/uploads/*
 .pytest_cache
 .vscode/*
+findings-prod.txt

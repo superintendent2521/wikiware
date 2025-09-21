@@ -2,13 +2,12 @@
 Custom Markdown extensions for WikiWare.
 Adds support for [[Page Title]] internal linking syntax and table rendering with color support.
 """
-
+from urllib.parse import quote
+import html as _html
 from markdown.extensions import Extension
 from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString
 from markdown.extensions.tables import TableExtension
-from urllib.parse import quote
-import html as _html
 
 
 class InternalLinkProcessor(InlineProcessor):
@@ -66,7 +65,7 @@ class TableExtensionWrapper(Extension):
         # Register custom inline pattern for color tags
         # Set priority to 165 to run before table extension (default 180)
         # Expanded to include newly supported colors
-        color_pattern = r"\{\{\s*global\.color\.(red|green|blue|purple|pink|orange|yellow|gray|cyan)\s*\}\}"
+        color_pattern = r"\{\{\s*global\.color\.(red|green|blue|purple|pink|orange|yellow|gray|cyan)\s*\}\}" # pylint: disable=C0301
         md.inlinePatterns.register(
             ColorTagProcessor(color_pattern, md), "color_tag", 165
         )

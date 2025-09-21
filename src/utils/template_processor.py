@@ -4,9 +4,9 @@ Performs safe, limited placeholder substitution (no Jinja execution).
 """
 
 import re
+from loguru import logger
 from ..stats import get_stats
 from ..database import db_instance
-from loguru import logger
 
 
 _SIMPLE_TOKEN_RE = re.compile(

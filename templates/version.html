@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Version {{ version_num }} of {{ page.title }} - WikiWare{% endblock %}
+{% block title %}Version {{ version_num }} of {{ page.title }} - {{ config.NAME }}{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -29,7 +29,8 @@
     <div class="page-meta">
         <p>
             <strong>Date:</strong> {{ page.updated_at.strftime('%Y-%m-%d %H:%M:%S') }} |
-            <strong>Author:</strong> {{ page.author }}
+            <strong>Author:</strong> {{ page.author }}<br>
+            <strong>Summary:</strong> {{ page.get('edit_summary') or 'No summary' }}
         </p>
     </div>
 
