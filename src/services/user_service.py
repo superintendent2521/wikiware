@@ -230,7 +230,7 @@ class UserService:
                 },
             )
 
-            if result.modified_count == 1 or result.matched_count == 1:
+            if result.modified_count == 1:
                 logger.info(f"Password updated for user: {username}")
                 return True, ""
 
