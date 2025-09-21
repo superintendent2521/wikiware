@@ -170,6 +170,7 @@
         <form id="editForm" action="{{ edit_action }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="branch" value="{{ branch_value }}">
+            <input type="hidden" name="summary" id="summaryInput" value="">
             <div class="form-group">
                 <label>Author:</label>
                 <input type="text" value="{{ user.username }}" readonly>
@@ -215,10 +216,28 @@
             </div>
 
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Page</button>
+                <button type="button" id="saveButton" class="btn btn-primary"><i class="fas fa-save"></i> Save Page</button>
                 <a href="{{ view_path }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
             </div>
         </form>
+    </div>
+
+    <!-- Edit Summary Modal -->
+    <div id="editSummaryModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" aria-label="Close">&times;</span>
+            <h3 class="modal-title">Edit Summary</h3>
+            <form id="summaryForm">
+                <div class="form-group">
+                    <label for="summaryText">Summary (optional):</label>
+                    <textarea id="summaryText" name="summary" class="form-control" rows="3" placeholder="Briefly describe your changes..."></textarea>
+                </div>
+                <div class="form-actions modal-actions">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="button" id="cancelSummary" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <div class="markdown-help">
