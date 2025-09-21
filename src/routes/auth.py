@@ -281,7 +281,6 @@ async def login_user(
 @router.get("/account/password", response_class=HTMLResponse)
 async def change_password_form(
     request: Request,
-    response: Response,
     csrf_protect: CsrfProtect = Depends(),
 ):
     """Display the password change form for authenticated users."""
@@ -307,7 +306,6 @@ async def change_password_form(
 @router.post("/account/password", response_class=HTMLResponse)
 async def change_password(
     request: Request,
-    response: Response,
     current_password: str = Form(...),
     new_password: str = Form(...),
     confirm_password: str = Form(...),
