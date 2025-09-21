@@ -19,6 +19,13 @@ class PageService:
     """Service class for page-related operations."""
 
     @staticmethod
+    def _normalize_summary(edit_summary: Optional[str]) -> str:
+        summary = (edit_summary or "").strip()
+        if len(summary) > 250:
+            return summary[:250]
+        return summary
+
+    @staticmethod
     async def get_page(title: str, branch: str = "main") -> Optional[Dict[str, Any]]:
         """
         Get a page by title and branch.
