@@ -174,6 +174,7 @@ async def save_user_page(
     username: str,
     content: str = Form(...),
     branch: str = Form("main"),
+    edit_summary: str = Form(...),
 ):
     """Save user page changes."""
     try:
@@ -204,7 +205,9 @@ async def save_user_page(
         author = user["username"]
 
         # Save the page
-        success = await PageService.update_page(username, content, author, branch)
+        success = await PageService.update_page(
+            username, content, author, branch, edit_summary=edit_summary
+        )
 
         if success:
             redirect_url = _build_user_page_redirect_url(request, username, branch)

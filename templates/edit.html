@@ -41,6 +41,26 @@
         </div>
     </div>
 
+    <!-- Edit Summary Modal -->
+    <div id="editSummaryModal" class="modal" style="display: none;">
+        <div class="modal-content summary-modal">
+            <span class="close" aria-label="Close">&times;</span>
+            <h3 class="modal-title">Edit Summary</h3>
+            <form id="editSummaryForm" class="edit-summary-form">
+                <div class="form-group">
+                    <label for="editSummaryInput">Summarize your changes<span aria-hidden="true">*</span></label>
+                    <textarea id="editSummaryInput" class="form-control" rows="3" maxlength="250" required placeholder="Briefly describe what changed"></textarea>
+                    <small class="form-helper">This summary appears on the history page.</small>
+                </div>
+                <div id="editSummaryStatus" class="modal-status" role="status"></div>
+                <div class="form-actions modal-actions">
+                    <button type="submit" class="btn btn-primary">Save Summary</button>
+                    <button type="button" id="editSummaryCancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Image Upload Modal -->
     <div id="imageUploadModal" class="modal" style="display: none;">
         <div class="modal-content image-modal">
@@ -168,6 +188,7 @@
 
     <div class="edit-form-container">
         <form id="editForm" action="{{ edit_action }}" method="post">
+            <input type="hidden" name="edit_summary" id="editSummaryHidden">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="branch" value="{{ branch_value }}">
             <div class="form-group">
@@ -251,6 +272,100 @@
                 toolbarSelector: '#wiki-editor-toolbar',
                 formSelector: '#editForm',
                 initialMarkdown: document.getElementById('content').value || ''
+            });
+        }
+
+        const editForm = document.getElementById('editForm');
+        const editSummaryModal = document.getElementById('editSummaryModal');
+        const editSummaryForm = document.getElementById('editSummaryForm');
+        const editSummaryInput = document.getElementById('editSummaryInput');
+        const editSummaryHidden = document.getElementById('editSummaryHidden');
+        const editSummaryCancel = document.getElementById('editSummaryCancel');
+        const editSummaryStatus = document.getElementById('editSummaryStatus');
+        const editSummaryCloseBtn = editSummaryModal ? editSummaryModal.querySelector('.close') : null;
+        let summaryConfirmed = false;
+
+        function resetSummaryStatus() {
+            if (editSummaryStatus) {
+                editSummaryStatus.innerHTML = '';
+            }
+        }
+
+        function closeSummaryModal() {
+            if (!editSummaryModal) return;
+            editSummaryModal.style.display = 'none';
+            editSummaryModal.setAttribute('aria-hidden', 'true');
+            resetSummaryStatus();
+        }
+
+        function openSummaryModal() {
+            if (!editSummaryModal) return;
+            resetSummaryStatus();
+            editSummaryModal.style.display = 'block';
+            editSummaryModal.setAttribute('aria-hidden', 'false');
+            if (editSummaryInput) {
+                const existing = editSummaryHidden ? editSummaryHidden.value : '';
+                editSummaryInput.value = existing || '';
+                requestAnimationFrame(() => {
+                    try {
+                        editSummaryInput.focus({ preventScroll: true });
+                    } catch (_) {
+                        editSummaryInput.focus();
+                    }
+                });
+            }
+        }
+
+        if (editSummaryForm) {
+            editSummaryForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const summaryValue = editSummaryInput ? editSummaryInput.value.trim() : '';
+                if (!summaryValue) {
+                    if (editSummaryStatus) {
+                        editSummaryStatus.innerHTML = '<div class="alert alert-error">Please add a brief summary.</div>';
+                    }
+                    if (editSummaryInput) {
+                        editSummaryInput.focus();
+                    }
+                    return;
+                }
+                if (editSummaryHidden) {
+                    editSummaryHidden.value = summaryValue;
+                }
+                summaryConfirmed = true;
+                closeSummaryModal();
+                if (editForm) {
+                    if (typeof editForm.requestSubmit === 'function') {
+                        editForm.requestSubmit();
+                    } else {
+                        editForm.submit();
+                    }
+                }
+            });
+        }
+
+        if (editSummaryCancel) {
+            editSummaryCancel.addEventListener('click', () => {
+                closeSummaryModal();
+            });
+        }
+
+        if (editSummaryCloseBtn) {
+            editSummaryCloseBtn.addEventListener('click', closeSummaryModal);
+        }
+
+        if (editForm) {
+            editForm.addEventListener('submit', (event) => {
+                if (event.defaultPrevented) {
+                    summaryConfirmed = false;
+                    return;
+                }
+                if (summaryConfirmed) {
+                    summaryConfirmed = false;
+                    return;
+                }
+                event.preventDefault();
+                openSummaryModal();
             });
         }
 
@@ -575,6 +690,9 @@
                 }
                 if (wikiLinkModal && wikiLinkModal.style.display === 'block') {
                     hideWikiLinkModal();
+                }
+                if (editSummaryModal && editSummaryModal.style.display === 'block') {
+                    closeSummaryModal();
                 }
             }
         });

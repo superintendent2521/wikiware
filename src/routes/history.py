@@ -145,12 +145,16 @@ def _build_version_entries(versions: List[Dict[str, Any]]) -> List[Dict[str, Any
                 str(updated_at) if updated_at is not None else "Unknown"
             )
 
+        summary_raw = doc.get("edit_summary")
+        edit_summary = str(summary_raw).strip() if summary_raw is not None else ""
+
         entries.append(
             {
                 "index": idx,
                 "display_number": max(1, total_versions - idx),
                 "author": doc.get("author", "Anonymous"),
                 "updated_at_display": updated_at_display,
+                "edit_summary": edit_summary,
                 "document": doc,
                 "is_current": idx == 0,
             }
@@ -787,8 +791,14 @@ async def restore_version(
                     "author": current_page.get("author", "Anonymous"),
                     "branch": branch,
                     "updated_at": current_page["updated_at"],
+                    "edit_summary": current_page.get("edit_summary", ""),
                 }
                 await history_collection.insert_one(history_item)
+
+            restore_summary = page.get("edit_summary") or f"Restored version {version_index}"
+            restore_summary = str(restore_summary).strip()
+            if len(restore_summary) > 250:
+                restore_summary = restore_summary[:250]
 
             # Restore the version
             await pages_collection.update_one(
@@ -797,6 +807,7 @@ async def restore_version(
                     "$set": {
                         "content": page["content"],
                         "author": page.get("author", "Anonymous"),
+                        "edit_summary": restore_summary,
                         "updated_at": datetime.now(timezone.utc),
                     }
                 },

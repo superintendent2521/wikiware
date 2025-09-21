@@ -79,6 +79,7 @@
                     <th>Version</th>
                     <th>Author</th>
                     <th>Date</th>
+                    <th>Summary</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -88,6 +89,7 @@
                     <td>Version {{ version.display_number }}</td>
                     <td>{{ version.author }}</td>
                     <td>{{ version.updated_at_display }}</td>
+                    <td>{{ version.edit_summary or 'No summary' }}</td>
                     <td>
                         <a href="/history/{{ title }}/{{ version.index }}?branch={{ branch or 'main' }}" class="btn btn-small btn-secondary"><i class="fas fa-eye"></i> View</a>
                         {% if not version.is_current %}

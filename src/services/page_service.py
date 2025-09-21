@@ -57,7 +57,11 @@ class PageService:
 
     @staticmethod
     async def create_page(
-        title: str, content: str, author: str = "Anonymous", branch: str = "main"
+        title: str,
+        content: str,
+        author: str = "Anonymous",
+        branch: str = "main",
+        edit_summary: Optional[str] = None,
     ) -> bool:
         """
         Create a new page.
@@ -67,6 +71,7 @@ class PageService:
             content: Page content
             author: Author name
             branch: Branch name
+            edit_summary: Optional summary describing the change
 
         Returns:
             True if successful, False otherwise
@@ -83,11 +88,14 @@ class PageService:
                 logger.error("Pages collection not available")
                 return False
 
+            summary = PageService._normalize_summary(edit_summary)
+
             page_data = {
                 "title": title,
                 "content": content,
                 "author": author,
                 "branch": branch,
+                "edit_summary": summary,
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc),
             }
@@ -101,7 +109,11 @@ class PageService:
 
     @staticmethod
     async def update_page(
-        title: str, content: str, author: str = "Anonymous", branch: str = "main"
+        title: str,
+        content: str,
+        author: str = "Anonymous",
+        branch: str = "main",
+        edit_summary: Optional[str] = None,
     ) -> bool:
         """
         Update an existing page.
@@ -111,6 +123,7 @@ class PageService:
             content: New content
             author: Author name
             branch: Branch name
+            edit_summary: Optional summary describing the change
 
         Returns:
             True if successful, False otherwise
@@ -130,13 +143,13 @@ class PageService:
                 logger.error("Pages collection not available")
                 return False
 
-            # Get existing page
+            summary = PageService._normalize_summary(edit_summary)
+
             existing_page = await pages_collection.find_one(
                 {"title": title, "branch": branch}
             )
 
             if existing_page:
-                # Save to history
                 if history_collection is not None:
                     history_item = {
                         "title": title,
@@ -144,28 +157,26 @@ class PageService:
                         "author": existing_page.get("author", "Anonymous"),
                         "branch": branch,
                         "updated_at": existing_page["updated_at"],
+                        "edit_summary": existing_page.get("edit_summary", ""),
                     }
                     await history_collection.insert_one(history_item)
 
-                # Update page
                 await pages_collection.update_one(
                     {"title": title, "branch": branch},
                     {
                         "$set": {
                             "content": content,
                             "author": author,
+                            "edit_summary": summary,
                             "updated_at": datetime.now(timezone.utc),
                         }
                     },
                 )
 
-                # Update user edit statistics
                 if users_collection is not None and author != "Anonymous":
-                    # Increment total edits
                     await users_collection.update_one(
                         {"username": author}, {"$inc": {"total_edits": 1}}
                     )
-                    # Increment page-specific edits
                     await users_collection.update_one(
                         {"username": author}, {"$inc": {f"page_edits.{title}": 1}}
                     )
@@ -173,10 +184,10 @@ class PageService:
                 logger.info(f"Page updated: {title} on branch: {branch} by {author}")
                 return True
             else:
-                # Create new page if it doesn't exist
-                created = await PageService.create_page(title, content, author, branch)
+                created = await PageService.create_page(
+                    title, content, author, branch, edit_summary=summary
+                )
                 if created and author != "Anonymous":
-                    # Update user edit statistics for new page
                     if users_collection is not None:
                         await users_collection.update_one(
                             {"username": author},
