@@ -11,4 +11,4 @@ Then, after it is completed,
 `cd wikiware`
 Install your requirements
 `pip install -r requirements.txt`
-It requires bleach, which is technically out of date and unsupported however nothing else exists that would match its functionality without me making it myself and i dont have much time anymore. so im stuck with out of date shit lmao
+It requires `bleach` for HTML sanitization. While this library is not actively maintained, it remains a necessary dependency for security until a suitable modern alternative is implemented.
