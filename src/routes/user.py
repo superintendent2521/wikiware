@@ -5,20 +5,21 @@ Handles user-specific page viewing, editing, and saving operations.
 
 from fastapi import APIRouter, Request, Form, HTTPException, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 import markdown
 from ..utils.link_processor import process_internal_links
 from ..utils.sanitizer import sanitize_html
 from ..services.page_service import PageService
 from ..database import db_instance
 from ..utils.validation import is_valid_title, is_safe_branch_parameter
-from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
 from fastapi_csrf_protect import CsrfProtect
+from ..utils.template_env import get_templates
+
 from loguru import logger
 
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 def _build_user_page_redirect_url(request: Request, username: str, branch: str) -> str:

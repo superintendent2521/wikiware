@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>WikiWare Help</title>
+    <title>{{ config.NAME }} Help</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- Example: Use same CSS as rest of frontend -->
     <link rel="stylesheet" href="/static/css/main.css">
@@ -19,7 +19,7 @@
     <main>
         <section>
             <h2>Getting Started</h2>
-            <p>Welcome to WikiWare! This help page provides guidance on using the platform.</p>
+            <p>Welcome to {{ config.NAME }}! This help page provides guidance on using the platform.</p>
         </section>
         <section>
             <h2>Frequently Asked Questions</h2>
@@ -32,11 +32,10 @@
         </section>
         <section>
             <h2>Contact Support</h2>
-            <p>If you need further assistance, please email <a href="mailto:support@wikiware.local">support@wikiware.local</a>.</p>
         </section>
     </main>
     <footer>
-        <p>&copy; 2024 WikiWare</p>
+        <p>&copy; 2024 {{ config.NAME }}</p>
     </footer>
 </body>
 </html>

@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
-from .config import APP_TITLE, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
+from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
 from .routes import (
     pages,
@@ -29,6 +29,7 @@ from loguru import logger
 import os
 import secrets
 from .middleware.security_headers import SecurityHeadersMiddleware
+from .utils.template_env import get_templates
 
 # Configure loguru
 os.makedirs("logs", exist_ok=True)
@@ -66,7 +67,11 @@ def get_csrf_config():
 
 
 # Create FastAPI app
-app = FastAPI(title=APP_TITLE, description=APP_DESCRIPTION)
+app = FastAPI(title=NAME, description=APP_DESCRIPTION)
+
+
+templates = get_templates()
+logger.info(NAME)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

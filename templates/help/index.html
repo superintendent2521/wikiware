@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Help - WikiWare</title>
+    <title>Help - {{ config.NAME }}</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
         /* Custom help page styling */
@@ -83,13 +83,13 @@
     <div class="container">
         <header>
             <h1>Help Center</h1>
-            <p>Everything you need to know about using WikiWare</p>
+            <p>Everything you need to know about using {{ config.NAME }}</p>
         </header>
 
         <main>
             <section class="help-section">
                 <h2>Getting Started</h2>
-                <p>WikiWare is a knowledge base for space history, mostly regarding starship. It allows users to create and share information easily. it also supports branches, which makes organizing related content simple and efficient.</p>
+                <p>{{ config.NAME }} is a knowledge base for space history, mostly regarding starship. It allows users to create and share information easily. it also supports branches, which makes organizing related content simple and efficient.</p>
                 <ul>
                     <li>To create your first page, start by searching for the title you’d like to use. If no results appear, you’ll have the option to create a new page with that title.</li>
                     <li>Use Markdown syntax to format your content</li>
@@ -109,7 +109,7 @@
 
             <section class="help-section">
                 <h2>Navigation</h2>
-                <p>WikiWare provides multiple ways to navigate your content.</p>
+            <p>{{ config.NAME }} provides multiple ways to navigate your content.</p>
                 <ul>
                     <li>Use the sidebar to browse your pages</li>
                     <li>Search for pages using the search bar at the top</li>
@@ -129,8 +129,7 @@
         </main>
 
         <footer>
-            <p>Need more help? Contact support at support@wikiware.com</p>
-        </footer>
+            <p>&copy; 2024 {{ config.NAME }}</p>
     </div>
 </body>
 </html>

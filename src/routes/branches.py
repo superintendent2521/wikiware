@@ -5,7 +5,6 @@ Handles branch management operations.
 
 from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
 from urllib.parse import urlparse, parse_qsl, urlencode
 from ..services.branch_service import BranchService
@@ -16,12 +15,14 @@ from ..utils.validation import (
     is_safe_branch_parameter,
     sanitize_referer_url,
 )
-from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
+from ..utils.template_env import get_templates
+
 from loguru import logger
 
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:

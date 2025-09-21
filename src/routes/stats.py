@@ -5,17 +5,18 @@ Handles statistics display.
 
 from fastapi import APIRouter, Request, Depends, Response, HTTPException
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
 from ..services.branch_service import BranchService
 from ..database import db_instance
-from ..config import TEMPLATE_DIR
 from ..stats import get_stats, get_user_edit_stats
 from ..middleware.auth_middleware import AuthMiddleware
+from ..utils.template_env import get_templates
+
 from loguru import logger
 
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 # Context processor to inject global stats into all templates

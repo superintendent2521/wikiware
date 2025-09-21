@@ -5,17 +5,18 @@ Handles search functionality.
 
 from fastapi import APIRouter, Request, Depends, Response
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
 from ..services.page_service import PageService
 from ..services.branch_service import BranchService
 from ..database import db_instance
-from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
+from ..utils.template_env import get_templates
+
 from loguru import logger
 
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 @router.get("/search", response_class=HTMLResponse)

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Login - WikiWare{% endblock %}
+{% block title %}Login - {{ config.NAME }}{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="auth-container">
-        <h2>Login to WikiWare</h2>
+        <h2>Login to {{ config.NAME }}</h2>
         
         {% if error %}
         <div class="alert alert-error">

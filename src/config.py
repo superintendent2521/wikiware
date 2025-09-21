@@ -31,6 +31,9 @@ LOG_DIR = "logs"
 LOG_RETENTION = "7 days"
 LOG_LEVEL = "INFO"
 
+# Name shown on all pages
+NAME = "WikiWare"
+
 # Template settings
 TEMPLATE_DIR = "templates"
 

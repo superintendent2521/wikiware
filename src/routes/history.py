@@ -5,7 +5,6 @@ Handles page version history and restoration.
 
 from fastapi import APIRouter, Request, Form, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
 import markdown
 from difflib import HtmlDiff
@@ -15,13 +14,15 @@ from ..utils.sanitizer import sanitize_html
 from ..database import get_pages_collection, get_history_collection, db_instance
 from ..services.branch_service import BranchService
 from ..utils.validation import is_valid_title, is_safe_branch_parameter
-from ..config import TEMPLATE_DIR
 from ..middleware.auth_middleware import AuthMiddleware
+from ..utils.template_env import get_templates
+
 from datetime import datetime, timezone
 from loguru import logger
 
 router = APIRouter()
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+templates = get_templates()
 
 
 def _build_page_redirect_url(

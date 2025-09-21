@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Register - WikiWare{% endblock %}
+{% block title %}Register - {{ config.NAME }}{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="auth-container">
-        <h2>Register for WikiWare</h2>
+        <h2>Register for {{ config.NAME }}</h2>
         
         {% if error %}
         <div class="alert alert-error">
