@@ -32,7 +32,7 @@ LOG_RETENTION = "7 days"
 LOG_LEVEL = "INFO"
 
 # Name shown on all pages
-NAME = "WikiWare"
+NAME = "Starship Wiki"
 
 # Template settings
 TEMPLATE_DIR = "templates"
