@@ -369,7 +369,6 @@ async def save_page(
     content: str = Form(...),
     author: str = Form("Anonymous"),
     branch: str = Form("main"),
-    summary: str = Form(""),
 ):
     """Save page changes."""
     try:
@@ -403,7 +402,7 @@ async def save_page(
         author = user["username"]
 
         # Save the page
-        success = await PageService.update_page(title, content, author, branch, summary)
+        success = await PageService.update_page(title, content, author, branch)
 
         if success:
             redirect_url = _build_page_redirect_url(request, title, branch)

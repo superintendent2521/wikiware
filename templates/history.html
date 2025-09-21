@@ -22,10 +22,14 @@
     {% if branch %}
     <div class="branch-info">
         <p><strong>Current Branch:</strong> {{ branch }}</p>
-        <p><strong>Total Versions:</strong> {{ versions|length }}</p>
     </div>
     {% endif %}
-
+    <div class="page-meta">
+        <p>
+            <strong>Revision History numbers increase with newer versions. Read more <a href="/help/revision_history">here</a>.</strong><br>
+            <strong>Total Versions:</strong> {{ versions|length }}
+        </p>
+    </div>
 
     {% if versions %}
     {% if versions|length > 1 %}

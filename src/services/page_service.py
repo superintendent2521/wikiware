@@ -94,7 +94,7 @@ class PageService:
 
     @staticmethod
     async def update_page(
-        title: str, content: str, author: str = "Anonymous", branch: str = "main", summary: str = ""
+        title: str, content: str, author: str = "Anonymous", branch: str = "main"
     ) -> bool:
         """
         Update an existing page.
@@ -137,7 +137,6 @@ class PageService:
                         "author": existing_page.get("author", "Anonymous"),
                         "branch": branch,
                         "updated_at": existing_page["updated_at"],
-                        "summary": summary,
                     }
                     await history_collection.insert_one(history_item)
 
