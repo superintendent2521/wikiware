@@ -75,8 +75,14 @@ async def get_total_characters():
         return last_character_count
     else:
         # Log time delta safely
-        time_delta = datetime.now() - last_character_count_time if last_character_count_time is not None else "never cached"
-        logger.info(f"Cache is old or uninitialized, Updating! Time delta is {time_delta}")
+        time_delta = (
+            datetime.now() - last_character_count_time
+            if last_character_count_time is not None
+            else "never cached"
+        )
+        logger.info(
+            f"Cache is old or uninitialized, Updating! Time delta is {time_delta}"
+        )
 
     try:
         pages_collection = get_pages_collection()

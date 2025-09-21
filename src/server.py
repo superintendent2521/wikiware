@@ -39,7 +39,9 @@ logger.add("logs/errors.log", rotation="1 day", retention="7 days", level="ERROR
 _CSRF_SECRET = os.getenv("CSRF_SECRET_KEY")
 if not _CSRF_SECRET:
     _CSRF_SECRET = secrets.token_urlsafe(64)
-    logger.warning("CSRF_SECRET_KEY not set; generated ephemeral secret key for this process")
+    logger.warning(
+        "CSRF_SECRET_KEY not set; generated ephemeral secret key for this process"
+    )
 
 
 class CsrfSettings(BaseModel):
@@ -80,6 +82,7 @@ app.mount("/help", StaticFiles(directory=HELP_STATIC_DIR), name="help")
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
 
+
 @app.middleware("http")
 async def inject_global_banner(request: Request, call_next):
     """Attach the global announcement banner to request state for templates."""
@@ -91,6 +94,7 @@ async def inject_global_banner(request: Request, call_next):
     request.state.global_banner = banner
     response = await call_next(request)
     return response
+
 
 # Include route modules
 app.include_router(pages.router)
@@ -108,6 +112,7 @@ app.include_router(user.router)
 app.include_router(log_streamer.router)
 # Initilize log streaming.
 log_streamer.setup_log_streaming(app, add_file_sink=False)
+
 
 @app.on_event("startup")
 async def startup_event():

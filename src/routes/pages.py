@@ -55,6 +55,7 @@ async def _is_user_page_title(title: str) -> bool:
     user_doc = await users_collection.find_one({"username": regex})
     return user_doc is not None
 
+
 @router.get("/", response_class=HTMLResponse)
 async def home(
     request: Request,
@@ -257,7 +258,10 @@ async def edit_page(
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
 
-        if await _is_user_page_title(title) and user["username"].casefold() != title.casefold():
+        if (
+            await _is_user_page_title(title)
+            and user["username"].casefold() != title.casefold()
+        ):
             logger.warning(
                 f"User {user['username']} attempted to edit personal page {title} via generic editor"
             )
@@ -371,7 +375,10 @@ async def save_page(
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
 
-        if await _is_user_page_title(title) and user["username"].casefold() != title.casefold():
+        if (
+            await _is_user_page_title(title)
+            and user["username"].casefold() != title.casefold()
+        ):
             logger.warning(
                 f"User {user['username']} attempted to save personal page {title} via generic editor"
             )
@@ -498,7 +505,9 @@ async def delete_branch(
             )
             # Validate before using in redirect URL
             if not is_valid_title(title) or not is_safe_branch_parameter(branch):
-                logger.warning(f"Attempted redirect with invalid title '{title}' or branch '{branch}'")
+                logger.warning(
+                    f"Attempted redirect with invalid title '{title}' or branch '{branch}'"
+                )
                 return RedirectResponse(url="/", status_code=303)
             safe_title = quote(title, safe="")
             safe_branch = quote(branch, safe="")

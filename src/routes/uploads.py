@@ -61,7 +61,11 @@ async def upload_image(
         # Check magic numbers for image types
         def _matches_magic_signature(content_type: str, data: bytes) -> bool:
             if content_type == "image/webp":
-                return len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP"
+                return (
+                    len(data) >= 12
+                    and data.startswith(b"RIFF")
+                    and data[8:12] == b"WEBP"
+                )
             if content_type == "image/gif":
                 return data.startswith(b"GIF87a") or data.startswith(b"GIF89a")
             magic_prefixes = {
@@ -174,4 +178,3 @@ async def upload_image(
         return JSONResponse(
             status_code=500, content={"error": "Failed to upload image"}
         )
-

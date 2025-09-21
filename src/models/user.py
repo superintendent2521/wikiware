@@ -15,7 +15,9 @@ class User(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
     is_admin: bool = False
-    page_edits: dict = Field(default_factory=dict)  # Dictionary to track edits per page: {"page_title": edit_count}
+    page_edits: dict = Field(
+        default_factory=dict
+    )  # Dictionary to track edits per page: {"page_title": edit_count}
     total_edits: int = 0  # Total number of edits by this user
 
     @validator("username")

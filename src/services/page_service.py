@@ -333,10 +333,18 @@ class PageService:
             }
 
             # (Optional) preview how many matches exist with each variant for better logs
-            count_title_branch = await pages_collection.count_documents({"title": title, "branch": branch})
-            count_title_branchname = await pages_collection.count_documents({"title": title, "branch_name": branch})
-            count_pagetitle_branch = await pages_collection.count_documents({"page_title": title, "branch": branch})
-            count_pagetitle_branchname = await pages_collection.count_documents({"page_title": title, "branch_name": branch})
+            count_title_branch = await pages_collection.count_documents(
+                {"title": title, "branch": branch}
+            )
+            count_title_branchname = await pages_collection.count_documents(
+                {"title": title, "branch_name": branch}
+            )
+            count_pagetitle_branch = await pages_collection.count_documents(
+                {"page_title": title, "branch": branch}
+            )
+            count_pagetitle_branchname = await pages_collection.count_documents(
+                {"page_title": title, "branch_name": branch}
+            )
             logger.info(
                 "Pages match counts — "
                 f"(title,branch)={count_title_branch}, "

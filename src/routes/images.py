@@ -17,6 +17,8 @@ from ..utils.template_env import get_templates
 router = APIRouter()
 
 templates = get_templates()
+
+
 def _list_images() -> List[Dict]:
     """Return a list of image file metadata from the uploads directory."""
     upload_path = Path(UPLOAD_DIR)
@@ -42,6 +44,8 @@ def _list_images() -> List[Dict]:
     # Sort by most recently modified first
     items.sort(key=lambda x: x["modified"], reverse=True)
     return items
+
+
 @router.get("/images", response_class=HTMLResponse)
 async def images_library(
     request: Request,
@@ -70,6 +74,8 @@ async def images_library(
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
+
+
 @router.get("/api/images", response_class=JSONResponse)
 async def list_images_api(request: Request):
     """Return JSON list of images; requires authentication."""

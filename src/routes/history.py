@@ -63,7 +63,9 @@ async def _fetch_versions_for_history(
 
     try:
         if pages_collection is not None:
-            current = await pages_collection.find_one({"title": title, "branch": branch})
+            current = await pages_collection.find_one(
+                {"title": title, "branch": branch}
+            )
             if current:
                 versions.append(current)
 
@@ -139,7 +141,9 @@ def _build_version_entries(versions: List[Dict[str, Any]]) -> List[Dict[str, Any
         if isinstance(updated_at, datetime):
             updated_at_display = updated_at.strftime("%Y-%m-%d %H:%M:%S")
         else:
-            updated_at_display = str(updated_at) if updated_at is not None else "Unknown"
+            updated_at_display = (
+                str(updated_at) if updated_at is not None else "Unknown"
+            )
 
         entries.append(
             {
@@ -229,13 +233,13 @@ async def page_history(
                 "history.html",
                 {
                     "request": request,
-                "title": title,
-                "versions": [],
-                "error": "Database error occurred",
-                "user": user,
-                "csrf_token": csrf_token,
-            },
-        )
+                    "title": title,
+                    "versions": [],
+                    "error": "Database error occurred",
+                    "user": user,
+                    "csrf_token": csrf_token,
+                },
+            )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
 

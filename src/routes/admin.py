@@ -18,6 +18,7 @@ router = APIRouter()
 
 templates = get_templates()
 
+
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_panel(
     request: Request, response: Response, csrf_protect: CsrfProtect = Depends()
@@ -67,10 +68,10 @@ async def admin_panel(
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
+
+
 @router.post("/admin/banner")
-async def update_banner(
-    request: Request, csrf_protect: CsrfProtect = Depends()
-):
+async def update_banner(request: Request, csrf_protect: CsrfProtect = Depends()):
     """Update the global banner message from the admin panel."""
     form = await request.form()
     await csrf_protect.validate_csrf(request)

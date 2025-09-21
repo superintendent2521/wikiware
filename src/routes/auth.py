@@ -20,6 +20,7 @@ router = APIRouter()
 
 templates = get_templates()
 
+
 @router.get("/register", response_class=HTMLResponse)
 async def register_form(
     request: Request, response: Response, csrf_protect: CsrfProtect = Depends()
@@ -40,6 +41,8 @@ async def register_form(
     csrf_protect.set_csrf_cookie(signed_token, template)
     logger.debug("CSRF cookie attached to registration response")
     return template
+
+
 @router.post("/register")
 async def register_user(
     request: Request,
@@ -140,6 +143,8 @@ async def register_user(
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_form(
     request: Request,
@@ -161,6 +166,8 @@ async def login_form(
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
+
+
 @router.post("/login")
 async def login_user(
     request: Request,
@@ -184,7 +191,9 @@ async def login_user(
         )
         user_agent = request.headers.get("user-agent", "unknown")
         if not db_instance.is_connected:
-            logger.error(f"Database not connected - cannot login user: {username} | {client_ip} | {user_agent} | db_offline | {request.url.path}")
+            logger.error(
+                f"Database not connected - cannot login user: {username} | {client_ip} | {user_agent} | db_offline | {request.url.path}"
+            )
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse(
                 "login.html",
@@ -203,7 +212,9 @@ async def login_user(
         )
         if not user:
             # Log failure using unified logger (also writes to file via loguru config)
-            logger.warning(f"Login failed: {username} | {client_ip} | {user_agent} | failure | {request.url.path}")
+            logger.warning(
+                f"Login failed: {username} | {client_ip} | {user_agent} | failure | {request.url.path}"
+            )
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
             template = templates.TemplateResponse(
                 "login.html",
@@ -243,12 +254,16 @@ async def login_user(
             max_age=3600 * 24 * 7,  # 1 week
         )
         # Log successful login using unified logger (also writes to file via loguru config)
-        logger.info(f"User logged in: {username} | {client_ip} | {user_agent} | success | {request.url.path}")
+        logger.info(
+            f"User logged in: {username} | {client_ip} | {user_agent} | success | {request.url.path}"
+        )
         return response
     except Exception as e:
         logger.error(f"Error logging in user {username}: {str(e)}")
         # Log error using unified logger (also writes to file via loguru config)
-        logger.error(f"Login error: {username} | {client_ip} | {user_agent} | error | {request.url.path}")
+        logger.error(
+            f"Login error: {username} | {client_ip} | {user_agent} | error | {request.url.path}"
+        )
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
         template = templates.TemplateResponse(
             "login.html",
@@ -261,6 +276,8 @@ async def login_user(
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
+
+
 @router.post("/logout")
 async def logout_user(
     request: Request, response: Response, csrf_protect: CsrfProtect = Depends()
