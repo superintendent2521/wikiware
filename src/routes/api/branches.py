@@ -1,20 +1,19 @@
 """
 Branch routes for WikiWare.
-Handles branch management operations.
+Handles branch management operations (API).
 """
 
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..database import db_instance
-from ..middleware.auth_middleware import AuthMiddleware
-from ..services.branch_service import BranchService
-from ..utils.template_env import get_templates
-from ..utils.validation import (
+from ...database import db_instance
+from ...middleware.auth_middleware import AuthMiddleware
+from ...services.branch_service import BranchService
+from ...utils.validation import (
     is_safe_branch_parameter,
     is_valid_branch_name,
     is_valid_title,
@@ -22,8 +21,6 @@ from ..utils.validation import (
 )
 
 router = APIRouter()
-
-templates = get_templates()
 
 
 def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
@@ -33,51 +30,6 @@ def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
     if safe_branch != "main":
         target_url = target_url.include_query_params(branch=safe_branch)
     return str(target_url)
-
-
-@router.get("/branches/{title}", response_class=HTMLResponse)
-async def list_branches(request: Request, title: str, branch: str = "main"):
-    """List all branches for a page."""
-    try:
-        if not db_instance.is_connected:
-            logger.warning(f"Database not connected - listing branches for: {title}")
-            return templates.TemplateResponse(
-                "edit.html",
-                {
-                    "request": request,
-                    "title": title,
-                    "content": "",
-                    "offline": True,
-                    "branch": branch,
-                },
-            )
-
-        branches = await BranchService.get_branches_for_page(title)
-
-        logger.info(f"Branches listed for page: {title}")
-        return templates.TemplateResponse(
-            "edit.html",
-            {
-                "request": request,
-                "title": title,
-                "content": "",
-                "branches": branches,
-                "offline": not db_instance.is_connected,
-                "branch": branch,
-            },
-        )
-    except Exception as e:
-        logger.error(f"Error listing branches for {title}: {str(e)}")
-        return templates.TemplateResponse(
-            "edit.html",
-            {
-                "request": request,
-                "title": title,
-                "content": "",
-                "offline": True,
-                "branch": branch,
-            },
-        )
 
 
 @router.post("/branches/{title}/create")

@@ -11,7 +11,24 @@ from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
 from loguru import logger
 
-from .routes.api import admin
+from .routes import (
+    api_admin,
+    api_auth,
+    api_branches,
+    api_exports,
+    api_pages,
+    api_stats,
+    api_uploads,
+    api_user,
+    web_admin,
+    web_auth,
+    web_branches,
+    web_exports,
+    web_pages,
+    web_search,
+    web_stats,
+    web_user,
+)
 from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
 from .routes import (
@@ -99,18 +116,26 @@ async def inject_global_banner(request: Request, call_next):
 
 
 # Include route modules
-app.include_router(pages.router)
-app.include_router(search.router)
+app.include_router(web_pages)
+app.include_router(web_search)
 app.include_router(history.router)
-app.include_router(branches.router)
-app.include_router(uploads.router)
-app.include_router(stats.router)
+app.include_router(web_branches)
+app.include_router(api_uploads)
+app.include_router(web_stats)
 app.include_router(logs.router)
-app.include_router(auth.router)
-app.include_router(admin.router)
+app.include_router(web_auth)
+app.include_router(api_admin)
+app.include_router(web_admin)
 app.include_router(images.router)
-app.include_router(user.router)
-app.include_router(exports.router)
+app.include_router(web_user)
+app.include_router(web_exports)
+# API routes
+app.include_router(api_pages)
+app.include_router(api_auth)
+app.include_router(api_branches)
+app.include_router(api_stats)
+app.include_router(api_user)
+app.include_router(api_exports)
 # From Utils, because its a service, not a route
 app.include_router(log_streamer.router)
 # Initilize log streaming.

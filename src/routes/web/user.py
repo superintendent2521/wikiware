@@ -1,34 +1,25 @@
 """
 Page routes for WikiWare.
-Handles user-specific page viewing, editing, and saving operations.
+Handles user-specific page viewing operations (web interface).
 """
 
 import markdown
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..database import db_instance
-from ..middleware.auth_middleware import AuthMiddleware
-from ..services.page_service import PageService
-from ..utils.link_processor import process_internal_links
-from ..utils.sanitizer import sanitize_html
-from ..utils.template_env import get_templates
-from ..utils.validation import is_safe_branch_parameter, is_valid_title
+from ...database import db_instance
+from ...middleware.auth_middleware import AuthMiddleware
+from ...services.page_service import PageService
+from ...utils.link_processor import process_internal_links
+from ...utils.sanitizer import sanitize_html
+from ...utils.template_env import get_templates
 
 router = APIRouter()
 
 templates = get_templates()
-
-
-def _build_user_page_redirect_url(request: Request, username: str, branch: str) -> str:
-    """Build an internal URL for the user page route with optional branch."""
-    target_url = request.url_for("user_page", username=username)
-    if branch != "main":
-        target_url = target_url.include_query_params(branch=branch)
-    return str(target_url)
 
 
 @router.get("/user/{username}", response_class=HTMLResponse)
@@ -167,56 +158,3 @@ async def edit_user_page(
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
-
-
-@router.post("/user/{username}/edit")
-async def save_user_page(
-    request: Request,
-    username: str,
-    content: str = Form(...),
-    branch: str = Form("main"),
-    edit_summary: str = Form(...),
-):
-    """Save user page changes."""
-    try:
-        user = await AuthMiddleware.require_auth(request)
-
-        if not db_instance.is_connected:
-            return {"error": "Database not available"}
-
-        # Only allow editing own page
-        if user["username"] != username:
-            raise HTTPException(
-                status_code=403, detail="You can only edit your own user page"
-            )
-
-        # Validate title (username) - must be safe for path inclusion
-        import re
-
-        if not is_valid_title(username) or not re.match(r"^[a-zA-Z0-9_-]+$", username):
-            raise HTTPException(status_code=400, detail="Invalid username")
-
-        if not is_safe_branch_parameter(branch):
-            logger.warning(
-                f"Invalid branch '{branch}' while saving user page for {username}, defaulting to main"
-            )
-            branch = "main"
-
-        # Use the authenticated user as the author
-        author = user["username"]
-
-        # Save the page
-        success = await PageService.update_page(
-            username, content, author, branch, edit_summary=edit_summary
-        )
-
-        if success:
-            redirect_url = _build_user_page_redirect_url(request, username, branch)
-            return RedirectResponse(url=redirect_url, status_code=303)
-        else:
-            return {"error": "Failed to save user page"}
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=303)
-    except Exception as e:
-        logger.error(f"Error saving user page {username} on branch {branch}: {str(e)}")
-        return {"error": "Failed to save user page, try again later."}
