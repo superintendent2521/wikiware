@@ -28,56 +28,52 @@
     </div>
     {% endif %}
 
-    <div class="page-header">
-        <div class="page-title-section">
-            <h2>{{ page.title }}</h2>
-        </div>
-        <div class="page-actions">
-            <div class="branch-selector">
-                <button type="button" class="branch-button" aria-haspopup="true" aria-expanded="false">
-                    <span class="branch-icon"><i class="fas fa-code-branch"></i></span>
-                    <span class="branch-name">{{ branch_value }}</span>
-                    <span class="dropdown-icon"><i class="fas fa-chevron-down"></i></span>
-                </button>
-                <div class="branch-dropdown" role="menu">
-                    <div class="branch-option {% if branch_value == 'main' %}current{% endif %}" data-branch="main">
-                        <span class="branch-icon"><i class="fas fa-code-branch"></i></span>
-                        <span class="branch-name">main</span>
-                    </div>
-                    {% if branches %}
-                    {% for b in branches %}
-                    {% if b != 'main' %}
-                    <div class="branch-option {% if branch_value == b %}current{% endif %}" data-branch="{{ b }}">
-                        <span class="branch-icon"><i class="fas fa-code-branch"></i></span>
-                        {% if page.title != 'Home' %}
-                            <input type="hidden" name="branch" value="{{ branch or 'main' }}">
-                        {% endif %}
-                        <span class="branch-name">{{ b }}</span>
-                    </div>
-                    {% endif %}
-                    {% endfor %}
-                    {% endif %}
-                </div>
-            </div>
-
-            {% if user %}
-            <a href="/history/{{ title }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
-            <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
-            {% endif %}
-            {% if user and user.is_admin %}
-            <form action="{{ delete_action }}" method="post" style="display: inline;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="hidden" name="branch" value="{{ branch_value }}">
-                <button type="submit" class="btn btn-danger" onclick="return confirm('{{ delete_confirm }}')"><i class="fas fa-trash"></i> {{ delete_label }}</button>
-            </form>
-            {% endif %}
-            {% if page.title != 'Home' %}
-                <a href="/?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
-            {% endif %}
-            </div>
-    </div>
-
-
+    <div class="page-header">
+        <div class="page-title-section">
+            <h2>{{ page.title }}</h2>
+        </div>
+        <div class="page-actions">
+            {% if page.title != 'Home' %}
+            <div class="branch-selector">
+                <button type="button" class="branch-button" aria-haspopup="true" aria-expanded="false">
+                    <span class="branch-icon"><i class="fas fa-code-branch"></i></span>
+                    <span class="branch-name">{{ branch_value }}</span>
+                    <span class="dropdown-icon"><i class="fas fa-chevron-down"></i></span>
+                </button>
+                <div class="branch-dropdown" role="menu">
+                    <div class="branch-option {% if branch_value == 'main' %}current{% endif %}" data-branch="main">
+                        <span class="branch-icon"><i class="fas fa-code-branch"></i></span>
+                        <span class="branch-name">main</span>
+                    </div>
+                    {% if branches %}
+                        {% for b in branches %}
+                            {% if b != 'main' %}
+                            <div class="branch-option {% if branch_value == b %}current{% endif %}" data-branch="{{ b }}">
+                                <span class="branch-icon"><i class="fas fa-code-branch"></i></span>
+                                <span class="branch-name">{{ b }}</span>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% if user %}
+            <a href="/history/{{ title }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
+            <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
+            {% endif %}
+            {% if user and user.is_admin %}
+            <form action="{{ delete_action }}" method="post" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="branch" value="{{ branch_value }}">
+                <button type="submit" class="btn btn-danger" onclick="return confirm('{{ delete_confirm }}')"><i class="fas fa-trash"></i> {{ delete_label }}</button>
+            </form>
+            {% endif %}
+            {% if page.title != 'Home' %}
+            <a href="/?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-home"></i> Back to Home</a>
+            {% endif %}
+        </div>
+    </div>
     {% if request.query_params.get('updated') %}
     <div class="alert alert-success">
         Updated. Please wait for it to propagate across caches.

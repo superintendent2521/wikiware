@@ -449,9 +449,15 @@ main {
 }
 
 .page-actions {
-    display: flex;
-    gap: var(--space-xs);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: .75rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
 }
+
+.page-actions.no-branches .branch-selector { display: none; }
 
 /* Page Content */
 .page-header {
