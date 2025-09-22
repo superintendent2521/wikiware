@@ -27,6 +27,7 @@ class Database:
 
         while retry_count < max_retries:
             try:
+                logger.info(f"Attempting to connect to MongoDB at {MONGODB_URL}...")
                 self.client = AsyncIOMotorClient(
                     MONGODB_URL, serverSelectionTimeoutMS=10000
                 )
