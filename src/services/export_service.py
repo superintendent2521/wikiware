@@ -157,15 +157,15 @@ class ExportService:
         with zipfile.ZipFile(in_memory, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(
                 "pages.json",
-                json.dumps(list(cls._serialize_documents(pages_data)), ensure_ascii=True),
+                json.dumps(list(cls._serialize_documents(pages_data)), ensure_ascii=False),
             )
             archive.writestr(
                 "history.json",
-                json.dumps(list(cls._serialize_documents(history_data)), ensure_ascii=True),
+                json.dumps(list(cls._serialize_documents(history_data)), ensure_ascii=False),
             )
             archive.writestr(
                 "branches.json",
-                json.dumps(list(cls._serialize_documents(branches_data)), ensure_ascii=True),
+                json.dumps(list(cls._serialize_documents(branches_data)), ensure_ascii=False),
             )
 
         await cls._update_last_export(username)
