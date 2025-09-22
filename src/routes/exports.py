@@ -76,13 +76,13 @@ async def download_collections(request: Request):
         raise HTTPException(status_code=404, detail="Account not found") from missing_user
     except StopAsyncIteration:
         async def empty_stream():
-            yield from ()
-
+            if False:
+                yield b""
         stream = empty_stream()
     else:
         async def stream_with_first_chunk(initial_chunk: bytes, remainder):
             yield initial_chunk
-            async for chunk in remainder:
+            async for chunk in remainder:    
                 yield chunk
 
         stream = stream_with_first_chunk(first_chunk, archive_stream)
