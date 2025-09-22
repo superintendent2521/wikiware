@@ -101,6 +101,10 @@ class ExportService:
         """Fetch all documents from the provided collection."""
         try:
             documents = await collection.find().to_list(length=cls.MAX_FETCH)
+            if len(documents) == cls.MAX_FETCH:
+                logger.warning(
+                    f"Reached MAX_FETCH limit ({cls.MAX_FETCH}) for {label} collection. Export may be incomplete."
+                )
             logger.info(f"Fetched {len(documents)} documents from {label} collection")
             return documents
         except Exception as exc:  # pragma: no cover - defensive logging
