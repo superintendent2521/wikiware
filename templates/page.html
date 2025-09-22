@@ -61,6 +61,7 @@
             </div>
 
             {% if user %}
+            <a href="/history/{{ title }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
             <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
             {% endif %}
             {% if user and user.is_admin %}
