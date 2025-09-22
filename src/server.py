@@ -24,6 +24,7 @@ from .routes import (
     admin,
     images,
     user,
+    exports,
 )
 from .services import log_streamer
 from .services.settings_service import SettingsService
@@ -108,6 +109,7 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(user.router)
+app.include_router(exports.router)
 # From Utils, because its a service, not a route
 app.include_router(log_streamer.router)
 # Initilize log streaming.

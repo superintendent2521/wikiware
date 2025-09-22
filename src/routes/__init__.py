@@ -15,6 +15,7 @@ from . import (
     admin,
     images,
     user,
+    exports,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "admin",
     "images",
     "user",
+    "exports",
 ]
