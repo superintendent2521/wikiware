@@ -115,7 +115,7 @@ class ExportService:
                 }
                 encoded = json.dumps(
                     serialized,
-                    ensure_ascii=True,
+                    ensure_ascii=False,
                     separators=(",", ":"),
                 ).encode("utf-8")
                 if first:
