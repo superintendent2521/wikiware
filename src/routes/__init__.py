@@ -4,6 +4,7 @@ This package contains all the route modules for the application.
 """
 
 # Import route modules for easier access
+from .api import admin
 from . import (
     pages,
     search,
@@ -12,7 +13,6 @@ from . import (
     uploads,
     stats,
     logs,
-    admin,
     images,
     user,
     exports,

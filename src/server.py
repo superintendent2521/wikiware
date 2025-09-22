@@ -10,6 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
 from loguru import logger
+
+from .routes.api import admin
 from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
 from .routes import (
@@ -21,7 +23,6 @@ from .routes import (
     stats,
     logs,
     auth,
-    admin,
     images,
     user,
     exports,
