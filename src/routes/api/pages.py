@@ -192,11 +192,8 @@ async def delete_branch(
                     f"Attempted redirect with invalid title '{title}' or branch '{branch}'"
                 )
                 return RedirectResponse(url="/", status_code=303)
-            safe_title = quote(title, safe="")
-            safe_branch = quote(branch, safe="")
-            return RedirectResponse(
-                url=f"/page/{safe_title}?branch={safe_branch}", status_code=303
-            )
+            redirect_url = _build_page_redirect_url(request, title, branch)
+            return RedirectResponse(url=redirect_url, status_code=303)
         else:
             logger.warning(f"Branch not found for deletion: {branch} from page {title}")
             return {"error": "Branch not found"}
