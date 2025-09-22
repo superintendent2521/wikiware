@@ -5,14 +5,13 @@ Provides utilities to bundle collections and enforce per-user rate limits.
 
 from __future__ import annotations
 
-import io
 import json
-import zipfile
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, AsyncIterator, Dict, Optional
 
 from bson import ObjectId
 from loguru import logger
+from zipstream.aiozipstream import AioZipStream
 
 from ..database import (
     db_instance,
@@ -43,6 +42,7 @@ class ExportService:
 
     EXPORT_INTERVAL = timedelta(hours=24)
     MAX_FETCH = 250_000  # safeguard to avoid unbounded cursor to_list calls
+    ZIP_CHUNK_SIZE = 64 * 1024
 
     @staticmethod
     async def _ensure_user(username: str) -> Dict[str, Any]:
@@ -53,7 +53,7 @@ class ExportService:
         return user
 
     @classmethod
-    async def _check_rate_limit(cls, user: Dict[str, Any]) -> Tuple[bool, datetime | None]:
+    async def _check_rate_limit(cls, user: Dict[str, Any]) -> tuple[bool, datetime | None]:
         """Return True if export is allowed, along with the stored timestamp."""
         last_export = user.get("last_collection_export_at")
         if isinstance(last_export, datetime):
@@ -90,38 +90,61 @@ class ExportService:
             return [ExportService._serialize_value(v) for v in value]
         return value
 
-    @classmethod
-    def _serialize_documents(cls, documents: Iterable[Dict[str, Any]]) -> Iterable[Dict[str, Any]]:
-        """Yield serialized documents ready for JSON dumping."""
-        for doc in documents:
-            yield {key: cls._serialize_value(value) for key, value in doc.items()}
+    @staticmethod
+    def build_export_filename(timestamp: Optional[datetime] = None) -> str:
+        """Create a timestamped filename for the export archive."""
+        timestamp = (timestamp or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+        return f"wikiware-collections-{timestamp}.zip"
 
     @classmethod
-    async def _fetch_collection(cls, collection, label: str) -> Iterable[Dict[str, Any]]:
-        """Fetch all documents from the provided collection."""
+    async def _stream_collection_json(cls, collection, label: str) -> AsyncIterator[bytes]:
+        """Yield a JSON array representation of the collection without buffering everything."""
         try:
-            documents = await collection.find().to_list(length=cls.MAX_FETCH)
-            if len(documents) == cls.MAX_FETCH:
-                logger.warning(
-                    f"Reached MAX_FETCH limit ({cls.MAX_FETCH}) for {label} collection. Export may be incomplete."
-                )
-            logger.info(f"Fetched {len(documents)} documents from {label} collection")
-            return documents
+            cursor = collection.find(limit=cls.MAX_FETCH)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error(f"Failed to fetch {label} collection: {exc}")
-            raise ExportUnavailableError(f"Failed to fetch {label} collection") from exc
+            logger.error(f"Failed to create cursor for {label} collection: {exc}")
+            raise ExportUnavailableError(f"Failed to stream {label} collection") from exc
+
+        first = True
+        count = 0
+        yield b"["
+        try:
+            async for document in cursor:
+                serialized = {
+                    key: cls._serialize_value(value) for key, value in document.items()
+                }
+                encoded = json.dumps(
+                    serialized,
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                if first:
+                    first = False
+                    yield encoded
+                else:
+                    yield b"," + encoded
+                count += 1
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error(f"Failed while streaming {label} collection: {exc}")
+            raise ExportUnavailableError(f"Failed to stream {label} collection") from exc
+        else:
+            if count == cls.MAX_FETCH:
+                logger.warning(
+                    f"Reached MAX_FETCH limit ({cls.MAX_FETCH}) for {label} collection. Export may be incomplete."  # pragma: no cover - logging only
+                )
+            yield b"]"
+            logger.info(
+                f"Streamed {count} documents from {label} collection"  # pragma: no cover - logging only
+            )
 
     @classmethod
-    async def generate_export_archive(cls, username: str) -> Tuple[bytes, str]:
-        """Generate a ZIP archive containing pages, history, and branches collections.
-
-        Returns:
-            Tuple of (archive_bytes, filename)
-
-        Raises:
-            ExportRateLimitError: if the user has exported within the cooldown period.
-            ExportUnavailableError: if required collections are unavailable.
-        """
+    async def generate_export_archive(
+        cls,
+        username: str,
+        *,
+        filename: Optional[str] = None,
+    ) -> AsyncIterator[bytes]:
+        """Stream a ZIP archive containing pages, history, and branches collections."""
         if not db_instance.is_connected:
             raise ExportUnavailableError("Database connection is not available")
 
@@ -144,40 +167,43 @@ class ExportService:
             )
             if coll is None
         ]
-
         if missing_collections:
             raise ExportUnavailableError(
                 f"{', '.join(missing_collections)} collection(s) are unavailable"
             )
 
-        pages_data = await cls._fetch_collection(pages_collection, "pages")
-        history_data = await cls._fetch_collection(history_collection, "history")
-        branches_data = await cls._fetch_collection(branches_collection, "branches")
+        archive_name = filename or cls.build_export_filename()
+        sources = [
+            {
+                "stream": cls._stream_collection_json(pages_collection, "pages"),
+                "name": "pages.json",
+                "compression": "deflate",
+            },
+            {
+                "stream": cls._stream_collection_json(history_collection, "history"),
+                "name": "history.json",
+                "compression": "deflate",
+            },
+            {
+                "stream": cls._stream_collection_json(branches_collection, "branches"),
+                "name": "branches.json",
+                "compression": "deflate",
+            },
+        ]
 
-        in_memory = io.BytesIO()
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        filename = f"wikiware-collections-{timestamp}.zip"
+        archive = AioZipStream(sources, chunksize=cls.ZIP_CHUNK_SIZE)
+        stream_completed = False
 
-        with zipfile.ZipFile(in_memory, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(
-                "pages.json",
-                json.dumps(list(cls._serialize_documents(pages_data)), ensure_ascii=False),
-            )
-            archive.writestr(
-                "history.json",
-                json.dumps(list(cls._serialize_documents(history_data)), ensure_ascii=False),
-            )
-            archive.writestr(
-                "branches.json",
-                json.dumps(list(cls._serialize_documents(branches_data)), ensure_ascii=False),
-            )
-
-        await cls._update_last_export(username)
-        in_memory.seek(0)
-        logger.info(
-            f"Collections export generated for user {username} with archive size {in_memory.getbuffer().nbytes} bytes"
-        )
-        return in_memory.read(), filename
+        try:
+            async for chunk in archive.stream():
+                yield chunk
+            stream_completed = True
+        finally:
+            if stream_completed:
+                await cls._update_last_export(username)
+                logger.info(
+                    f"Collections export streamed for user {username} with archive {archive_name}"  # pragma: no cover - logging only
+                )
 
 
 __all__ = ["ExportService", "ExportRateLimitError", "ExportUnavailableError"]

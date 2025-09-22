@@ -3,7 +3,6 @@ Export routes for WikiWare.
 Provides endpoints to download database collections with per-user rate limiting.
 """
 
-import io
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -49,9 +48,11 @@ async def download_collections(request: Request):
     """Allow an authenticated user to download wiki collections as a ZIP file."""
     user = await AuthMiddleware.require_auth(request)
     username = user["username"]
+    filename = ExportService.build_export_filename()
+    archive_stream = ExportService.generate_export_archive(username, filename=filename)
 
     try:
-        archive_bytes, filename = await ExportService.generate_export_archive(username)
+        first_chunk = await archive_stream.__anext__()
     except ExportRateLimitError as rate_error:
         next_allowed = rate_error.next_allowed
         logger.info(
@@ -73,7 +74,19 @@ async def download_collections(request: Request):
     except ValueError as missing_user:
         logger.warning(f"Export denied for {username}: {missing_user}")
         raise HTTPException(status_code=404, detail="Account not found") from missing_user
+    except StopAsyncIteration:
+        async def empty_stream():
+            if False:
+                yield b""
 
-    stream = io.BytesIO(archive_bytes)
+        stream = empty_stream()
+    else:
+        async def stream_with_first_chunk(initial_chunk: bytes, remainder):
+            yield initial_chunk
+            async for chunk in remainder:
+                yield chunk
+
+        stream = stream_with_first_chunk(first_chunk, archive_stream)
+
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(stream, media_type="application/zip", headers=headers)
