@@ -41,26 +41,6 @@
         </div>
     </div>
 
-    <!-- Edit Summary Modal -->
-    <div id="editSummaryModal" class="modal" style="display: none;">
-        <div class="modal-content summary-modal">
-            <span class="close" aria-label="Close">&times;</span>
-            <h3 class="modal-title">Edit Summary</h3>
-            <form id="editSummaryForm" class="edit-summary-form">
-                <div class="form-group">
-                    <label for="editSummaryInput">Summarize your changes<span aria-hidden="true">*</span></label>
-                    <textarea id="editSummaryInput" class="form-control" rows="3" maxlength="250" required placeholder="Briefly describe what changed"></textarea>
-                    <small class="form-helper">This summary appears on the history page.</small>
-                </div>
-                <div id="editSummaryStatus" class="modal-status" role="status"></div>
-                <div class="form-actions modal-actions">
-                    <button type="submit" class="btn btn-primary">Save Summary</button>
-                    <button type="button" id="editSummaryCancel" class="btn btn-secondary">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <!-- Image Upload Modal -->
     <div id="imageUploadModal" class="modal" style="display: none;">
         <div class="modal-content image-modal">
@@ -235,6 +215,25 @@
                 <textarea id="content" name="content" rows="20" class="raw-editor" style="display:none;">{{ content }}</textarea>
             </div>
 
+            <div id="editSummaryInline" class="edit-summary-inline" hidden aria-hidden="true">
+                <div class="summary-header">
+                    <h3 class="modal-title">Edit Summary</h3>
+                    <button type="button" id="editSummaryClose" class="summary-close" aria-label="Close summary panel">&times;</button>
+                </div>
+                <div class="form-group">
+                    <div class="summary-label-row">
+                        <label for="editSummaryInput">Summarize your changes<span aria-hidden="true">*</span></label>
+                        <small class="form-helper">This summary appears on the history page.</small>
+                    </div>
+                    <textarea id="editSummaryInput" class="form-control" rows="3" maxlength="250" placeholder="Briefly describe what changed"></textarea>
+                </div>
+                <div id="editSummaryStatus" class="summary-status" role="status"></div>
+                <div class="summary-actions">
+                    <button type="button" id="editSummarySave" class="btn btn-primary">Save Summary</button>
+                    <button type="button" id="editSummaryCancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Page</button>
                 <a href="{{ view_path }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
@@ -276,13 +275,13 @@
         }
 
         const editForm = document.getElementById('editForm');
-        const editSummaryModal = document.getElementById('editSummaryModal');
-        const editSummaryForm = document.getElementById('editSummaryForm');
+        const editSummaryPanel = document.getElementById('editSummaryInline');
         const editSummaryInput = document.getElementById('editSummaryInput');
         const editSummaryHidden = document.getElementById('editSummaryHidden');
         const editSummaryCancel = document.getElementById('editSummaryCancel');
         const editSummaryStatus = document.getElementById('editSummaryStatus');
-        const editSummaryCloseBtn = editSummaryModal ? editSummaryModal.querySelector('.close') : null;
+        const editSummarySave = document.getElementById('editSummarySave');
+        const editSummaryCloseBtn = document.getElementById('editSummaryClose');
         let summaryConfirmed = false;
 
         function resetSummaryStatus() {
@@ -291,67 +290,77 @@
             }
         }
 
-        function closeSummaryModal() {
-            if (!editSummaryModal) return;
-            editSummaryModal.style.display = 'none';
-            editSummaryModal.setAttribute('aria-hidden', 'true');
+        function hideSummaryPanel() {
+            if (!editSummaryPanel) return;
+            editSummaryPanel.hidden = true;
+            editSummaryPanel.setAttribute('aria-hidden', 'true');
             resetSummaryStatus();
         }
 
-        function openSummaryModal() {
-            if (!editSummaryModal) return;
+        function showSummaryPanel() {
+            if (!editSummaryPanel) return;
             resetSummaryStatus();
-            editSummaryModal.style.display = 'block';
-            editSummaryModal.setAttribute('aria-hidden', 'false');
+            const existing = editSummaryHidden ? editSummaryHidden.value : '';
             if (editSummaryInput) {
-                const existing = editSummaryHidden ? editSummaryHidden.value : '';
                 editSummaryInput.value = existing || '';
-                requestAnimationFrame(() => {
+            }
+            editSummaryPanel.hidden = false;
+            editSummaryPanel.setAttribute('aria-hidden', 'false');
+            requestAnimationFrame(() => {
+                if (editSummaryInput) {
                     try {
                         editSummaryInput.focus({ preventScroll: true });
                     } catch (_) {
                         editSummaryInput.focus();
                     }
-                });
+                }
+                if (editSummaryPanel && typeof editSummaryPanel.scrollIntoView === 'function') {
+                    editSummaryPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
+        }
+
+        function confirmSummary() {
+            const summaryValue = editSummaryInput ? editSummaryInput.value.trim() : '';
+            if (!summaryValue) {
+                if (editSummaryStatus) {
+                    editSummaryStatus.innerHTML = '<div class="alert alert-error">Please add a brief summary.</div>';
+                }
+                if (editSummaryInput) {
+                    editSummaryInput.focus();
+                }
+                return;
+            }
+            if (editSummaryHidden) {
+                editSummaryHidden.value = summaryValue;
+            }
+            summaryConfirmed = true;
+            hideSummaryPanel();
+            if (editForm) {
+                if (typeof editForm.requestSubmit === 'function') {
+                    editForm.requestSubmit();
+                } else {
+                    editForm.submit();
+                }
             }
         }
 
-        if (editSummaryForm) {
-            editSummaryForm.addEventListener('submit', (event) => {
-                event.preventDefault();
-                const summaryValue = editSummaryInput ? editSummaryInput.value.trim() : '';
-                if (!summaryValue) {
-                    if (editSummaryStatus) {
-                        editSummaryStatus.innerHTML = '<div class="alert alert-error">Please add a brief summary.</div>';
-                    }
-                    if (editSummaryInput) {
-                        editSummaryInput.focus();
-                    }
-                    return;
-                }
-                if (editSummaryHidden) {
-                    editSummaryHidden.value = summaryValue;
-                }
-                summaryConfirmed = true;
-                closeSummaryModal();
-                if (editForm) {
-                    if (typeof editForm.requestSubmit === 'function') {
-                        editForm.requestSubmit();
-                    } else {
-                        editForm.submit();
-                    }
-                }
-            });
+        if (editSummarySave) {
+            editSummarySave.addEventListener('click', confirmSummary);
         }
 
         if (editSummaryCancel) {
             editSummaryCancel.addEventListener('click', () => {
-                closeSummaryModal();
+                summaryConfirmed = false;
+                hideSummaryPanel();
             });
         }
 
         if (editSummaryCloseBtn) {
-            editSummaryCloseBtn.addEventListener('click', closeSummaryModal);
+            editSummaryCloseBtn.addEventListener('click', () => {
+                summaryConfirmed = false;
+                hideSummaryPanel();
+            });
         }
 
         if (editForm) {
@@ -365,7 +374,7 @@
                     return;
                 }
                 event.preventDefault();
-                openSummaryModal();
+                showSummaryPanel();
             });
         }
 
@@ -691,8 +700,9 @@
                 if (wikiLinkModal && wikiLinkModal.style.display === 'block') {
                     hideWikiLinkModal();
                 }
-                if (editSummaryModal && editSummaryModal.style.display === 'block') {
-                    closeSummaryModal();
+                if (editSummaryPanel && !editSummaryPanel.hidden) {
+                    summaryConfirmed = false;
+                    hideSummaryPanel();
                 }
             }
         });
