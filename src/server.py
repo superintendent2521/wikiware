@@ -79,7 +79,7 @@ app = FastAPI(title=NAME, description=APP_DESCRIPTION)
 
 
 templates = get_templates()
-logger.info(f"{NAME} templates loaded from {templates.directory}")
+logger.info(f"Wiki Name is {NAME}  ")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
