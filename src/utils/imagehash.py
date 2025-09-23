@@ -30,6 +30,15 @@ def calculate_sha256(file_path: Path) -> str:
         logger.error(f"Error calculating hash for {file_path}: {e}")
         return ""
 
+def get_all_image_hashes() -> List[Dict]:
+    """Retrieve all image hashes from the database."""
+    collection = get_image_hashes_collection()
+    if collection is None:
+        logger.error("Image hashes collection not available")
+        return []
+    return list(collection.find({}))
+
+
 
 async def update_image_hashes():
     """Calculate SHA256 hashes for all images and store in database."""
