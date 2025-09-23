@@ -6,8 +6,7 @@ Provides API endpoints for statistics.
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
-from ...database import db_instance
-from ...stats import get_user_edit_stats
+from ...database import db_instance, get_users_collection
 
 router = APIRouter()
 
