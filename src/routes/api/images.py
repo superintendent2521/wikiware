@@ -47,4 +47,6 @@ def _list_images() -> List[Dict]:
 async def list_images_api(request: Request):
     """Return JSON list of images; requires authentication."""
     await AuthMiddleware.require_auth(request)
-    return JSONResponse(content={"items": _list_images()})
+    loop = asyncio.get_running_loop()
+    items = await loop.run_in_executor(None, _list_images)
+    return JSONResponse(content={"items": items})
