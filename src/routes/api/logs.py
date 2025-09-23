@@ -10,8 +10,8 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..middleware.auth_middleware import AuthMiddleware
-from ..utils.logs import LogUtils
+from ...middleware.auth_middleware import AuthMiddleware
+from ...utils.logs import LogUtils
 
 router = APIRouter()
 

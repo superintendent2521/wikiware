@@ -13,9 +13,9 @@ from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
 from loguru import logger
 
-from ..config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
-from ..middleware.auth_middleware import AuthMiddleware
-from ..utils.validation import sanitize_filename
+from ...config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
+from ...middleware.auth_middleware import AuthMiddleware
+from ...utils.validation import sanitize_filename
 
 router = APIRouter()
 

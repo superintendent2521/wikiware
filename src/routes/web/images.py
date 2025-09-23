@@ -7,14 +7,14 @@ from pathlib import Path
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..config import UPLOAD_DIR
-from ..database import db_instance
-from ..middleware.auth_middleware import AuthMiddleware
-from ..utils.template_env import get_templates
+from ...config import UPLOAD_DIR
+from ...database import db_instance
+from ...middleware.auth_middleware import AuthMiddleware
+from ...utils.template_env import get_templates
 
 router = APIRouter()
 
@@ -76,10 +76,3 @@ async def images_library(
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
-
-
-@router.get("/api/images", response_class=JSONResponse)
-async def list_images_api(request: Request):
-    """Return JSON list of images; requires authentication."""
-    await AuthMiddleware.require_auth(request)
-    return JSONResponse(content={"items": _list_images()})

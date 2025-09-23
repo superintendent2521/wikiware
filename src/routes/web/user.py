@@ -10,13 +10,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..database import db_instance
-from ..middleware.auth_middleware import AuthMiddleware
-from ..services.page_service import PageService
-from ..utils.link_processor import process_internal_links
-from ..utils.sanitizer import sanitize_html
-from ..utils.template_env import get_templates
-from ..utils.validation import is_safe_branch_parameter, is_valid_title
+from ...database import db_instance
+from ...middleware.auth_middleware import AuthMiddleware
+from ...services.page_service import PageService
+from ...utils.link_processor import process_internal_links
+from ...utils.sanitizer import sanitize_html
+from ...utils.template_env import get_templates
+from ...utils.validation import is_safe_branch_parameter, is_valid_title
 
 router = APIRouter()
 

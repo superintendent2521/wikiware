@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 
-from ..database import db_instance, get_users_collection
-from ..middleware.auth_middleware import AuthMiddleware
-from ..services.settings_service import SettingsService
-from ..stats import get_stats
-from ..utils.logs import LogUtils
-from ..utils.template_env import get_templates
+from ...database import db_instance, get_users_collection
+from ...middleware.auth_middleware import AuthMiddleware
+from ...services.settings_service import SettingsService
+from ...stats import get_stats
+from ...utils.logs import LogUtils
+from ...utils.template_env import get_templates
 
 router = APIRouter()
 

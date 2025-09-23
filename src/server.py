@@ -12,19 +12,24 @@ from pydantic import BaseModel
 from loguru import logger
 from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
-from .routes import (
+from .routes.web import (
     pages,
     search,
     history,
     branches,
-    uploads,
     stats,
-    logs,
     auth,
     admin,
     images,
     user,
     exports,
+)
+from .routes.api import (
+    uploads,
+    logs,
+    stats as api_stats,
+    images as api_images,
+    exports as api_exports,
 )
 from .services import log_streamer
 from .services.settings_service import SettingsService
@@ -110,6 +115,10 @@ app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(user.router)
 app.include_router(exports.router)
+# API routes
+app.include_router(api_stats.router)
+app.include_router(api_images.router)
+app.include_router(api_exports.router)
 # From Utils, because its a service, not a route
 app.include_router(log_streamer.router)
 # Initilize log streaming.
