@@ -11,7 +11,7 @@ from typing import Dict, List
 from loguru import logger
 
 from ..database import get_image_hashes_collection
-from ..utils.images import _list_images
+from .images import _list_images
 from ..config import UPLOAD_DIR
 
 
