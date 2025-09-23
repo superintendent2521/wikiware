@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict, List
 
-from config import UPLOAD_DIR
+from ..config import UPLOAD_DIR
 
 from loguru import logger
 

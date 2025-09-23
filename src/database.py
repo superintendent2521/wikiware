@@ -92,6 +92,11 @@ def get_users_collection():
     return db_instance.get_collection("users")
 
 
+def get_image_hashes_collection():
+    """Get the image_hashes collection."""
+    return db_instance.get_collection("image_hashes")
+
+
 # Helper functions
 async def create_indexes():
     """Create required indexes on MongoDB collections."""
@@ -126,6 +131,13 @@ async def create_indexes():
             await sessions.create_index("user_id")
             await sessions.create_index("expires_at", expireAfterSeconds=0)
             logger.info("Sessions collection indexes created")
+
+        # Create indexes for image_hashes collection
+        image_hashes = get_image_hashes_collection()
+        if image_hashes is not None:
+            await image_hashes.create_index("filename", unique=True)
+            await image_hashes.create_index("sha256")
+            logger.info("Image hashes collection indexes created")
 
 
 async def init_database():
