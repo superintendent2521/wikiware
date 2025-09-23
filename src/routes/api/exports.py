@@ -52,7 +52,8 @@ async def download_collections(request: Request):
         raise HTTPException(status_code=404, detail="Account not found") from missing_user
     except StopAsyncIteration:
         async def empty_stream():
-            yield from ()
+            async for item in ():
+                yield item
 
         stream = empty_stream()
     else:
