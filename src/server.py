@@ -79,7 +79,7 @@ app = FastAPI(title=NAME, description=APP_DESCRIPTION)
 
 
 templates = get_templates()
-logger.info(NAME)
+logger.info(f"{NAME} templates loaded from {templates.directory}")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
