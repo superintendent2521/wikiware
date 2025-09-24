@@ -121,6 +121,8 @@ class PageService:
         author: str = "Anonymous",
         branch: str = "main",
         edit_summary: Optional[str] = None,
+        edit_permission: str = "everybody",
+        allowed_users: Optional[List[str]] = None,
     ) -> bool:
         """
         Update an existing page.
@@ -183,6 +185,8 @@ class PageService:
                             "content": new_content,
                             "author": author,
                             "edit_summary": summary,
+                            "edit_permission": edit_permission,
+                            "allowed_users": allowed_users or [],
                             "updated_at": datetime.now(timezone.utc),
                         }
                     },
