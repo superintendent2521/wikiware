@@ -57,6 +57,7 @@ async def _is_user_page_title(title: str) -> bool:
     return user_doc is not None
 
 
+
 @router.get("/", response_class=HTMLResponse)
 async def home(
     request: Request,
@@ -156,6 +157,11 @@ async def get_page(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
+
+        # Check for user page redirect: /page/User?branch=username -> /user/username
+        if title == "User" and branch != "main":
+            redirect_url = request.url_for("user_page", username=branch)
+            return RedirectResponse(url=str(redirect_url), status_code=303)
 
         # Get page-specific branches
         branches = await BranchService.get_branches_for_page(title)

@@ -90,9 +90,16 @@ class PageService:
 
             summary = PageService._normalize_summary(edit_summary)
 
+            # For talk branches, add signature to content
+            if branch == "talk":
+                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                signed_content = f"{content} ([[User:{author}]] {timestamp})"
+            else:
+                signed_content = content
+
             page_data = {
                 "title": title,
-                "content": content,
+                "content": signed_content,
                 "author": author,
                 "branch": branch,
                 "edit_summary": summary,
@@ -161,11 +168,19 @@ class PageService:
                     }
                     await history_collection.insert_one(history_item)
 
+                # For talk branch, append with signature instead of replacing
+                if branch == "talk":
+                    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    signature = f"\n\n{content} ([[User:{author}]] {timestamp})"
+                    new_content = existing_page["content"] + signature
+                else:
+                    new_content = content
+
                 await pages_collection.update_one(
                     {"title": title, "branch": branch},
                     {
                         "$set": {
-                            "content": content,
+                            "content": new_content,
                             "author": author,
                             "edit_summary": summary,
                             "updated_at": datetime.now(timezone.utc),
@@ -184,16 +199,39 @@ class PageService:
                 logger.info(f"Page updated: {title} on branch: {branch} by {author}")
                 return True
             else:
-                created = await PageService.create_page(
-                    title, content, author, branch, edit_summary=summary
-                )
-                if created and author != "Anonymous":
-                    if users_collection is not None:
+                # Check if this is the first branch ever created for this page
+                
+                any_existing_page = await pages_collection.find_one({"title": title})
+                if not any_existing_page:
+                    # Create both main and talk branches for new pages
+                    async with await db_instance.client.start_session() as s:
+                        async with s.start_transaction():
+                            created_main = await PageService.create_page(
+                                title, content, author, "main", edit_summary=summary
+                            )
+                            created_talk = await PageService.create_page(
+                                title, "", author, "talk", edit_summary="wikibot: Auto-created talk page"
+                            )
+                    if created_main and created_talk:
+                        if author != "Anonymous" and users_collection is not None:
+                            await users_collection.update_one(
+                                {"username": author},
+                                {"$inc": {"total_edits": 2, f"page_edits.{title}": 2}},
+                            )
+                        return True
+                    else:
+                        return False
+                else:
+                    # Page exists on other branches, just create this specific branch
+                    created = await PageService.create_page(
+                        title, content, author, branch, edit_summary=summary
+                    )
+                    if created and author != "Anonymous" and users_collection is not None:
                         await users_collection.update_one(
                             {"username": author},
                             {"$inc": {"total_edits": 1, f"page_edits.{title}": 1}},
                         )
-                return created
+                    return created
         except Exception as e:
             logger.error(f"Error updating page {title} on branch {branch}: {str(e)}")
             return False
