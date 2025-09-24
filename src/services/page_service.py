@@ -184,16 +184,36 @@ class PageService:
                 logger.info(f"Page updated: {title} on branch: {branch} by {author}")
                 return True
             else:
-                created = await PageService.create_page(
-                    title, content, author, branch, edit_summary=summary
-                )
-                if created and author != "Anonymous":
-                    if users_collection is not None:
+                # Check if this is the first branch ever created for this page
+                any_existing_page = await pages_collection.find_one({"title": title})
+                if not any_existing_page:
+                    # Create both main and talk branches for new pages
+                    created_main = await PageService.create_page(
+                        title, content, author, "main", edit_summary=summary
+                    )
+                    created_talk = await PageService.create_page(
+                        title, content, author, "talk", edit_summary=summary
+                    )
+                    if created_main and created_talk:
+                        if author != "Anonymous" and users_collection is not None:
+                            await users_collection.update_one(
+                                {"username": author},
+                                {"$inc": {"total_edits": 2, f"page_edits.{title}": 2}},
+                            )
+                        return True
+                    else:
+                        return False
+                else:
+                    # Page exists on other branches, just create this specific branch
+                    created = await PageService.create_page(
+                        title, content, author, branch, edit_summary=summary
+                    )
+                    if created and author != "Anonymous" and users_collection is not None:
                         await users_collection.update_one(
                             {"username": author},
                             {"$inc": {"total_edits": 1, f"page_edits.{title}": 1}},
                         )
-                return created
+                    return created
         except Exception as e:
             logger.error(f"Error updating page {title} on branch {branch}: {str(e)}")
             return False

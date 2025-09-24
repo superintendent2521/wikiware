@@ -86,10 +86,10 @@ Utility functions provide reusable helpers across the application.
   - URL-encodes spaces in titles and branch names
 
 #### `logs.py`
-- `get_paginated_logs(page: int = 1, limit: int = 50, action_type: Optional[str] = None)`: Get paginated logs
+- `get_paginated_logs(page: int = 1, limit: int = 50, bypass: bool = False, action_type: Optional[str] = None)`: Get paginated logs
   - Combines edit history and branch creation events
   - Returns structured JSON with pagination metadata
-  - Limits limit to 50 for performance. Pass `bypass=True` to return all matching entries when needed (use sparingly to avoid heavy queries).
+  - Limits limit to 50 for performance unless bypass=True. Pass `bypass=True` to return all matching entries when needed (use sparingly to avoid heavy queries).
 
 #### `markdown_extensions.py`
 - `InternalLinkExtension`: Markdown extension for `[[Page Title]]` syntax
@@ -106,6 +106,20 @@ Utility functions provide reusable helpers across the application.
 - `is_valid_title(title: str)`: Validate page title (no "..", no "/", no empty)
 - `is_valid_branch_name(branch_name: str)`: Validate branch name (no "..", no "/", no "\", not reserved)
 - `sanitize_filename(filename: str)`: Sanitize uploaded filenames (replace dangerous chars with underscores)
+
+#### `imagehash.py`
+- `calculate_sha256(file_path: Path)`: Calculate SHA256 hash of a file
+- `get_all_image_hashes()`: Retrieve all image hashes from the database
+- `update_image_hashes()`: Calculate SHA256 hashes for all images and store in database
+
+#### `images.py`
+- `_list_images()`: Return a list of image file metadata from the uploads directory
+
+#### `sanitizer.py`
+- `sanitize_html(html: str)`: Sanitize HTML produced from Markdown to prevent XSS using Bleach
+
+#### `template_env.py`
+- `get_templates()`: Return the shared Jinja2Templates instance with global config
 
 # Log Streaming Service
 
@@ -215,16 +229,25 @@ The service is designed to be initialized **once per application** via `setup_lo
 }
 ```
 
-### Logs Collection
+### Branches Collection
 ```json
 {
   "_id": "ObjectId",
-  "action": "string", // "edit" or "branch_create"
-  "title": "string",
-  "branch": "string",
-  "author": "string",
-  "timestamp": "ISODate",
-  "details": "object" // Contains additional context
+  "page_title": "string",
+  "branch_name": "string",
+  "created_from": "string",
+  "created_at": "ISODate"
+}
+```
+
+### Image Hashes Collection
+```json
+{
+  "_id": "ObjectId",
+  "filename": "string",
+  "sha256": "string",
+  "size": "integer",
+  "modified": "integer"
 }
 ```
 

@@ -16,7 +16,6 @@ from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...utils.template_env import get_templates
 from ...utils.images import _list_images
-from ...utils.imagehash import update_image_hashes
 router = APIRouter()
 
 templates = get_templates()
