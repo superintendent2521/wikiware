@@ -4,6 +4,7 @@ Handles page viewing, editing, and saving operations.
 """
 
 import re
+from typing import List, Optional
 from urllib.parse import quote
 
 import markdown
@@ -17,6 +18,7 @@ from ...middleware.auth_middleware import AuthMiddleware
 from ...services.branch_service import BranchService
 from ...services.page_service import PageService
 from ...services.user_service import UserService
+from ...database import get_users_collection
 from ...stats import get_stats
 from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
@@ -25,7 +27,55 @@ from ...utils.validation import is_safe_branch_parameter, is_valid_title
 
 router = APIRouter()
 
+EDIT_PERMISSION_EVERYBODY = "everybody"
+EDIT_PERMISSION_TEN_EDITS = "10_edits"
+EDIT_PERMISSION_FIFTY_EDITS = "50_edits"
+EDIT_PERMISSION_SELECT_USERS = "select_users"
+VALID_EDIT_PERMISSIONS = {
+    EDIT_PERMISSION_EVERYBODY,
+    EDIT_PERMISSION_TEN_EDITS,
+    EDIT_PERMISSION_FIFTY_EDITS,
+    EDIT_PERMISSION_SELECT_USERS,
+}
+
 templates = get_templates()
+
+def _sanitize_edit_permission(value: Optional[str]) -> str:
+    """Return a valid edit permission value, falling back to everybody."""
+    if not value:
+        return EDIT_PERMISSION_EVERYBODY
+    value = value.strip()
+    return value if value in VALID_EDIT_PERMISSIONS else EDIT_PERMISSION_EVERYBODY
+
+
+def _parse_allowed_users(raw: str) -> List[str]:
+    """Split a comma-separated allowed users string into a list."""
+    if not raw:
+        return []
+    return [username.strip() for username in raw.split(',') if username.strip()]
+
+
+def _render_error_page(
+    request: Request,
+    user: Optional[dict],
+    title: str,
+    message: str,
+    status_code: int = 403,
+) -> HTMLResponse:
+    """Render a shared error template with the provided message."""
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "title": title,
+            "message": message,
+            "user": user,
+            "branch": request.query_params.get("branch", "main"),
+            "offline": getattr(request.state, "offline", False),
+            "csrf_token": getattr(request.state, "csrf_token", ""),
+        },
+        status_code=status_code,
+    )
 
 
 def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
@@ -55,6 +105,30 @@ async def _is_user_page_title(title: str) -> bool:
     regex = {"$regex": f"^{re.escape(title)}$", "$options": "i"}
     user_doc = await users_collection.find_one({"username": regex})
     return user_doc is not None
+
+
+async def _can_user_edit_page(user: dict, page_data: Optional[dict]) -> bool:
+    """Check if user can edit the page based on permissions."""
+    if not page_data:
+        return True  # New page, anyone can create
+
+    permission = _sanitize_edit_permission(page_data.get('edit_permission'))
+    if permission == EDIT_PERMISSION_EVERYBODY:
+        return True
+    if permission == EDIT_PERMISSION_TEN_EDITS:
+        return user.get('total_edits', 0) >= 10
+    if permission == EDIT_PERMISSION_FIFTY_EDITS:
+        return user.get('total_edits', 0) >= 50
+    if permission == EDIT_PERMISSION_SELECT_USERS:
+        allowed_users = page_data.get('allowed_users', [])
+        if isinstance(allowed_users, list):
+            allowed_usernames = list(allowed_users)
+        elif isinstance(allowed_users, str):
+            allowed_usernames = _parse_allowed_users(allowed_users)
+        else:
+            allowed_usernames = []
+        return user.get('username') in allowed_usernames
+    return False
 
 
 
@@ -301,9 +375,38 @@ async def edit_page(
 
         # Get existing content
         content = ""
+        edit_permission = EDIT_PERMISSION_EVERYBODY
+        allowed_users: List[str] = []
         page = await PageService.get_page(title, branch)
         if page:
             content = page["content"]
+            edit_permission = _sanitize_edit_permission(page.get("edit_permission"))
+            allowed_users_data = page.get("allowed_users", [])
+            if isinstance(allowed_users_data, list):
+                allowed_users = list(allowed_users_data)
+            elif isinstance(allowed_users_data, str):
+                allowed_users = _parse_allowed_users(allowed_users_data)
+            else:
+                allowed_users = []
+            # Check if user can edit this page
+            if not await _can_user_edit_page(user, page):
+                return _render_error_page(
+                    request,
+                    user,
+                    "Access Denied",
+                    "You do not have permission to edit this page.",
+                    status_code=403,
+                )
+
+        # Get all users for the multi-select
+        all_users = []
+        if db_instance.is_connected:
+            users_collection = get_users_collection()
+            if users_collection is not None:
+                cursor = users_collection.find({}, {"username": 1})
+                async for user_doc in cursor:
+                    all_users.append(user_doc["username"])
+                all_users.sort()
 
         logger.info(
             f"Page edit accessed: {title} on branch: {branch} by user: {user['username']}"
@@ -340,6 +443,9 @@ async def edit_page(
                 "user": user,
                 "csrf_token": csrf_token,
                 "global": global_stats,
+                "edit_permission": edit_permission,
+                "allowed_users": allowed_users,
+                "all_users": all_users,
             },
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
@@ -377,6 +483,8 @@ async def save_page(
     author: str = Form("Anonymous"),
     branch: str = Form("main"),
     edit_summary: str = Form(...),
+    edit_permission: str = Form("everybody"),
+    allowed_users: str = Form(""),
 ):
     """Save page changes."""
     try:
@@ -409,9 +517,47 @@ async def save_page(
         # Use the authenticated user as the author
         author = user["username"]
 
+        page_data = await PageService.get_page(title, branch)
+
+        if not await _can_user_edit_page(user, page_data):
+            return _render_error_page(
+                request,
+                user,
+                "Access Denied",
+                "You do not have permission to edit this page.",
+                status_code=403,
+            )
+
+        is_admin = user.get("is_admin", False)
+        edit_permission = _sanitize_edit_permission(edit_permission)
+
+        if is_admin:
+            allowed_users_list = _parse_allowed_users(allowed_users)
+        else:
+            if page_data:
+                edit_permission = _sanitize_edit_permission(
+                    page_data.get("edit_permission")
+                )
+                existing_allowed_users = page_data.get("allowed_users", [])
+                if isinstance(existing_allowed_users, list):
+                    allowed_users_list = list(existing_allowed_users)
+                elif isinstance(existing_allowed_users, str):
+                    allowed_users_list = _parse_allowed_users(existing_allowed_users)
+                else:
+                    allowed_users_list = []
+            else:
+                edit_permission = EDIT_PERMISSION_EVERYBODY
+                allowed_users_list = []
+
         # Save the page
         success = await PageService.update_page(
-            title, content, author, branch, edit_summary=edit_summary
+            title,
+            content,
+            author,
+            branch,
+            edit_summary=edit_summary,
+            edit_permission=edit_permission,
+            allowed_users=allowed_users_list,
         )
 
         if success:

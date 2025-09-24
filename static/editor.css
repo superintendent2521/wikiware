@@ -359,3 +359,87 @@
 [data-theme="dark"] .image-library-item img {
   background: #111111;
 }
+
+/* Permission control styling */
+.permission-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #c9c9c9);
+  border-radius: 8px;
+  background: var(--primary-white, #ffffff);
+  box-shadow: var(--box-shadow-sm, 0 2px 6px rgba(0,0,0,0.05));
+  margin-bottom: 16px;
+}
+
+.permission-dropdown {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color, #c9c9c9);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #333;
+  font-size: 14px;
+}
+
+.permission-control label {
+  font-weight: 600;
+  color: var(--dark-gray, #444444);
+  margin-bottom: 4px;
+}
+
+.user-input-group {
+  display: none;
+}
+
+.user-input {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color, #c9c9c9);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #333;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.user-input:focus {
+  outline: 2px solid var(--focus, #6aa9ff);
+  border-color: var(--focus, #6aa9ff);
+}
+
+.form-hint {
+  margin-top: 4px;
+  font-size: 0.875rem;
+  color: var(--medium-gray, #686868);
+}
+
+/* Dark theme for permission controls */
+[data-theme="dark"] .permission-control {
+  background: #1f1f1f;
+  border-color: #404040;
+}
+
+[data-theme="dark"] .permission-dropdown {
+  background: #1f1f1f;
+  color: #f1f1f1;
+  border-color: #404040;
+}
+
+[data-theme="dark"] .permission-control label {
+  color: #d1d5db;
+}
+
+[data-theme="dark"] .user-input {
+  background: #1f1f1f;
+  color: #f1f1f1;
+  border-color: #404040;
+}
+
+[data-theme="dark"] .form-hint {
+  color: #9ca3af;
+}

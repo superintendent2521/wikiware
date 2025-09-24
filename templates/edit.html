@@ -92,7 +92,22 @@
 
     <div class="edit-header">
         <h2>Editing: {{ title }}</h2>
-    <div class="edit-actions">
+        <div class="edit-actions">
+            {% if user and user.is_admin %}
+            <div class="permission-control">
+                <label for="editPermission">Who can edit:</label>
+                <select id="editPermission" name="edit_permission" class="permission-dropdown">
+                    <option value="everybody" {% if edit_permission == 'everybody' %}selected{% endif %}>Everybody (with an account)</option>
+                    <option value="10_edits" {% if edit_permission == '10_edits' %}selected{% endif %}>People with 10 edits</option>
+                    <option value="50_edits" {% if edit_permission == '50_edits' %}selected{% endif %}>People with 50 edits</option>
+                    <option value="select_users" {% if edit_permission == 'select_users' %}selected{% endif %}>Select users only</option>
+                </select>
+                <div id="userInput" class="user-input-group" {% if edit_permission != 'select_users' %}style="display: none;"{% endif %}>
+                    <textarea id="allowedUsersInput" name="allowed_users" rows="2" cols="30" placeholder="Enter usernames separated by commas (e.g., user1, user2, user3)" class="user-input">{{ allowed_users|join(', ') if allowed_users else '' }}</textarea>
+                    <small class="form-hint">Usernames are case-sensitive and must match exactly.</small>
+                </div>
+            </div>
+            {% endif %}
             <div class="branch-selector">
                 <button type="button" class="branch-button" aria-haspopup="true" aria-expanded="false">
                     <span class="branch-icon"><i class="fas fa-code-branch"></i></span>
@@ -706,6 +721,21 @@
                 }
             }
         });
+
+        // Permission selector toggle
+        const editPermissionSelect = document.getElementById('editPermission');
+        const userInput = document.getElementById('userInput');
+
+        function toggleUserInput() {
+            if (editPermissionSelect && userInput) {
+                const show = editPermissionSelect.value === 'select_users';
+                userInput.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        if (editPermissionSelect) {
+            editPermissionSelect.addEventListener('change', toggleUserInput);
+        }
 
     });
 </script>
