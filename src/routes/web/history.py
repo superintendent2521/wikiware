@@ -702,6 +702,8 @@ async def view_version(
         return _render_template_with_csrf(
             "edit.html", context, csrf_protect, signed_token_e
         )
+
+        
 @router.post("/restore/{title}/{version_index}")
 async def restore_version(
     request: Request,
