@@ -212,7 +212,7 @@ class PageService:
                                 title, content, author, "main", edit_summary=summary
                             )
                             created_talk = await PageService.create_page(
-                                title, content, author, "talk", edit_summary="wikibot: Auto-created talk page"
+                                title, "", author, "talk", edit_summary="wikibot: Auto-created talk page"
                             )
                     if created_main and created_talk:
                         if author != "Anonymous" and users_collection is not None:
