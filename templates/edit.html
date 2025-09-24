@@ -724,17 +724,17 @@
 
         // Permission selector toggle
         const editPermissionSelect = document.getElementById('editPermission');
-        const userSelector = document.getElementById('userSelector');
+        const userInput = document.getElementById('userInput');
 
-        function toggleUserSelector() {
-            if (editPermissionSelect && userSelector) {
+        function toggleUserInput() {
+            if (editPermissionSelect && userInput) {
                 const show = editPermissionSelect.value === 'select_users';
-                userSelector.style.display = show ? 'block' : 'none';
+                userInput.style.display = show ? 'block' : 'none';
             }
         }
 
         if (editPermissionSelect) {
-            editPermissionSelect.addEventListener('change', toggleUserSelector);
+            editPermissionSelect.addEventListener('change', toggleUserInput);
         }
 
     });

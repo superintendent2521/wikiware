@@ -421,7 +421,7 @@ async def save_page(
     branch: str = Form("main"),
     edit_summary: str = Form(...),
     edit_permission: str = Form("everybody"),
-    allowed_users: List[str] = Form([]),
+    allowed_users: str = Form(""),
 ):
     """Save page changes."""
     try:
@@ -454,9 +454,12 @@ async def save_page(
         # Use the authenticated user as the author
         author = user["username"]
 
+        # Parse allowed_users from comma-separated string
+        allowed_users_list = [u.strip() for u in allowed_users.split(',') if u.strip()] if allowed_users else []
+
         # Save the page
         success = await PageService.update_page(
-            title, content, author, branch, edit_summary=edit_summary, edit_permission=edit_permission, allowed_users=allowed_users
+            title, content, author, branch, edit_summary=edit_summary, edit_permission=edit_permission, allowed_users=allowed_users_list
         )
 
         if success:
