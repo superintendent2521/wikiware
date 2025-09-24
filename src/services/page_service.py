@@ -206,12 +206,14 @@ class PageService:
                 any_existing_page = await pages_collection.find_one({"title": title})
                 if not any_existing_page:
                     # Create both main and talk branches for new pages
-                    created_main = await PageService.create_page(
-                        title, content, author, "main", edit_summary=summary
-                    )
-                    created_talk = await PageService.create_page(
-                        title, content, author, "talk", edit_summary="wikibot: Auto-created talk page"
-                    )
+                    async with await db_instance.client.start_session() as s:
+                        async with s.start_transaction():
+                            created_main = await PageService.create_page(
+                                title, content, author, "main", edit_summary=summary
+                            )
+                            created_talk = await PageService.create_page(
+                                title, content, author, "talk", edit_summary="wikibot: Auto-created talk page"
+                            )
                     if created_main and created_talk:
                         if author != "Anonymous" and users_collection is not None:
                             await users_collection.update_one(

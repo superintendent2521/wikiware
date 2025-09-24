@@ -4,3 +4,5 @@ static/uploads/*
 .pytest_cache
 .vscode/*
 findings-prod.txt
+output.txt
+# for local dev shennanigans involving piping output from cloudflared
