@@ -200,6 +200,9 @@ class PageService:
                 return True
             else:
                 # Check if this is the first branch ever created for this page
+                # HACK: This could be optimized with an transaction if needed, its done in seperate operations.
+                # if one fails its possible to have only one branch created. which can cause confusion.
+                # but for simplicity and given the likely low contention, this is acceptable for now.
                 any_existing_page = await pages_collection.find_one({"title": title})
                 if not any_existing_page:
                     # Create both main and talk branches for new pages
@@ -207,7 +210,7 @@ class PageService:
                         title, content, author, "main", edit_summary=summary
                     )
                     created_talk = await PageService.create_page(
-                        title, content, author, "talk", edit_summary=summary
+                        title, content, author, "talk", edit_summary="wikibot: Auto-created talk page"
                     )
                     if created_main and created_talk:
                         if author != "Anonymous" and users_collection is not None:
