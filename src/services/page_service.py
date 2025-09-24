@@ -90,9 +90,16 @@ class PageService:
 
             summary = PageService._normalize_summary(edit_summary)
 
+            # For talk branches, add signature to content
+            if branch == "talk":
+                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                signed_content = f"{content} ([[User:{author}]] {timestamp})"
+            else:
+                signed_content = content
+
             page_data = {
                 "title": title,
-                "content": content,
+                "content": signed_content,
                 "author": author,
                 "branch": branch,
                 "edit_summary": summary,
@@ -161,11 +168,19 @@ class PageService:
                     }
                     await history_collection.insert_one(history_item)
 
+                # For talk branch, append with signature instead of replacing
+                if branch == "talk":
+                    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    signature = f"\n\n{content} ([[User:{author}]] {timestamp})"
+                    new_content = existing_page["content"] + signature
+                else:
+                    new_content = content
+
                 await pages_collection.update_one(
                     {"title": title, "branch": branch},
                     {
                         "$set": {
-                            "content": content,
+                            "content": new_content,
                             "author": author,
                             "edit_summary": summary,
                             "updated_at": datetime.now(timezone.utc),
