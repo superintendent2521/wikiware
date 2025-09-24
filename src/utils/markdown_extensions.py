@@ -96,5 +96,5 @@ class ColorTagProcessor(InlineProcessor):
         return AtomicString(f'<span class="{css_class}"></span>'), m.start(0), m.end(0)
 
 
-# Add CSS classes for colors to the stylesheet
-# This will be handled by updating static/style.css separately
+
+
