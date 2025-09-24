@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - {{ config.NAME }}{% endblock %}
+
+{% block content %}
+<section class="error-page">
+    <h1>{{ title }}</h1>
+    <p>{{ message }}</p>
+    <p><a href="/" class="btn btn-primary">Return to Home</a></p>
+</section>
+{% endblock %}
