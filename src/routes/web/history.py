@@ -14,13 +14,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..database import db_instance, get_history_collection, get_pages_collection
-from ..middleware.auth_middleware import AuthMiddleware
-from ..services.branch_service import BranchService
-from ..utils.link_processor import process_internal_links
-from ..utils.sanitizer import sanitize_html
-from ..utils.template_env import get_templates
-from ..utils.validation import is_safe_branch_parameter, is_valid_title
+from ...database import db_instance, get_history_collection, get_pages_collection
+from ...middleware.auth_middleware import AuthMiddleware
+from ...services.branch_service import BranchService
+from ...utils.link_processor import process_internal_links
+from ...utils.sanitizer import sanitize_html
+from ...utils.template_env import get_templates
+from ...utils.validation import is_safe_branch_parameter, is_valid_title
 
 router = APIRouter()
 templates = get_templates()
@@ -844,6 +844,3 @@ async def restore_version(
             request, title, branch, error="restore_error"
         )
         return RedirectResponse(url=redirect_url, status_code=303)
-
-
-

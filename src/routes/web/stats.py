@@ -3,16 +3,16 @@ Stats routes for WikiWare.
 Handles statistics display.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..database import db_instance
-from ..middleware.auth_middleware import AuthMiddleware
-from ..services.branch_service import BranchService
-from ..stats import get_stats, get_user_edit_stats
-from ..utils.template_env import get_templates
+from ...database import db_instance
+from ...middleware.auth_middleware import AuthMiddleware
+from ...services.branch_service import BranchService
+from ...stats import get_stats
+from ...utils.template_env import get_templates
 
 router = APIRouter()
 
@@ -97,8 +97,6 @@ async def stats_page(
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
         return template
-    except HTTPException as exc:
-        raise exc
     except Exception as e:
         logger.error(f"Error viewing stats page: {str(e)}")
         try:
@@ -121,36 +119,3 @@ async def stats_page(
 
 # Register the context processor with Jinja2
 templates.env.globals.update(global_stats_context=global_stats_context)
-
-
-@router.get("/stats/{username}")
-async def get_user_stats(username: str):
-    """
-    Get edit statistics for a specific user.
-
-    Args:
-        username: Username to get statistics for
-
-    Returns:
-        dict: User edit statistics or 404 if user not found
-    """
-    try:
-        if not db_instance.is_connected:
-            raise HTTPException(status_code=503, detail="Database not available")
-
-        # Get all user stats
-        all_user_stats = await get_user_edit_stats()
-
-        # Check if user exists
-        if username not in all_user_stats:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        # Return only the requested user's stats
-        return all_user_stats[username]
-
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Error getting user stats for {username}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")

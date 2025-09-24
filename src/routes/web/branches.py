@@ -10,11 +10,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..database import db_instance
-from ..middleware.auth_middleware import AuthMiddleware
-from ..services.branch_service import BranchService
-from ..utils.template_env import get_templates
-from ..utils.validation import (
+from ...database import db_instance
+from ...middleware.auth_middleware import AuthMiddleware
+from ...services.branch_service import BranchService
+from ...utils.template_env import get_templates
+from ...utils.validation import (
     is_safe_branch_parameter,
     is_valid_branch_name,
     is_valid_title,

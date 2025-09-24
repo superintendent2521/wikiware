@@ -74,8 +74,6 @@ Services encapsulate business logic and database operations.
 - `delete_session(session_id: str)`: Delete session
 - `get_user_by_session(session_id: str)`: Get user by session ID
 
-#### `LogService`
-- `collect_all()`: Retrieve all historical page data
 
 ### Utils Layer
 

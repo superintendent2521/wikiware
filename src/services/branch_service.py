@@ -173,19 +173,3 @@ class BranchService:
             )
             return False
 
-    @staticmethod
-    async def set_branch(branch: str) -> str:
-        """
-        Set the current branch (for session management).
-        In a real application, this would be stored in session/cookies.
-
-        Args:
-            branch: Branch name to set
-
-        Returns:
-            The branch name that was set
-        """
-        # For now, just validate and return the branch
-        # In a full implementation, this would update session state
-        logger.info(f"Branch set to: {branch}")
-        return branch

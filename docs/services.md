@@ -8,8 +8,6 @@ The service layer consists of the following components:
 - `PageService`: Manages page creation, retrieval, updates, and search
 - `BranchService`: Handles branch creation, management, and page branching operations
 - `UserService`: Manages user authentication, registration, and session handling
-- `LogService`: Collects and manages historical page data
-
 ## PageService
 
 Handles all operations related to wiki pages.
@@ -249,15 +247,3 @@ Retrieves a user by session ID.
 **Returns:**
 - User document if session exists and is valid
 - `None` if session doesn't exist or is invalid
-
-## LogService
-
-Manages historical page data collection.
-
-### `collect_all() -> List`
-
-Retrieves all historical page data from the history collection.
-
-**Returns:**
-- List of all history records
-- Empty list if history collection is unavailable

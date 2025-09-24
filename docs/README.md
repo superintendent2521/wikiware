@@ -22,7 +22,6 @@ The service layer contains business logic that interfaces with the database:
 - `PageService`: Manages page creation, retrieval, updates, and search
 - `BranchService`: Handles branch creation and management
 - `UserService`: Manages user registration, authentication, and sessions
-- `LogService`: Collects and manages historical page data
 
 #### Utilities
 Utility functions provide reusable helpers across the application:

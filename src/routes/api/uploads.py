@@ -6,6 +6,7 @@ Handles file upload operations.
 import shutil
 from pathlib import Path
 import uuid
+import hashlib
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -13,11 +14,16 @@ from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
 from loguru import logger
 
-from ..config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
-from ..middleware.auth_middleware import AuthMiddleware
-from ..utils.validation import sanitize_filename
+from ...config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
+from ...database import get_image_hashes_collection
+from ...middleware.auth_middleware import AuthMiddleware
+from ...utils.validation import sanitize_filename
+
+
 
 router = APIRouter()
+
+
 
 
 @router.post("/upload-image")
@@ -114,6 +120,22 @@ async def upload_image(
                     )
             await file.seek(0)
 
+        # Read file content to calculate SHA256
+        file_content = await file.read()
+        sha256_hash = hashlib.sha256(file_content).hexdigest()
+        await file.seek(0)
+
+        # Check for duplicate
+        collection = get_image_hashes_collection()
+        if collection is not None:
+            existing = await collection.find_one({"sha256": sha256_hash})
+            if existing:
+                logger.info(f"Duplicate image upload detected: {existing['filename']}")
+                return JSONResponse(
+                    status_code=200,
+                    content={"url": f"/static/uploads/{existing['filename']}", "filename": existing["filename"]}
+                )
+
         # Generate unique filename
         original_extension = (
             file.filename.split(".")[-1] if "." in file.filename else ""
@@ -160,6 +182,22 @@ async def upload_image(
         # Save file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+
+        # Store hash in database
+        if collection is not None:
+            stat = file_path.stat()
+            await collection.update_one(
+                {"filename": unique_filename},
+                {
+                    "$set": {
+                        "filename": unique_filename,
+                        "sha256": sha256_hash,
+                        "size": len(file_content),
+                        "modified": int(stat.st_mtime),
+                    }
+                },
+                upsert=True
+            )
 
         # Return success response with image URL
         image_url = f"/static/uploads/{unique_filename}"

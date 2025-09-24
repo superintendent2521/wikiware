@@ -10,13 +10,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ..config import DEV, SESSION_COOKIE_NAME
-from ..database import db_instance
-from ..middleware.auth_middleware import AuthMiddleware
-from ..models.user import UserRegistration
-from ..services.user_service import UserService
-from ..utils.template_env import get_templates
-from ..utils.validation import sanitize_redirect_path
+from ...config import DEV, SESSION_COOKIE_NAME
+from ...database import db_instance
+from ...middleware.auth_middleware import AuthMiddleware
+from ...models.user import UserRegistration
+from ...services.user_service import UserService
+from ...utils.template_env import get_templates
+from ...utils.validation import sanitize_redirect_path
 
 router = APIRouter()
 
