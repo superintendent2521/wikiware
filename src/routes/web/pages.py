@@ -125,6 +125,28 @@ def _count_toc_entries(items: List[dict]) -> int:
     return total
 
 
+async def _render_markdown_with_toc(content: str) -> tuple[str, List[dict]]:
+    """Renders markdown content to HTML and extracts a table of contents."""
+    # Process internal links first
+    processed_content = await process_internal_links(content)
+
+    # Set up markdown processor with extensions
+    md = markdown.Markdown(
+        extensions=["tables", TocExtension(permalink=False)]
+    )
+
+    # Convert to HTML and sanitize
+    html_content = md.convert(processed_content)
+    sanitized_html = sanitize_html(html_content)
+
+    # Extract and transform TOC tokens
+    toc_items = _transform_toc_tokens(getattr(md, "toc_tokens", []))
+    if _count_toc_entries(toc_items) < 2:
+        toc_items = []
+
+    return sanitized_html, toc_items
+
+
 async def _is_user_page_title(title: str) -> bool:
     """Return True if the title matches an existing user's personal page."""
     if not title or not db_instance.is_connected:
@@ -212,18 +234,7 @@ async def home(
         }
 
     # Process internal links and render as Markdown
-    processed_content = await process_internal_links(page["content"])
-    md = markdown.Markdown(
-        extensions=[
-            "tables",
-            TocExtension(permalink=False),
-        ]
-    )
-    html_content = md.convert(processed_content)
-    page["html_content"] = sanitize_html(html_content)
-    toc_items = _transform_toc_tokens(getattr(md, "toc_tokens", []))
-    if _count_toc_entries(toc_items) < 2:
-        toc_items = []
+    page["html_content"], toc_items = await _render_markdown_with_toc(page["content"])
 
     template = templates.TemplateResponse(
         "page.html",
@@ -305,20 +316,8 @@ async def get_page(
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
 
-        # First process internal links with our custom processor
-        processed_content = await process_internal_links(page["content"])
-        # Then render as Markdown (with any remaining Markdown syntax)
-        md = markdown.Markdown(
-            extensions=[
-                "tables",
-                TocExtension(permalink=False),
-            ]
-        )
-        html_content = md.convert(processed_content)
-        page["html_content"] = sanitize_html(html_content)
-        toc_items = _transform_toc_tokens(getattr(md, "toc_tokens", []))
-        if _count_toc_entries(toc_items) < 2:
-            toc_items = []
+        # Process internal links and render as Markdown
+        page["html_content"], toc_items = await _render_markdown_with_toc(page["content"])
         logger.info(f"Page viewed: {title} on branch: {branch}")
         template = templates.TemplateResponse(
             "page.html",
