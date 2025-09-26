@@ -49,6 +49,10 @@ ALLOWED_ATTRIBUTES = {
     "td": ["colspan", "rowspan"],
 }
 
+
+for heading in ("h1", "h2", "h3", "h4", "h5", "h6"):
+    ALLOWED_ATTRIBUTES[heading] = ["id"]
+
 ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 
 

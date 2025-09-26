@@ -87,14 +87,34 @@
     {% endif %}
 
 
-    <div class="page-content">
-        {{ page.html_content | safe }}
-    </div>
-
-    <div class="page-footer">
-        {% if user %}
-        <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit this page</a>
+    <div class="page-layout{% if toc_items %} has-toc{% endif %}">
+        {% if toc_items %}
+        <nav id="page-toc" class="page-toc" aria-label="Table of contents">
+            <div class="page-toc__title"><i class="fas fa-list-ul" aria-hidden="true"></i><span>Table of Contents</span></div>
+            <ul class="page-toc__list">
+                {% for item in toc_items recursive %}
+                <li class="page-toc__item level-{{ item.level }}">
+                    <a href="#{{ item.id }}">{{ item.title }}</a>
+                    {% if item.children %}
+                    <ul class="page-toc__list">
+                        {{ loop(item.children) }}
+                    </ul>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </nav>
         {% endif %}
+        <div class="page-main">
+            <div class="page-content">
+                {{ page.html_content | safe }}
+            </div>
+            <div class="page-footer">
+                {% if user %}
+                <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit this page</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
