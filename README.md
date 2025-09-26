@@ -3,10 +3,10 @@ gurt
 
 ^ my beloved gurt will not be removed.
 
-## Table of Contents
+# Table of contents
 - [Installation](#installation)
 
-# Installation
+## Installation
 Install Wikiware by git cloning the project, via
 
 `git clone https://github.com/superintendent2521/wikiware.git`
