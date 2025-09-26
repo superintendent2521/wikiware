@@ -579,6 +579,7 @@ async def view_version(
                 "title": title,
                 "content": "",
                 "offline": True,
+                "toc_items": [],
                 "user": deps.user,
                 "csrf_token": deps.csrf_token,
             }

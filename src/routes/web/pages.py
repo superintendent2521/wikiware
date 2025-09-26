@@ -8,6 +8,7 @@ from typing import List, Optional
 from urllib.parse import quote
 
 import markdown
+from markdown.extensions.toc import TocExtension
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
@@ -94,6 +95,36 @@ def _build_user_page_redirect_url(request: Request, username: str, branch: str) 
     return str(target_url)
 
 
+def _transform_toc_tokens(tokens: Optional[List[dict]]) -> List[dict]:
+    """Convert markdown toc_tokens into a simplified structure for templates."""
+    items: List[dict] = []
+    if not tokens:
+        return items
+    for token in tokens:
+        anchor = token.get("id")
+        title = (token.get("name") or token.get("title") or token.get("id") or "").strip()
+        if not anchor or not title:
+            continue
+        children = _transform_toc_tokens(token.get("children"))
+        items.append(
+            {
+                "id": anchor,
+                "title": title,
+                "level": token.get("level", 0),
+                "children": children,
+            }
+        )
+    return items
+
+
+def _count_toc_entries(items: List[dict]) -> int:
+    """Return the total number of entries in a nested TOC tree."""
+    total = 0
+    for item in items:
+        total += 1 + _count_toc_entries(item.get("children", []))
+    return total
+
+
 async def _is_user_page_title(title: str) -> bool:
     """Return True if the title matches an existing user's personal page."""
     if not title or not db_instance.is_connected:
@@ -159,6 +190,7 @@ async def home(
                 },
                 "offline": True,
                 "branch": branch,
+                "toc_items": [],
                 "user": user,
                 "csrf_token": csrf_token,
             },
@@ -181,8 +213,17 @@ async def home(
 
     # Process internal links and render as Markdown
     processed_content = await process_internal_links(page["content"])
-    md = markdown.Markdown(extensions=["tables"])
-    page["html_content"] = sanitize_html(md.convert(processed_content))
+    md = markdown.Markdown(
+        extensions=[
+            "tables",
+            TocExtension(permalink=False),
+        ]
+    )
+    html_content = md.convert(processed_content)
+    page["html_content"] = sanitize_html(html_content)
+    toc_items = _transform_toc_tokens(getattr(md, "toc_tokens", []))
+    if _count_toc_entries(toc_items) < 2:
+        toc_items = []
 
     template = templates.TemplateResponse(
         "page.html",
@@ -191,6 +232,7 @@ async def home(
             "page": page,
             "offline": not db_instance.is_connected,
             "branch": branch,
+            "toc_items": toc_items,
             "user": user,
             "csrf_token": csrf_token,
         },
@@ -266,8 +308,17 @@ async def get_page(
         # First process internal links with our custom processor
         processed_content = await process_internal_links(page["content"])
         # Then render as Markdown (with any remaining Markdown syntax)
-        md = markdown.Markdown(extensions=["tables"])
-        page["html_content"] = sanitize_html(md.convert(processed_content))
+        md = markdown.Markdown(
+            extensions=[
+                "tables",
+                TocExtension(permalink=False),
+            ]
+        )
+        html_content = md.convert(processed_content)
+        page["html_content"] = sanitize_html(html_content)
+        toc_items = _transform_toc_tokens(getattr(md, "toc_tokens", []))
+        if _count_toc_entries(toc_items) < 2:
+            toc_items = []
         logger.info(f"Page viewed: {title} on branch: {branch}")
         template = templates.TemplateResponse(
             "page.html",
@@ -277,6 +328,7 @@ async def get_page(
                 "branch": branch,
                 "offline": False,
                 "branches": branches,
+                "toc_items": toc_items,
                 "user": user,
                 "csrf_token": csrf_token,
             },
