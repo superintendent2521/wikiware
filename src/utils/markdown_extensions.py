@@ -72,7 +72,7 @@ class TableExtensionWrapper(Extension):
 
 
 class ColorTagProcessor(InlineProcessor):
-    """Process {{ global.color.pink }} syntax and convert to CSS color class."""
+    """Process {{ global.color.COLOR }} syntax and convert to CSS color class."""
 
     def __init__(self, pattern, md):
         super().__init__(pattern, md)
