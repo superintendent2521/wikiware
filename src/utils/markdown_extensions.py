@@ -61,8 +61,10 @@ class TableExtensionWrapper(Extension):
     """Wrapper to add table extension with default settings and color tagging support."""
 
     def extendMarkdown(self, md):
-        # Register the built-in tables extension
-        md.registerExtension(TableExtension())
+        # Register the built-in tables extension (and expose reset hooks)
+        table_extension = TableExtension()
+        table_extension.extendMarkdown(md)
+        md.registerExtension(table_extension)
 
         # Register custom inline pattern for color tags
         # Set priority to 165 to run before table extension (default 180)
@@ -141,4 +143,3 @@ class UnixTimestampProcessor(InlineProcessor):
                 span.set("title", "Timestamp missing for {{ global.unix }}")
             span.text = "Invalid timestamp"
             return span, m.start(0), m.end(0)
-
