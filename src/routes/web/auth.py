@@ -12,6 +12,7 @@ from ...config import DEV, SESSION_COOKIE_NAME
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...models.user import UserRegistration
+from ...services.settings_service import SettingsService
 from ...services.user_service import UserService
 from ...utils.template_env import get_templates
 from ...utils.validation import sanitize_redirect_path
@@ -27,6 +28,7 @@ async def register_form(
 ):
     """Show user registration form."""
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    feature_flags = request.state.feature_flags
     logger.debug("Generated CSRF token for registration form")
     # Attach CSRF cookie to the actual response being returned
     template = templates.TemplateResponse(
@@ -55,6 +57,23 @@ async def register_user(
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
+        feature_flags = request.state.feature_flags
+        if not feature_flags.account_creation_enabled:
+            logger.info("Registration blocked because account creation is disabled")
+            csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+            template = templates.TemplateResponse(
+                "register.html",
+                {
+                    "request": request,
+                    "error": "Registration is currently disabled by an administrator.",
+                    "offline": not db_instance.is_connected,
+                    "username": username,
+                    "csrf_token": csrf_token,
+                },
+                status_code=403,
+            )
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
         if not db_instance.is_connected:
             logger.error("Database not connected - cannot register user")
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()

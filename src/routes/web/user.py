@@ -13,6 +13,7 @@ from loguru import logger
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.page_service import PageService
+from ...services.settings_service import FeatureFlags, SettingsService
 from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
 from ...utils.template_env import get_templates
@@ -22,6 +23,41 @@ from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExten
 router = APIRouter()
 
 templates = get_templates()
+
+
+async def _get_feature_flags(request: Request) -> FeatureFlags:
+    """Return feature flags from request state or via settings service."""
+    feature_flags = getattr(request.state, "feature_flags", None)
+    if feature_flags is None:
+        feature_flags = await SettingsService.get_feature_flags()
+        request.state.feature_flags = feature_flags
+    return feature_flags
+
+
+def _render_error_page(
+    request: Request,
+    user: dict,
+    csrf_token: str,
+    *,
+    branch: str,
+    message: str,
+    status_code: int = 403,
+    title: str = "Editing Disabled",
+):
+    """Render a standardized error template for user page operations."""
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "title": title,
+            "message": message,
+            "user": user,
+            "branch": branch,
+            "csrf_token": csrf_token,
+            "offline": not db_instance.is_connected,
+        },
+        status_code=status_code,
+    )
 
 
 def _build_user_page_redirect_url(request: Request, username: str, branch: str) -> str:
@@ -42,6 +78,7 @@ async def user_page(
 ):
     """View a user's personal page."""
     current_user = await AuthMiddleware.get_current_user(request)
+    feature_flags = await _get_feature_flags(request)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     csrf_protect.set_csrf_cookie(signed_token, response)
 
@@ -57,6 +94,7 @@ async def user_page(
                 "is_owner": False,
                 "csrf_token": csrf_token,
                 "is_user_page": True,
+                "feature_flags": feature_flags,
             },
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
@@ -106,6 +144,7 @@ async def user_page(
             "is_owner": is_owner,
             "csrf_token": csrf_token,
             "user_stats": user_stats,
+            "feature_flags": feature_flags,
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
@@ -124,6 +163,18 @@ async def edit_user_page(
     user = await AuthMiddleware.require_auth(request)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     csrf_protect.set_csrf_cookie(signed_token, response)
+
+    feature_flags = await _get_feature_flags(request)
+    if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
+        template = _render_error_page(
+            request,
+            user,
+            csrf_token,
+            branch=branch,
+            message="Page editing is currently disabled by an administrator.",
+        )
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
 
     if not db_instance.is_connected:
         template = templates.TemplateResponse(
@@ -164,6 +215,7 @@ async def edit_user_page(
             "user": user,
             "csrf_token": csrf_token,
             "is_user_page": True,
+            "feature_flags": feature_flags,
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
@@ -177,10 +229,24 @@ async def save_user_page(
     content: str = Form(...),
     branch: str = Form("main"),
     edit_summary: str = Form(...),
+    csrf_protect: CsrfProtect = Depends(),
 ):
     """Save user page changes."""
     try:
         user = await AuthMiddleware.require_auth(request)
+
+        feature_flags = await _get_feature_flags(request)
+        if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
+            csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+            template = _render_error_page(
+                request,
+                user,
+                csrf_token,
+                branch=branch,
+                message="Page editing is currently disabled by an administrator.",
+            )
+            csrf_protect.set_csrf_cookie(signed_token, template)
+            return template
 
         if not db_instance.is_connected:
             return {"error": "Database not available"}

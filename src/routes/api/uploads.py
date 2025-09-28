@@ -17,6 +17,7 @@ from loguru import logger
 from ...config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
 from ...database import get_image_hashes_collection
 from ...middleware.auth_middleware import AuthMiddleware
+from ...services.settings_service import SettingsService
 from ...utils.validation import sanitize_filename
 
 
@@ -43,7 +44,20 @@ async def upload_image(
         await csrf_protect.validate_csrf(request)
 
         # Check if user is authenticated
-        await AuthMiddleware.require_auth(request)
+        user = await AuthMiddleware.require_auth(request)
+
+        feature_flags = request.state.feature_flags
+        if not feature_flags.image_upload_enabled and not user.get("is_admin", False):
+            logger.info(
+                "Image upload blocked for user '%s' because uploads are disabled",
+                user.get("username"),
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "Image uploading is currently disabled by an administrator."
+                },
+            )
 
         # Create uploads directory if it doesn't exist
         upload_path = Path(UPLOAD_DIR)
