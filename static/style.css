@@ -633,6 +633,7 @@ main {
 .page-content img {
     float: right;
     margin: 0 0 var(--space-md) var(--space-lg);
+    shape-outside: margin-box;
     max-width: min(100%, 500px);
     max-height: 500px;
     width: auto;
@@ -1944,4 +1945,3 @@ footer p {
         padding: var(--space-lg);
     }
 }
-

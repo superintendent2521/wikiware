@@ -149,7 +149,7 @@
   function htmlToMd(root) {
     function serialize(node) {
       if (node.nodeType === Node.TEXT_NODE) {
-        return node.nodeValue.replace(/\n/g, ' ');
+        return node.nodeValue.replace(/\u200B/g, '').replace(/\n/g, ' ');
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return '';
       const name = node.nodeName;
@@ -801,9 +801,35 @@
       img.src = src;
       img.alt = alt || '';
       insertNodeAtSelection(img);
-      const range = getRange();
-      if (range) {
-        lastSelectionRange = range.cloneRange();
+
+      let rangeForCaret = null;
+      const parent = img.parentNode;
+      if (parent) {
+        const spacer = document.createTextNode('\u200B');
+        parent.insertBefore(spacer, img.nextSibling);
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.setStart(spacer, 0);
+        range.collapse(true);
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+        rangeForCaret = range;
+        let editorEl = parent;
+        while (editorEl && editorEl.nodeType === Node.ELEMENT_NODE && !editorEl.isContentEditable) {
+          editorEl = editorEl.parentNode;
+        }
+        if (editorEl && editorEl.isContentEditable) {
+          lastSelectionEditor = editorEl;
+        }
+      }
+
+      if (!rangeForCaret) {
+        rangeForCaret = getRange();
+      }
+      if (rangeForCaret) {
+        lastSelectionRange = rangeForCaret.cloneRange();
       }
     }
   };
