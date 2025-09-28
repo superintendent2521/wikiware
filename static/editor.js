@@ -693,6 +693,23 @@
         });
       }
 
+      if (unixTimeBtn) {
+        unixTimeBtn.addEventListener('click', () => {
+          if (unixTimeBtn.disabled) return;
+          const defaultValue = String(Math.floor(Date.now() / 1000));
+          const input = prompt('Unix timestamp (seconds)', defaultValue);
+          if (input === null) return;
+          const value = String(input).trim();
+          if (!value) return;
+          if (!/^[0-9]+$/.test(value)) {
+            alert('Unix timestamp must be digits only.');
+            return;
+          }
+          restoreSavedSelection();
+          insertSnippet('{{ global.unix:' + value + ' }}');
+        });
+      }
+
       // Link creation
       const linkBtn = qs('#createLinkBtn');
       if (linkBtn) linkBtn.addEventListener('click', () => {
