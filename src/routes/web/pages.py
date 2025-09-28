@@ -24,7 +24,7 @@ from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
 from ...utils.template_env import get_templates
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
-from ...utils.markdown_extensions import TableExtensionWrapper
+from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExtension
 
 router = APIRouter()
 
@@ -135,7 +135,7 @@ async def _render_markdown_with_toc(content: str) -> tuple[str, List[dict]]:
 
     # Set up markdown processor with extensions
     md = markdown.Markdown(
-        extensions=[TableExtensionWrapper(), TocExtension(permalink=False)]
+        extensions=[TableExtensionWrapper(), ImageFigureExtension(), TocExtension(permalink=False)]
     )
 
     # Convert to HTML and sanitize

@@ -21,7 +21,7 @@ from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
 from ...utils.template_env import get_templates
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
-from ...utils.markdown_extensions import TableExtensionWrapper
+from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExtension
 
 router = APIRouter()
 templates = get_templates()
@@ -651,7 +651,7 @@ async def view_version(
 
         try:
             processed_content = await process_internal_links(page["content"])
-            md = markdown.Markdown(extensions=[TableExtensionWrapper()])
+            md = markdown.Markdown(extensions=[TableExtensionWrapper(), ImageFigureExtension()])
             page["html_content"] = sanitize_html(md.convert(processed_content))
         except Exception as md_error:
             logger.error(

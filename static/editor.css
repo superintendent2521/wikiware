@@ -107,12 +107,64 @@
 
 /* Constrain images in visual editor to match article layout */
 .visual-editor img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.visual-editor figure.wiki-image {
   float: right;
   margin: 0 0 var(--space-md, 16px) var(--space-lg, 24px);
-  max-width: min(100%, 500px);
-  max-height: 500px;
-  width: auto;
+  shape-outside: margin-box;
+  max-width: min(100%, 320px);
+  background: #f8f9fa;
+  border: 1px solid var(--border-color, #c9c9c9);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.visual-editor figure.wiki-image img {
+  margin: 0;
+  float: none;
+  width: 100%;
   height: auto;
+}
+
+.visual-editor figure.wiki-image figcaption {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  background: #eef1f5;
+  border-top: 1px solid var(--border-color, #c9c9c9);
+  color: #374151;
+  min-height: 1.2em;
+}
+
+.visual-editor figure.wiki-image figcaption:empty::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+}
+
+.visual-editor figure.wiki-image figcaption:focus {
+  outline: 2px solid var(--focus, #6aa9ff);
+  outline-offset: -2px;
+}
+
+[data-theme="dark"] .visual-editor figure.wiki-image {
+  background: #1f1f1f;
+  border-color: #404040;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .visual-editor figure.wiki-image figcaption {
+  background: #13161f;
+  border-top-color: #404040;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .visual-editor figure.wiki-image figcaption:empty::before {
+  color: #9ca3af;
 }
 
 .visual-editor::after {

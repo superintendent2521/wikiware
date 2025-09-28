@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from markdown.extensions import Extension
 from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString
+from markdown.treeprocessors import Treeprocessor
 from markdown.extensions.tables import TableExtension
 
 
@@ -81,6 +82,68 @@ class TableExtensionWrapper(Extension):
         md.inlinePatterns.register(
             UnixTimestampProcessor(unix_pattern, md), "unix_timestamp", 164
         )
+
+
+class ImageFigureProcessor(Treeprocessor):
+    """Convert stand-alone images into <figure> structures with optional captions."""
+
+    def run(self, root):
+        for parent in root.iter():
+            children = list(parent)
+            for index, child in enumerate(children):
+                if child.tag != 'p':
+                    continue
+                if (child.text or '').strip():
+                    continue
+                element_children = list(child)
+                if len(element_children) != 1:
+                    continue
+                node = element_children[0]
+                if (node.tail or '').strip():
+                    continue
+                wrapper = None
+                image = None
+                if node.tag == 'img':
+                    image = node
+                elif (
+                    node.tag == 'a'
+                    and len(node) == 1
+                    and node[0].tag == 'img'
+                    and not (node.text or '').strip()
+                    and not (node[0].tail or '').strip()
+                ):
+                    wrapper = node
+                    image = node[0]
+                else:
+                    continue
+                if image is None or (image.tail or '').strip():
+                    continue
+                figure = Element('figure')
+                figure.set('class', 'wiki-image')
+                if wrapper is not None:
+                    wrapper.tail = ''
+                    image.tail = ''
+                    figure.append(wrapper)
+                else:
+                    image.tail = ''
+                    figure.append(image)
+                caption_text = (image.get('title') or '').strip()
+                if 'title' in image.attrib:
+                    image.attrib.pop('title')
+                if caption_text:
+                    figcaption = Element('figcaption')
+                    figcaption.text = caption_text
+                    figure.append(figcaption)
+                figure.tail = child.tail
+                parent.insert(index, figure)
+                parent.remove(child)
+
+
+class ImageFigureExtension(Extension):
+    """Register the image figure processor for Markdown conversion."""
+
+    def extendMarkdown(self, md):
+        md.treeprocessors.register(ImageFigureProcessor(md), 'wiki_image_figure', 15)
 
 
 class ColorTagProcessor(InlineProcessor):

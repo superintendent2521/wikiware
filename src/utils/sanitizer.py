@@ -39,11 +39,15 @@ ALLOWED_TAGS: Iterable[str] = {
     "td",
     "span",
     "img",
+    "figure",
+    "figcaption",
 }
 
 ALLOWED_ATTRIBUTES = {
     "a": ["href", "title", "rel"],
     "img": ["src", "alt", "title", "width", "height"],
+    "figure": ["class"],
+    "figcaption": ["class"],
     "span": ["class", "title", "data-timestamp", "data-source"],
     "th": ["colspan", "rowspan"],
     "td": ["colspan", "rowspan"],

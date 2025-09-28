@@ -640,6 +640,53 @@ main {
     height: auto;
 }
 
+.page-content figure.wiki-image {
+    float: right;
+    margin: 0 0 var(--space-md) var(--space-lg);
+    shape-outside: margin-box;
+    max-width: min(100%, 320px);
+    background: var(--primary-white);
+    border: 1px solid var(--light-gray);
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--box-shadow-sm);
+    overflow: hidden;
+}
+
+.page-content figure.wiki-image img {
+    float: none;
+    margin: 0;
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    shape-outside: none;
+}
+
+.page-content figure.wiki-image figcaption {
+    padding: var(--space-sm);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    background: var(--secondary-white);
+    border-top: 1px solid var(--light-gray);
+    color: var(--dark-gray);
+}
+.page-content figure.wiki-image figcaption:empty {
+    display: none;
+}
+
+
+[data-theme="dark"] .page-content figure.wiki-image {
+    background: #1c2029;
+    border-color: rgba(148, 163, 184, 0.22);
+    box-shadow: none;
+}
+
+[data-theme="dark"] .page-content figure.wiki-image figcaption {
+    background: #13161f;
+    border-top-color: rgba(148, 163, 184, 0.22);
+    color: var(--darker-gray);
+}
+
 .page-content::after {
     content: "";
     display: block;
