@@ -16,7 +16,7 @@ Thank you for helping keep this project secure. Please report vulnerabilities us
 ### What to include in a report
 To help us triage and remediate quickly, include as much of the following as possible:
 - A clear summary of the issue (one-line).
-- Affected versions/branches (e.g., `main`, `prod_v2`, tag `v1.2.3`).
+- Affected versions/branches (e.g., `main`, `prod_v2`, Commit `118c175`).
 - Steps to reproduce (exact commands, requests, or interactions).
 - Proof of concept (PoC) that demonstrates the issue — please minimize any sensitive data in PoC.
 - Impact assessment (e.g., RCE, data exposure, privilege escalation).
@@ -48,14 +48,8 @@ While we make determinations on severity after triage, here are our general defi
 ## Safe Harbor
 If you follow this policy and act in good faith to avoid privacy violations, data destruction, or service disruption while investigating/reporting, we will not initiate legal action. Please avoid disruptive actions (e.g., exfiltrating private user data, tampering with production assets). If you're unsure whether an action is acceptable, ask first.
 
-## Acknowledgements
-We appreciate contributions from the security community. If you wish, you can indicate in your report whether you'd like to be credited for the finding and how (GitHub handle, real name, or anonymously). We will list contributors in the repository `SECURITY` or `AUTHORS` file as appropriate, with your permission.
-
 ## Contact & PGP (optional)
 - GitHub: use the repository Security reporting flow or open a private issue.
 - Discord: `.superintendent`
-
-**PGP key (optional):** If you prefer encrypted communication, include your PGP public key in your report or request ours and we will provide a key fingerprint.  
-(If you want to publish a PGP key, paste it here or link to a keyserver entry.)
 
 ---
