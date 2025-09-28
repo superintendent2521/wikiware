@@ -46,10 +46,7 @@ async def upload_image(
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
 
-        feature_flags = getattr(request.state, "feature_flags", None)
-        if feature_flags is None:
-            feature_flags = await SettingsService.get_feature_flags()
-            request.state.feature_flags = feature_flags
+        feature_flags = request.state.feature_flags
         if not feature_flags.image_upload_enabled and not user.get("is_admin", False):
             logger.info(
                 "Image upload blocked for user '%s' because uploads are disabled",
