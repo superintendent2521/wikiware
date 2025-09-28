@@ -20,14 +20,19 @@ class Database:
         self.db = None
         self.is_connected = False
 
-    async def connect(self):
+    async def connect(self, max_retries: int | None = 10):
         """Establish connection to MongoDB and test connectivity with retry logic."""
-        max_retries = 10  # Will try for ~50 seconds total (10 attempts * 5s delay)
+        if max_retries is None:
+            max_retries = float('inf')  # Infinite retries for background monitor
+            delay = 10  # 10 seconds for ongoing retries
+        else:
+            delay = 5  # 5 seconds for startup
+
         retry_count = 0
 
         while retry_count < max_retries:
             try:
-                logger.info(f"Attempting to connect to MongoDB at {MONGODB_URL}...")
+                logger.info(f"Attempting to connect to MongoDB at {MONGODB_URL}... (attempt {retry_count + 1})")
                 self.client = AsyncIOMotorClient(
                     MONGODB_URL, serverSelectionTimeoutMS=10000
                 )
@@ -39,21 +44,38 @@ class Database:
                 return  # Exit the loop on successful connection
             except ServerSelectionTimeoutError:
                 retry_count += 1
-                logger.warning(
-                    f"MongoDB server not available. Attempt {retry_count}/{max_retries}."
-                    "Retrying in 5 seconds... Server Offline?"
-                )
-                await asyncio.sleep(5)  # Wait 5 seconds before retrying
+                if max_retries != float('inf'):
+                    logger.warning(
+                        f"MongoDB server not available. Attempt {retry_count}/{max_retries}."
+                        f"Retrying in {delay} seconds... Server Offline?"
+                    )
+                else:
+                    logger.warning(
+                        f"MongoDB connection lost. Retrying in {delay} seconds..."
+                    )
+                await asyncio.sleep(delay)
             except Exception as e:  # IGNORE W0718
                 logger.error(f"Database connection error: {e}")
                 self.is_connected = False
-                return  # Don't retry on other errors
+                if max_retries != float('inf'):
+                    return  # Don't retry on other errors for startup
+                else:
+                    await asyncio.sleep(delay)  # Retry on errors for background
 
-        # If we've exhausted all retries
-        logger.error(
-            "Failed to connect to MongoDB after multiple attempts. Running in offline mode."
-        )
-        self.is_connected = False
+        # If we've exhausted all retries (startup only)
+        if max_retries != float('inf'):
+            logger.error(
+                "Failed to connect to MongoDB after multiple attempts. Running in offline mode."
+            )
+            self.is_connected = False
+
+    async def monitor_connection(self):
+        """Background task to monitor and retry connection if lost."""
+        logger.info("Starting MongoDB connection monitor (retries every 10s)")
+        while True:
+            if not self.is_connected:
+                await self.connect(max_retries=None)  # Infinite retry
+            await asyncio.sleep(10)  # Check every 10 seconds even if connected
 
     async def disconnect(self):
         """Close the MongoDB connection."""
@@ -143,7 +165,7 @@ async def create_indexes():
 async def init_database():
     """Initialize database connection and create indexes."""
     try:
-        await db_instance.connect()
+        await db_instance.connect()  # Finite retries for startup
         if db_instance.is_connected:
             await create_indexes()
     except Exception as e:
