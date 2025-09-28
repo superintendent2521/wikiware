@@ -1,3 +1,13 @@
+﻿/* Constrain images in visual editor to match article layout */
+.visual-editor img {
+  float: right;
+  margin: 0 0 var(--space-md, 16px) var(--space-lg, 24px);
+  max-width: min(100%, 500px);
+  max-height: 500px;
+  width: auto;
+  height: auto;
+}
+
 /* Basic styles for the WikiWare visual editor */
 .editor-toolbar {
   display: flex;
@@ -105,12 +115,6 @@
   border: 1px solid #404040;
 }
 
-/* Constrain images in visual editor to match article layout */
-.visual-editor img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-}
 
 .visual-editor figure.wiki-image {
   float: right;
