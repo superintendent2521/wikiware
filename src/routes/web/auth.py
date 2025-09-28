@@ -28,10 +28,7 @@ async def register_form(
 ):
     """Show user registration form."""
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-    feature_flags = getattr(request.state, "feature_flags", None)
-    if feature_flags is None:
-        feature_flags = await SettingsService.get_feature_flags()
-        request.state.feature_flags = feature_flags
+    feature_flags = request.state.feature_flags
     logger.debug("Generated CSRF token for registration form")
     # Attach CSRF cookie to the actual response being returned
     template = templates.TemplateResponse(
