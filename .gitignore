@@ -5,4 +5,5 @@ static/uploads/*
 .vscode/*
 findings-prod.txt
 output.txt
+example-page.pdf
 # for local dev shennanigans involving piping output from cloudflared
