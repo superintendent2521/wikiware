@@ -39,6 +39,16 @@ async def generate_page_pdf(request: Request, pdf_req: PDFRequest):
         pdf = MarkdownPdf()
         section = Section(content)
         pdf.add_section(section)
+        if pdf.toc:
+            # Normalize heading levels so PyMuPDF accepts the generated TOC.
+            first_with_level = next((item[0] for item in pdf.toc if item[0] > 0), None)
+            if first_with_level and first_with_level != 1:
+                shift = first_with_level - 1
+                pdf.toc = [
+                    (max(1, level - shift), title, page, top)
+                    for level, title, page, top in pdf.toc
+                ]
+
         out = io.BytesIO()
         pdf.save(out)
         pdf_bytes = out.getvalue()
