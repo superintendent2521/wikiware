@@ -3,7 +3,6 @@ Authentication routes for WikiWare.
 Handles user registration, login, and logout operations.
 """
 
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -364,6 +363,7 @@ async def change_password(
     template = templates.TemplateResponse("password_reset.html", context)
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
+
 
 @router.post("/logout")
 async def logout_user(

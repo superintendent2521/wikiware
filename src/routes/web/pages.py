@@ -18,7 +18,6 @@ from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.branch_service import BranchService
 from ...services.page_service import PageService
-from ...services.user_service import UserService
 from ...database import get_users_collection
 from ...stats import get_stats
 from ...utils.link_processor import process_internal_links
@@ -42,6 +41,7 @@ VALID_EDIT_PERMISSIONS = {
 
 templates = get_templates()
 
+
 def _sanitize_edit_permission(value: Optional[str]) -> str:
     """Return a valid edit permission value, falling back to everybody."""
     if not value:
@@ -54,7 +54,7 @@ def _parse_allowed_users(raw: str) -> List[str]:
     """Split a comma-separated allowed users string into a list."""
     if not raw:
         return []
-    return [username.strip() for username in raw.split(',') if username.strip()]
+    return [username.strip() for username in raw.split(",") if username.strip()]
 
 
 def _render_error_page(
@@ -103,7 +103,9 @@ def _transform_toc_tokens(tokens: Optional[List[dict]]) -> List[dict]:
         return items
     for token in tokens:
         anchor = token.get("id")
-        title = (token.get("name") or token.get("title") or token.get("id") or "").strip()
+        title = (
+            token.get("name") or token.get("title") or token.get("id") or ""
+        ).strip()
         if not anchor or not title:
             continue
         children = _transform_toc_tokens(token.get("children"))
@@ -166,24 +168,23 @@ async def _can_user_edit_page(user: dict, page_data: Optional[dict]) -> bool:
     if not page_data:
         return True  # New page, anyone can create
 
-    permission = _sanitize_edit_permission(page_data.get('edit_permission'))
+    permission = _sanitize_edit_permission(page_data.get("edit_permission"))
     if permission == EDIT_PERMISSION_EVERYBODY:
         return True
     if permission == EDIT_PERMISSION_TEN_EDITS:
-        return user.get('total_edits', 0) >= 10
+        return user.get("total_edits", 0) >= 10
     if permission == EDIT_PERMISSION_FIFTY_EDITS:
-        return user.get('total_edits', 0) >= 50
+        return user.get("total_edits", 0) >= 50
     if permission == EDIT_PERMISSION_SELECT_USERS:
-        allowed_users = page_data.get('allowed_users', [])
+        allowed_users = page_data.get("allowed_users", [])
         if isinstance(allowed_users, list):
             allowed_usernames = list(allowed_users)
         elif isinstance(allowed_users, str):
             allowed_usernames = _parse_allowed_users(allowed_users)
         else:
             allowed_usernames = []
-        return user.get('username') in allowed_usernames
+        return user.get("username") in allowed_usernames
     return False
-
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -318,7 +319,9 @@ async def get_page(
             return template
 
         # Process internal links and render as Markdown
-        page["html_content"], toc_items = await _render_markdown_with_toc(page["content"])
+        page["html_content"], toc_items = await _render_markdown_with_toc(
+            page["content"]
+        )
         logger.info(f"Page viewed: {title} on branch: {branch}")
         template = templates.TemplateResponse(
             "page.html",

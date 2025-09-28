@@ -3,7 +3,7 @@ Admin panel routes for WikiWare.
 Only accessible to users with admin: true flag.
 """
 
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 

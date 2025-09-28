@@ -2,6 +2,7 @@
 User service layer for WikiWare.
 Contains business logic for user operations.
 """
+
 import secrets
 from datetime import timedelta
 from typing import Optional, Dict, Any, Tuple
@@ -143,19 +144,25 @@ class UserService:
             user = await UserService.get_user_by_username(username)
             if not user:
                 logger.warning(f"User not found: {username}")
-                logger.warning(f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}") # pylint: disable=C0301
+                logger.warning(
+                    f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}"
+                )  # pylint: disable=C0301
                 return None
 
             # Check if user is active
             if not user.get("is_active", True):
                 logger.warning(f"User account is inactive: {username}")
-                logger.warning(f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}") # pylint: disable=C0301
+                logger.warning(
+                    f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}"
+                )  # pylint: disable=C0301
                 return None
 
             # Verify password
             if not UserService.verify_password(password, user["password_hash"]):
                 logger.warning(f"Invalid password for user: {username}")
-                logger.warning(f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}") # pylint: disable=C0301
+                logger.warning(
+                    f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}"
+                )  # pylint: disable=C0301
                 return None
 
             logger.info(f"User authenticated: {username}")

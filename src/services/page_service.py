@@ -172,7 +172,9 @@ class PageService:
 
                 # For talk branch, append with signature instead of replacing
                 if branch == "talk":
-                    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    timestamp = datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%d %H:%M:%S UTC"
+                    )
                     signature = f"\n\n{content} ([[User:{author}]] {timestamp})"
                     new_content = existing_page["content"] + signature
                 else:
@@ -204,7 +206,7 @@ class PageService:
                 return True
             else:
                 # Check if this is the first branch ever created for this page
-                
+
                 any_existing_page = await pages_collection.find_one({"title": title})
                 if not any_existing_page:
                     # Create both main and talk branches for new pages
@@ -214,7 +216,11 @@ class PageService:
                                 title, content, author, "main", edit_summary=summary
                             )
                             created_talk = await PageService.create_page(
-                                title, "", author, "talk", edit_summary="wikibot: Auto-created talk page"
+                                title,
+                                "",
+                                author,
+                                "talk",
+                                edit_summary="wikibot: Auto-created talk page",
                             )
                     if created_main and created_talk:
                         if author != "Anonymous" and users_collection is not None:
@@ -230,7 +236,11 @@ class PageService:
                     created = await PageService.create_page(
                         title, content, author, branch, edit_summary=summary
                     )
-                    if created and author != "Anonymous" and users_collection is not None:
+                    if (
+                        created
+                        and author != "Anonymous"
+                        and users_collection is not None
+                    ):
                         await users_collection.update_one(
                             {"username": author},
                             {"$inc": {"total_edits": 1, f"page_edits.{title}": 1}},

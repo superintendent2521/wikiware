@@ -4,7 +4,6 @@ Calculates SHA256 sums for images and stores them in the database.
 """
 
 import hashlib
-import asyncio
 from pathlib import Path
 from typing import Dict, List
 
@@ -30,6 +29,7 @@ def calculate_sha256(file_path: Path) -> str:
         logger.error(f"Error calculating hash for {file_path}: {e}")
         return ""
 
+
 def get_all_image_hashes() -> List[Dict]:
     """Retrieve all image hashes from the database."""
     collection = get_image_hashes_collection()
@@ -37,7 +37,6 @@ def get_all_image_hashes() -> List[Dict]:
         logger.error("Image hashes collection not available")
         return []
     return list(collection.find({}))
-
 
 
 async def update_image_hashes():
@@ -70,7 +69,7 @@ async def update_image_hashes():
                     "modified": image["modified"],
                 }
             },
-            upsert=True
+            upsert=True,
         )
         logger.info(f"Updated hash for {filename}: {sha256}")
 

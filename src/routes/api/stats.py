@@ -30,7 +30,7 @@ async def get_user_stats(username: str):
         users_collection = get_users_collection()
         user_stats = await users_collection.find_one(
             {"username": username},
-            projection={"_id": 0, "total_edits": 1, "page_edits": 1}
+            projection={"_id": 0, "total_edits": 1, "page_edits": 1},
         )
 
         if not user_stats:

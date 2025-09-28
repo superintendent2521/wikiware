@@ -5,6 +5,7 @@ from ..config import UPLOAD_DIR
 
 from loguru import logger
 
+
 def _list_images() -> List[Dict]:
     """Return a list of image file metadata from the uploads directory."""
     upload_path = Path(UPLOAD_DIR)

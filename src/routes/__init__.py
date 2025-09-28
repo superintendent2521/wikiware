@@ -4,7 +4,13 @@ This package contains all the route modules for the application.
 """
 
 # Import route modules for easier access
-from .api import logs, stats as api_stats, images as api_images, exports as api_exports, uploads
+from .api import (
+    logs,
+    stats as api_stats,
+    images as api_images,
+    exports as api_exports,
+    uploads,
+)
 from .web import (
     pages,
     search,

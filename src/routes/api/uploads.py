@@ -20,10 +20,7 @@ from ...middleware.auth_middleware import AuthMiddleware
 from ...utils.validation import sanitize_filename
 
 
-
 router = APIRouter()
-
-
 
 
 @router.post("/upload-image")
@@ -133,7 +130,10 @@ async def upload_image(
                 logger.info(f"Duplicate image upload detected: {existing['filename']}")
                 return JSONResponse(
                     status_code=200,
-                    content={"url": f"/static/uploads/{existing['filename']}", "filename": existing["filename"]}
+                    content={
+                        "url": f"/static/uploads/{existing['filename']}",
+                        "filename": existing["filename"],
+                    },
                 )
 
         # Generate unique filename
@@ -196,7 +196,7 @@ async def upload_image(
                         "modified": int(stat.st_mtime),
                     }
                 },
-                upsert=True
+                upsert=True,
             )
 
         # Return success response with image URL

@@ -26,6 +26,7 @@ from ...utils.markdown_extensions import TableExtensionWrapper
 router = APIRouter()
 templates = get_templates()
 
+
 @dataclass
 class HistoryViewDependencies:
     user: Any
@@ -90,6 +91,7 @@ def _render_template_with_csrf(
     if signed_token:
         csrf_protect.set_csrf_cookie(signed_token, template)
     return template
+
 
 def _build_page_redirect_url(
     request: Request, title: str, branch: str, **extra_params: str
@@ -229,7 +231,6 @@ def _build_version_entries(versions: List[Dict[str, Any]]) -> List[Dict[str, Any
     return entries
 
 
-
 @router.get("/history/{title}", response_class=HTMLResponse)
 async def page_history(
     request: Request,
@@ -342,6 +343,7 @@ async def page_history(
         return _render_template_with_csrf(
             "history.html", context, csrf_protect, signed_token_e
         )
+
 
 @router.get("/history/{title}/compare", response_class=HTMLResponse)
 async def compare_versions(
@@ -522,6 +524,7 @@ async def compare_versions(
         return _render_template_with_csrf(
             "compare.html", context, csrf_protect, signed_token_e
         )
+
 
 @router.get("/history/{title}/{version_index}", response_class=HTMLResponse)
 async def view_version(
@@ -705,7 +708,7 @@ async def view_version(
             "edit.html", context, csrf_protect, signed_token_e
         )
 
-        
+
 @router.post("/restore/{title}/{version_index}")
 async def restore_version(
     request: Request,
@@ -811,7 +814,9 @@ async def restore_version(
                 }
                 await history_collection.insert_one(history_item)
 
-            restore_summary = page.get("edit_summary") or f"Restored version {version_index}"
+            restore_summary = (
+                page.get("edit_summary") or f"Restored version {version_index}"
+            )
             restore_summary = str(restore_summary).strip()
             if len(restore_summary) > 250:
                 restore_summary = restore_summary[:250]

@@ -172,4 +172,3 @@ class BranchService:
                 f"Error creating branch {branch_name} for page {title}: {str(e)}"
             )
             return False
-

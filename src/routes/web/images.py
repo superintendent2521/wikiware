@@ -3,19 +3,16 @@ Image library routes for WikiWare.
 Allows authenticated users to browse and search uploaded images.
 """
 
-
-
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi_csrf_protect import CsrfProtect
-from loguru import logger
 import asyncio
 
-from ...config import UPLOAD_DIR
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...utils.template_env import get_templates
 from ...utils.images import _list_images
+
 router = APIRouter()
 
 templates = get_templates()

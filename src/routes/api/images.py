@@ -3,20 +3,14 @@ Image API routes for WikiWare.
 Provides API endpoints for image operations.
 """
 
-
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from loguru import logger
 import asyncio
 
-from ...config import UPLOAD_DIR
 from ...middleware.auth_middleware import AuthMiddleware
 from ...utils.images import _list_images
 
 router = APIRouter()
-
-
-
 
 
 @router.get("/api/images", response_class=JSONResponse)

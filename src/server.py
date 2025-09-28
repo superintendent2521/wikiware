@@ -25,8 +25,6 @@ from .routes.web import (
     exports,
 )
 from .routes.api import (
-    uploads,
-    logs,
     stats as api_stats,
     images as api_images,
     exports as api_exports,

@@ -53,7 +53,9 @@ class ExportService:
         return user
 
     @classmethod
-    async def _check_rate_limit(cls, user: Dict[str, Any]) -> tuple[bool, datetime | None]:
+    async def _check_rate_limit(
+        cls, user: Dict[str, Any]
+    ) -> tuple[bool, datetime | None]:
         """Return True if export is allowed, along with the stored timestamp."""
         last_export = user.get("last_collection_export_at")
         if isinstance(last_export, datetime):
@@ -97,13 +99,17 @@ class ExportService:
         return f"wikiware-collections-{timestamp}.zip"
 
     @classmethod
-    async def _stream_collection_json(cls, collection, label: str) -> AsyncIterator[bytes]:
+    async def _stream_collection_json(
+        cls, collection, label: str
+    ) -> AsyncIterator[bytes]:
         """Yield a JSON array representation of the collection without buffering everything."""
         try:
             cursor = collection.find(limit=cls.MAX_FETCH)
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error(f"Failed to create cursor for {label} collection: {exc}")
-            raise ExportUnavailableError(f"Failed to stream {label} collection") from exc
+            raise ExportUnavailableError(
+                f"Failed to stream {label} collection"
+            ) from exc
 
         first = True
         count = 0
@@ -126,7 +132,9 @@ class ExportService:
                 count += 1
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error(f"Failed while streaming {label} collection: {exc}")
-            raise ExportUnavailableError(f"Failed to stream {label} collection") from exc
+            raise ExportUnavailableError(
+                f"Failed to stream {label} collection"
+            ) from exc
         else:
             if count == cls.MAX_FETCH:
                 logger.warning(
