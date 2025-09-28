@@ -15,3 +15,4 @@ fastapi-limiter
 slowapi
 bleach
 aiozipstream
+markdown-pdf

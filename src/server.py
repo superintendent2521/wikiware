@@ -30,6 +30,7 @@ from .routes.api import (
     stats as api_stats,
     images as api_images,
     exports as api_exports,
+    pdf as api_pdf,
 )
 from .services import log_streamer
 from .services.settings_service import SettingsService
@@ -107,18 +108,17 @@ app.include_router(pages.router)
 app.include_router(search.router)
 app.include_router(history.router)
 app.include_router(branches.router)
-app.include_router(uploads.router)
 app.include_router(stats.router)
-app.include_router(logs.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(user.router)
 app.include_router(exports.router)
 # API routes
-app.include_router(api_stats.router)
-app.include_router(api_images.router)
-app.include_router(api_exports.router)
+app.include_router(api_stats.router, prefix="/api")
+app.include_router(api_images.router, prefix="/api")
+app.include_router(api_exports.router, prefix="/api")
+app.include_router(api_pdf.router, prefix="/api")
 # From Utils, because its a service, not a route
 app.include_router(log_streamer.router)
 # Initilize log streaming.
