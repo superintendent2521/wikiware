@@ -4,6 +4,8 @@ Adds support for [[Page Title]] internal linking syntax and table rendering with
 """
 from urllib.parse import quote
 import html as _html
+from xml.etree.ElementTree import Element
+from datetime import datetime, timezone
 from markdown.extensions import Extension
 from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString
@@ -70,9 +72,16 @@ class TableExtensionWrapper(Extension):
             ColorTagProcessor(color_pattern, md), "color_tag", 165
         )
 
+        # Register custom inline pattern for unix timestamps
+        # Set priority to 164 to run before color tags
+        unix_pattern = r"\{\{\s*global\.unix(?::(\d*))?\s*\}\}"
+        md.inlinePatterns.register(
+            UnixTimestampProcessor(unix_pattern, md), "unix_timestamp", 164
+        )
+
 
 class ColorTagProcessor(InlineProcessor):
-    """Process {{ global.color.pink }} syntax and convert to CSS color class."""
+    """Process {{ global.color.COLOR }} syntax and convert to CSS color class."""
 
     def __init__(self, pattern, md):
         super().__init__(pattern, md)
@@ -96,5 +105,40 @@ class ColorTagProcessor(InlineProcessor):
         return AtomicString(f'<span class="{css_class}"></span>'), m.start(0), m.end(0)
 
 
+class UnixTimestampProcessor(InlineProcessor):
+    """Process {{ global.unix:TIMESTAMP }} and render formatted UTC time; requires an explicit timestamp."""
 
+    def __init__(self, pattern, md):
+        super().__init__(pattern, md)
+
+    def handleMatch(self, m, data):
+        timestamp_str = m.group(1) if m.group(1) is not None else None
+        
+        try:
+            if not timestamp_str:
+                raise ValueError("Timestamp required for {{ global.unix }}")
+
+            timestamp = int(timestamp_str)
+            dt_utc = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+            formatted_time = dt_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+            span = Element("span")
+            span.set("class", "unix-timestamp")
+            span.set("title", f"Unix timestamp: {timestamp}")
+            span.set("data-timestamp", str(timestamp))
+            span.set("data-source", "provided")
+            span.text = formatted_time
+            return span, m.start(0), m.end(0)
+
+        except (ValueError, OSError):
+            span = Element("span")
+            span.set("class", "unix-timestamp-error")
+            span.set("data-source", "error")
+            if timestamp_str:
+                span.set("title", f"Invalid timestamp: {timestamp_str}")
+                span.set("data-timestamp", timestamp_str)
+            else:
+                span.set("title", "Timestamp missing for {{ global.unix }}")
+            span.text = "Invalid timestamp"
+            return span, m.start(0), m.end(0)
 
