@@ -59,5 +59,3 @@ We appreciate contributions from the security community. If you wish, you can in
 (If you want to publish a PGP key, paste it here or link to a keyserver entry.)
 
 ---
-
-## Vulnerability Report Template (copy into your issue message)
