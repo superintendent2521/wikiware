@@ -89,14 +89,22 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.middleware("http")
-async def inject_global_banner(request: Request, call_next):
-    """Attach the global announcement banner to request state for templates."""
+async def inject_global_settings(request: Request, call_next):
+    """Attach global settings such as the banner and feature flags to request state."""
     try:
         banner = await SettingsService.get_banner()
     except Exception as exc:
         logger.error(f"Failed to load global banner: {exc}")
         banner = SettingsService._banner_cache
     request.state.global_banner = banner
+
+    try:
+        feature_flags = await SettingsService.get_feature_flags()
+    except Exception as exc:
+        logger.error(f"Failed to load feature flags: {exc}")
+        feature_flags = SettingsService._feature_flags_cache
+    request.state.feature_flags = feature_flags
+
     response = await call_next(request)
     return response
 

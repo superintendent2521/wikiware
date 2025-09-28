@@ -30,10 +30,23 @@ _DEFAULT_BANNER = Banner(message="", level="info", is_active=False)
 _ALLOWED_LEVELS = {"info", "success", "warning", "danger"}
 
 
+@dataclass(frozen=True)
+class FeatureFlags:
+    """Represent global feature toggles exposed in the admin panel."""
+
+    page_editing_enabled: bool = True
+    account_creation_enabled: bool = True
+    image_upload_enabled: bool = True
+
+
+_DEFAULT_FEATURE_FLAGS = FeatureFlags()
+
+
 class SettingsService:
     """Provide helpers for reading and writing global site settings."""
 
     _banner_cache: Banner = _DEFAULT_BANNER
+    _feature_flags_cache: FeatureFlags = _DEFAULT_FEATURE_FLAGS
 
     @staticmethod
     def _normalize_level(level: Optional[str]) -> str:
@@ -107,5 +120,62 @@ class SettingsService:
         """Disable the banner and clear message content."""
         return await cls.update_banner(message="", level="info", is_active=False)
 
+    @classmethod
+    async def get_feature_flags(cls) -> FeatureFlags:
+        """Return the current set of feature toggles, cached when offline."""
+        if not db_instance.is_connected:
+            return cls._feature_flags_cache
 
-__all__ = ["SettingsService", "Banner"]
+        settings_collection = db_instance.get_collection("settings")
+        if settings_collection is None:
+            return cls._feature_flags_cache
+
+        doc = await settings_collection.find_one({"_id": "feature_flags"})
+        if not doc:
+            cls._feature_flags_cache = _DEFAULT_FEATURE_FLAGS
+            return cls._feature_flags_cache
+
+        flags = FeatureFlags(
+            page_editing_enabled=bool(doc.get("page_editing_enabled", True)),
+            account_creation_enabled=bool(doc.get("account_creation_enabled", True)),
+            image_upload_enabled=bool(doc.get("image_upload_enabled", True)),
+        )
+        cls._feature_flags_cache = flags
+        return flags
+
+    @classmethod
+    async def update_feature_flags(
+        cls,
+        *,
+        page_editing_enabled: bool,
+        account_creation_enabled: bool,
+        image_upload_enabled: bool,
+    ) -> bool:
+        """Persist feature toggle values and refresh the cache."""
+        if not db_instance.is_connected:
+            logger.error("Cannot update feature flags while database is offline")
+            return False
+
+        settings_collection = db_instance.get_collection("settings")
+        if settings_collection is None:
+            logger.error("Settings collection is unavailable")
+            return False
+
+        payload = {
+            "page_editing_enabled": bool(page_editing_enabled),
+            "account_creation_enabled": bool(account_creation_enabled),
+            "image_upload_enabled": bool(image_upload_enabled),
+        }
+
+        await settings_collection.update_one(
+            {"_id": "feature_flags"},
+            {"$set": payload},
+            upsert=True,
+        )
+
+        cls._feature_flags_cache = FeatureFlags(**payload)
+        logger.info("Updated feature flags: %s", cls._feature_flags_cache)
+        return True
+
+
+__all__ = ["SettingsService", "Banner", "FeatureFlags"]

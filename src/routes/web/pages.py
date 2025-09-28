@@ -18,6 +18,7 @@ from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.branch_service import BranchService
 from ...services.page_service import PageService
+from ...services.settings_service import FeatureFlags, SettingsService
 from ...database import get_users_collection
 from ...stats import get_stats
 from ...utils.link_processor import process_internal_links
@@ -40,6 +41,15 @@ VALID_EDIT_PERMISSIONS = {
 }
 
 templates = get_templates()
+
+
+async def _get_feature_flags(request: Request) -> FeatureFlags:
+    """Return feature flags from request state or service fallback."""
+    feature_flags = getattr(request.state, "feature_flags", None)
+    if feature_flags is None:
+        feature_flags = await SettingsService.get_feature_flags()
+        request.state.feature_flags = feature_flags
+    return feature_flags
 
 
 def _sanitize_edit_permission(value: Optional[str]) -> str:
@@ -398,6 +408,16 @@ async def edit_page(
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
 
+        feature_flags = await _get_feature_flags(request)
+        if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
+            return _render_error_page(
+                request,
+                user,
+                "Editing Disabled",
+                "Page editing is currently disabled by an administrator.",
+                status_code=403,
+            )
+
         if (
             await _is_user_page_title(title)
             and user["username"].casefold() != title.casefold()
@@ -505,6 +525,7 @@ async def edit_page(
                 "edit_permission": edit_permission,
                 "allowed_users": allowed_users,
                 "all_users": all_users,
+                "feature_flags": feature_flags,
             },
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
@@ -549,6 +570,16 @@ async def save_page(
     try:
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
+
+        feature_flags = await _get_feature_flags(request)
+        if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
+            return _render_error_page(
+                request,
+                user,
+                "Editing Disabled",
+                "Page editing is currently disabled by an administrator.",
+                status_code=403,
+            )
 
         if (
             await _is_user_page_title(title)

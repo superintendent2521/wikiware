@@ -18,11 +18,13 @@
 }
 </style>
 <div class="container">
+    {% set feature_flags = request.state.feature_flags %}
+    {% set can_edit_user_page = is_owner and (feature_flags.page_editing_enabled or (user and user.is_admin)) %}
     <div class="user-layout" style="display:flex; gap: var(--space-xl, 32px); align-items:flex-start; flex-wrap:wrap;">
         <div class="page-container" style="flex:1 1 0; min-width:min(100%, 540px);">
             <div class="page-header">
                 <h1>{{ username }}'s Page</h1>
-                {% if is_owner %}
+                {% if can_edit_user_page %}
                 <div class="page-actions">
                     <a href="/user/{{ username }}/edit" class="btn btn-primary">Edit Page</a>
                 </div>

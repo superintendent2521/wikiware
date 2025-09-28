@@ -17,6 +17,8 @@
     {% set delete_action = ('/delete/' ~ title) if is_main_branch else ('/delete-branch/' ~ title) %}
     {% set delete_label = 'Delete Page' if is_main_branch else 'Delete Branch Page' %}
     {% set delete_confirm = 'Are you sure you want to delete ' ~ ('this page' if is_main_branch else 'this branch page') ~ '? This action cannot be undone.' %}
+    {% set feature_flags = request.state.feature_flags %}
+    {% set image_upload_allowed = user.is_admin or feature_flags.image_upload_enabled %}
     <link rel="stylesheet" href="{{ url_for('static', path='editor.css') }}">
     <!-- Wiki Link Modal -->
     <div id="wikiLinkModal" class="modal" style="display: none;">
@@ -52,13 +54,16 @@
                 </div>
             </div>
             <div id="imageModalUploadSection" class="image-modal-section">
-                <form id="imageUploadForm">
+                {% if not image_upload_allowed %}
+                <div class="alert alert-warning"><strong>Heads up:</strong> Image uploading is currently disabled by an administrator.</div>
+                {% endif %}
+                <form id="imageUploadForm" {% if not image_upload_allowed %}data-disabled="true"{% endif %}>
                     <div class="form-group">
                         <label for="imageFile">Select Image:</label>
-                        <input type="file" id="imageFile" name="image" accept="image/*">
+                        <input type="file" id="imageFile" name="image" accept="image/*" {% if not image_upload_allowed %}disabled{% endif %}>
                     </div>
                     <div class="form-actions modal-actions">
-                        <button type="submit" class="btn btn-primary">Upload Image</button>
+                        <button type="submit" class="btn btn-primary" {% if not image_upload_allowed %}disabled{% endif %}>Upload Image</button>
                         <button type="button" class="btn btn-secondary" id="cancelUpload">Cancel</button>
                     </div>
                 </form>
@@ -402,6 +407,7 @@
         const cancelLibrary = document.getElementById('cancelLibrary');
         const backToUploadBtn = document.getElementById('backToUploadBtn');
         const imageUploadForm = document.getElementById('imageUploadForm');
+        const uploadDisabled = imageUploadForm && imageUploadForm.dataset.disabled === 'true';
         const uploadStatus = document.getElementById('uploadStatus');
         const contentTextarea = document.getElementById('content');
         const imageModalUploadSection = document.getElementById('imageModalUploadSection');
@@ -457,6 +463,9 @@
             if (!modal) return;
             if (window.WikiEditor && typeof window.WikiEditor.captureSelection === 'function') {
                 window.WikiEditor.captureSelection();
+            }
+            if (uploadDisabled && section === 'upload') {
+                section = 'library';
             }
             showSection(section);
             modal.style.display = 'block';
@@ -576,6 +585,12 @@
         if (imageUploadForm) {
             imageUploadForm.addEventListener('submit', (e) => {
                 e.preventDefault();
+                if (uploadDisabled) {
+                    if (uploadStatus) {
+                        uploadStatus.innerHTML = '<div class="alert alert-warning">Image uploading is currently disabled.</div>';
+                    }
+                    return;
+                }
                 const fileInput = document.getElementById('imageFile');
                 const file = fileInput ? fileInput.files[0] : null;
                 if (!file) {

@@ -6,13 +6,14 @@ Handles branch management operations.
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.branch_service import BranchService
+from ...services.settings_service import SettingsService
 from ...utils.template_env import get_templates
 from ...utils.validation import (
     is_safe_branch_parameter,
@@ -94,7 +95,23 @@ async def create_branch(
         await csrf_protect.validate_csrf(request)
 
         # Check if user is authenticated
-        await AuthMiddleware.require_auth(request)
+        user = await AuthMiddleware.require_auth(request)
+
+        feature_flags = getattr(request.state, "feature_flags", None)
+        if feature_flags is None:
+            feature_flags = await SettingsService.get_feature_flags()
+            request.state.feature_flags = feature_flags
+        if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
+            logger.info(
+                "Branch creation blocked for user '%s' because page editing is disabled",
+                user.get("username"),
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "Page editing is currently disabled by an administrator."
+                },
+            )
 
         if not db_instance.is_connected:
             logger.error(

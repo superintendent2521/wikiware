@@ -116,7 +116,44 @@
 
         <div class="admin-card admin-card-wide">
             <h3><i class="fas fa-cog"></i> System Settings</h3>
-            <p>Placeholder for system configuration options.</p>
+            {% set status = request.query_params.get("status") %}
+            {% if status == "features_saved" %}
+            <div class="callout callout-success"><i class="fas fa-check-circle"></i> Feature settings saved.</div>
+            {% elif status == "features_error" %}
+            <div class="callout callout-error"><i class="fas fa-triangle-exclamation"></i> Could not save feature settings. Check database connectivity.</div>
+            {% endif %}
+            {% if offline %}
+            <div class="callout callout-warning"><i class="fas fa-plug-circle-xmark"></i> Database offline. Updates are disabled until connectivity is restored.</div>
+            {% endif %}
+            <form method="post" action="/admin/features" class="feature-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="feature-toggle">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="page_editing_enabled" {% if feature_flags.page_editing_enabled %}checked{% endif %} {% if offline %}disabled{% endif %}>
+                        <span>Allow page editing</span>
+                    </label>
+                    <p class="feature-toggle__help">Controls the ability for non-admin users to create or edit pages.</p>
+                </div>
+                <div class="feature-toggle">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="account_creation_enabled" {% if feature_flags.account_creation_enabled %}checked{% endif %} {% if offline %}disabled{% endif %}>
+                        <span>Allow new account registrations</span>
+                    </label>
+                    <p class="feature-toggle__help">Disabling hides registration links and blocks the signup form.</p>
+                </div>
+                <div class="feature-toggle">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="image_upload_enabled" {% if feature_flags.image_upload_enabled %}checked{% endif %} {% if offline %}disabled{% endif %}>
+                        <span>Allow image uploads</span>
+                    </label>
+                    <p class="feature-toggle__help">When disabled, only admins can upload media.</p>
+                </div>
+                <div class="feature-form__actions">
+                    <button type="submit" class="btn btn-primary" {% if offline %}disabled{% endif %}>
+                        <i class="fas fa-save"></i> Save Feature Settings
+                    </button>
+                </div>
+            </form>
         </div>
 
         <!-- Live Log Stream Button and Modal -->
@@ -176,6 +213,34 @@
 
 .admin-card-wide {
     grid-column: 1 / -1;
+}
+
+.feature-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.feature-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--light-gray);
+    border-radius: 6px;
+    background: var(--secondary-white, rgba(255,255,255,0.08));
+}
+
+.feature-toggle__help {
+    margin: 0;
+    color: var(--medium-gray);
+    font-size: 0.9rem;
+}
+
+.feature-form__actions {
+    display: flex;
+    justify-content: flex-end;
 }
 
 /* Span helper to let a card stretch across two columns when available */

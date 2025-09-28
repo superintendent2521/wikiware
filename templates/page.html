@@ -9,6 +9,8 @@
     {% set delete_action = ('/delete/' ~ page.title) if is_main_branch else ('/delete-branch/' ~ page.title) %}
     {% set delete_label = 'Delete Page' if is_main_branch else 'Delete Branch Page' %}
     {% set delete_confirm = 'Are you sure you want to delete ' ~ ('this page' if is_main_branch else 'this branch page') ~ '? This action cannot be undone.' %}
+    {% set feature_flags = request.state.feature_flags %}
+    {% set can_edit_page = user and (feature_flags.page_editing_enabled or user.is_admin) %}
     {% if request.query_params.get('error') %}
     <div class="alert alert-error">
         <strong>Error:</strong> 
@@ -60,7 +62,9 @@
             {% endif %}
             {% if user %}
             <a href="/history/{{ page.title }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
+            {% if can_edit_page %}
             <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
+            {% endif %}
             {% endif %}
             {% if user and user.is_admin %}
             <form action="{{ delete_action }}" method="post" style="display: inline;">
@@ -110,7 +114,7 @@
                 {{ page.html_content | safe }}
             </div>
             <div class="page-footer">
-                {% if user %}
+                {% if can_edit_page %}
                 <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit this page</a>
                 {% endif %}
             </div>
