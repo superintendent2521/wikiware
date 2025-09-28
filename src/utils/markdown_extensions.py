@@ -112,8 +112,8 @@ class UnixTimestampProcessor(InlineProcessor):
         super().__init__(pattern, md)
 
     def handleMatch(self, m, data):
-        timestamp_str = m.group(2).strip() if m.group(2) else None
-
+        timestamp_str = m.group(1) if m.group(1) is not None else None
+        
         try:
             if not timestamp_str:
                 raise ValueError("Timestamp required for {{ global.unix }}")
