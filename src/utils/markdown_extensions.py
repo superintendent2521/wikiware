@@ -74,7 +74,7 @@ class TableExtensionWrapper(Extension):
 
         # Register custom inline pattern for unix timestamps
         # Set priority to 164 to run before color tags
-        unix_pattern = r"\{\{\s*global\.unix(:([^\}]+?))?\s*\}\}"
+        unix_pattern = r"\{\{\s*global\.unix(?::(\d*))?\s*\}\}"
         md.inlinePatterns.register(
             UnixTimestampProcessor(unix_pattern, md), "unix_timestamp", 164
         )
