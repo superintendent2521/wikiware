@@ -26,6 +26,7 @@ from ...utils.sanitizer import sanitize_html
 from ...utils.template_env import get_templates
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
 from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExtension
+from ...utils.error_utils import render_error_page
 
 router = APIRouter()
 
@@ -43,13 +44,9 @@ VALID_EDIT_PERMISSIONS = {
 templates = get_templates()
 
 
-async def _get_feature_flags(request: Request) -> FeatureFlags:
-    """Return feature flags from request state or service fallback."""
-    feature_flags = getattr(request.state, "feature_flags", None)
-    if feature_flags is None:
-        feature_flags = await SettingsService.get_feature_flags()
-        request.state.feature_flags = feature_flags
-    return feature_flags
+def _get_feature_flags(request: Request) -> FeatureFlags:
+    """Return feature flags from request state."""
+    return request.state.feature_flags
 
 
 def _sanitize_edit_permission(value: Optional[str]) -> str:
@@ -67,27 +64,6 @@ def _parse_allowed_users(raw: str) -> List[str]:
     return [username.strip() for username in raw.split(",") if username.strip()]
 
 
-def _render_error_page(
-    request: Request,
-    user: Optional[dict],
-    title: str,
-    message: str,
-    status_code: int = 403,
-) -> HTMLResponse:
-    """Render a shared error template with the provided message."""
-    return templates.TemplateResponse(
-        "error.html",
-        {
-            "request": request,
-            "title": title,
-            "message": message,
-            "user": user,
-            "branch": request.query_params.get("branch", "main"),
-            "offline": getattr(request.state, "offline", False),
-            "csrf_token": getattr(request.state, "csrf_token", ""),
-        },
-        status_code=status_code,
-    )
 
 
 def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
@@ -408,13 +384,13 @@ async def edit_page(
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
 
-        feature_flags = await _get_feature_flags(request)
+        feature_flags = _get_feature_flags(request)
         if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
-            return _render_error_page(
+            return render_error_page(
                 request,
-                user,
-                "Editing Disabled",
-                "Page editing is currently disabled by an administrator.",
+                user=user,
+                title="Editing Disabled",
+                message="Page editing is currently disabled by an administrator.",
                 status_code=403,
             )
 
@@ -469,11 +445,11 @@ async def edit_page(
                 allowed_users = []
             # Check if user can edit this page
             if not await _can_user_edit_page(user, page):
-                return _render_error_page(
+                return render_error_page(
                     request,
-                    user,
-                    "Access Denied",
-                    "You do not have permission to edit this page.",
+                    user=user,
+                    title="Access Denied",
+                    message="You do not have permission to edit this page.",
                     status_code=403,
                 )
 
@@ -571,13 +547,13 @@ async def save_page(
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
 
-        feature_flags = await _get_feature_flags(request)
+        feature_flags = _get_feature_flags(request)
         if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
-            return _render_error_page(
+            return render_error_page(
                 request,
-                user,
-                "Editing Disabled",
-                "Page editing is currently disabled by an administrator.",
+                user=user,
+                title="Editing Disabled",
+                message="Page editing is currently disabled by an administrator.",
                 status_code=403,
             )
 
@@ -610,11 +586,11 @@ async def save_page(
         page_data = await PageService.get_page(title, branch)
 
         if not await _can_user_edit_page(user, page_data):
-            return _render_error_page(
+            return render_error_page(
                 request,
-                user,
-                "Access Denied",
-                "You do not have permission to edit this page.",
+                user=user,
+                title="Access Denied",
+                message="You do not have permission to edit this page.",
                 status_code=403,
             )
 

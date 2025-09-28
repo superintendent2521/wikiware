@@ -136,9 +136,9 @@ class SettingsService:
             return cls._feature_flags_cache
 
         flags = FeatureFlags(
-            page_editing_enabled=bool(doc.get("page_editing_enabled", True)),
-            account_creation_enabled=bool(doc.get("account_creation_enabled", True)),
-            image_upload_enabled=bool(doc.get("image_upload_enabled", True)),
+            page_editing_enabled=doc.get("page_editing_enabled", True),
+            account_creation_enabled=doc.get("account_creation_enabled", True),
+            image_upload_enabled=doc.get("image_upload_enabled", True),
         )
         cls._feature_flags_cache = flags
         return flags
@@ -162,9 +162,9 @@ class SettingsService:
             return False
 
         payload = {
-            "page_editing_enabled": bool(page_editing_enabled),
-            "account_creation_enabled": bool(account_creation_enabled),
-            "image_upload_enabled": bool(image_upload_enabled),
+            "page_editing_enabled": page_editing_enabled,
+            "account_creation_enabled": account_creation_enabled,
+            "image_upload_enabled": image_upload_enabled,
         }
 
         await settings_collection.update_one(

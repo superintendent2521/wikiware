@@ -57,10 +57,7 @@ async def register_user(
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
-        feature_flags = getattr(request.state, "feature_flags", None)
-        if feature_flags is None:
-            feature_flags = await SettingsService.get_feature_flags()
-            request.state.feature_flags = feature_flags
+        feature_flags = request.state.feature_flags
         if not feature_flags.account_creation_enabled:
             logger.info("Registration blocked because account creation is disabled")
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
