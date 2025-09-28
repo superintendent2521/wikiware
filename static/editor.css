@@ -107,8 +107,8 @@
 
 /* Constrain images in visual editor to match article layout */
 .visual-editor img {
-  float: left;
-  margin: 0 var(--space-lg, 24px) var(--space-md, 16px) 0;
+  float: right;
+  margin: 0 0 var(--space-md, 16px) var(--space-lg, 24px);
   max-width: min(100%, 500px);
   max-height: 500px;
   width: auto;
@@ -443,3 +443,4 @@
 [data-theme="dark"] .form-hint {
   color: #9ca3af;
 }
+

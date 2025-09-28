@@ -13,7 +13,7 @@ from ...utils.images import _list_images
 router = APIRouter()
 
 
-@router.get("/api/images", response_class=JSONResponse)
+@router.get("/images", response_class=JSONResponse)
 async def list_images_api(request: Request):
     """Return JSON list of images; requires authentication."""
     await AuthMiddleware.require_auth(request)

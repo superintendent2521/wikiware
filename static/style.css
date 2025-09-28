@@ -631,8 +631,8 @@ main {
 
 /* Image display within wiki pages */
 .page-content img {
-    float: left;
-    margin: 0 var(--space-lg) var(--space-md) 0;
+    float: right;
+    margin: 0 0 var(--space-md) var(--space-lg);
     max-width: min(100%, 500px);
     max-height: 500px;
     width: auto;
@@ -1944,3 +1944,4 @@ footer p {
         padding: var(--space-lg);
     }
 }
+
