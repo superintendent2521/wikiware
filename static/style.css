@@ -667,6 +667,36 @@ main {
 .page-content .color-orange { background-color: #ffa500; color: white; }
 .page-content .color-gray   { background-color: #808080; color: white; }
 .page-content .color-yellow { background-color: #fdd835; color: white; }
+
+/* Unix timestamp styles */
+.page-content .unix-timestamp {
+    background-color: var(--secondary-white);
+    border: 1px solid var(--medium-gray);
+    border-radius: var(--border-radius-sm);
+    padding: 2px 6px;
+    font-family: 'Courier New', monospace;
+    font-size: var(--font-size-sm);
+    color: var(--accent-blue-dark);
+    cursor: help;
+    transition: all var(--transition-fast);
+}
+
+.page-content .unix-timestamp:hover {
+    background-color: var(--accent-blue);
+    color: var(--primary-white);
+    border-color: var(--accent-blue-dark);
+}
+
+.page-content .unix-timestamp-error {
+    background-color: rgba(231, 76, 60, 0.1);
+    border: 1px solid var(--error);
+    border-radius: var(--border-radius-sm);
+    padding: 2px 6px;
+    font-family: 'Courier New', monospace;
+    font-size: var(--font-size-sm);
+    color: var(--error-dark);
+    cursor: help;
+}
 /* When the whole cell is colored via :has(),
    make inner color tags transparent so they don't create overlays. */
 .page-content td:has(.color-red) .color-red,
