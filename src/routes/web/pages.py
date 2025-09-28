@@ -135,7 +135,11 @@ async def _render_markdown_with_toc(content: str) -> tuple[str, List[dict]]:
 
     # Set up markdown processor with extensions
     md = markdown.Markdown(
-        extensions=[TableExtensionWrapper(), ImageFigureExtension(), TocExtension(permalink=False)]
+        extensions=[
+            TableExtensionWrapper(),
+            ImageFigureExtension(),
+            TocExtension(permalink=False),
+        ]
     )
 
     # Convert to HTML and sanitize

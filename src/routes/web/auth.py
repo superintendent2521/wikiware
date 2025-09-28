@@ -3,7 +3,6 @@ Authentication routes for WikiWare.
 Handles user registration, login, and logout operations.
 """
 
-
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect

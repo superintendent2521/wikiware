@@ -651,7 +651,9 @@ async def view_version(
 
         try:
             processed_content = await process_internal_links(page["content"])
-            md = markdown.Markdown(extensions=[TableExtensionWrapper(), ImageFigureExtension()])
+            md = markdown.Markdown(
+                extensions=[TableExtensionWrapper(), ImageFigureExtension()]
+            )
             page["html_content"] = sanitize_html(md.convert(processed_content))
         except Exception as md_error:
             logger.error(
