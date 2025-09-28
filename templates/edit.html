@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block title %}Edit {{ title }} - {{ config.NAME }}{% endblock %}
 
@@ -208,6 +208,7 @@
                     <button type="button" data-cmd="insertOrderedList" class="btn btn-secondary btn-small" title="Numbered List"><i class="fas fa-list-ol"></i></button>
                     <button type="button" id="createLinkBtn" class="btn btn-secondary btn-small" title="Insert Link"><i class="fas fa-link"></i></button>
                     <button type="button" id="insertWikiLinkBtn" class="btn btn-secondary btn-small" title="Insert wiki link"><i class="fas fa-book"></i> Wiki Link</button>
+                    <button type="button" id="insertUnixTimeBtn" class="btn btn-secondary btn-small" title="Insert Unix timestamp"><i class="fas fa-clock"></i> Unix Time</button>
                     <span class="sep"></span>
                     <button type="button" id="insertTableBtn" class="btn btn-secondary btn-small" title="Insert Table"><i class="fas fa-table"></i> Table</button>
                     <div class="table-tools">

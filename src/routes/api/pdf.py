@@ -152,6 +152,7 @@ async def _collect_linked_pages(root_title: str, root_branch: str) -> List[Dict[
     branch = (root_branch or 'main').strip() or 'main'
     queue.append((initial, branch))
     queued: Set[Tuple[str, str]] = {_normalize_key(initial, branch)}
+    logger.info("Starting PDF page crawl from %s (branch: %s)", initial, branch)
     visited: Set[Tuple[str, str]] = set()
     collected: List[Dict[str, str]] = []
 
@@ -178,6 +179,7 @@ async def _collect_linked_pages(root_title: str, root_branch: str) -> List[Dict[
             'raw': raw_content,
             'content': processed,
         })
+        logger.info("Collected page %s (branch: %s) for PDF export", title, page_branch)
 
         if len(collected) >= MAX_LINKED_PAGES:
             break
@@ -190,6 +192,7 @@ async def _collect_linked_pages(root_title: str, root_branch: str) -> List[Dict[
                 continue
             queue.append((linked_title, linked_branch))
             queued.add(child_key)
+            logger.info("Queued linked page %s (branch: %s) for PDF export", linked_title, linked_branch)
 
     return collected
 

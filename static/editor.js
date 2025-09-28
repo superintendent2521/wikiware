@@ -1,4 +1,4 @@
-// WikiWare client-side visual editor (M1 + M2)
+﻿// WikiWare client-side visual editor (M1 + M2)
 // No external deps; serializes back to Markdown on submit
 
 (function () {
@@ -294,6 +294,7 @@
       const buttons = () => qsa('[data-cmd]', toolbar);
       const toggleRawBtn = toolbar ? toolbar.querySelector('#toggleRawBtn') : null;
       const wikiLinkBtn = toolbar ? toolbar.querySelector('#insertWikiLinkBtn') : null;
+      const unixTimeBtn = toolbar ? toolbar.querySelector('#insertUnixTimeBtn') : null;
       const toolbarButtonsAll = () => toolbar ? qsa('button', toolbar) : [];
       let isRawMode = false;
 
