@@ -34,6 +34,10 @@ LOG_LEVEL = "INFO"
 # Name shown on all pages
 NAME = "Starship Wiki"
 
+# Version shown on all pages
+
+VERSION = "1.1"
+
 # Template settings
 TEMPLATE_DIR = "templates"
 
