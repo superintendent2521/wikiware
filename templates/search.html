@@ -36,9 +36,11 @@
                 {% endfor %}
             </div>
             {% else %}
-            <p>No pages found matching "{{ query }}". <a href="/edit/{{ query }}?branch={{ branch or 'main' }}">Create this page?</a></p>
-            {% endif %}
+
+                {% endif %}
         </div>
+            <script src="/static/create_page_modal.js"></script>
+
         {% else %}
         <div class="search-instructions">
             <h3>Search Instructions</h3>
@@ -46,10 +48,13 @@
             <p>You can also:</p>
             <ul>
                 <li><a href="/?branch={{ branch or 'main' }}">Browse all pages</a></li>
-                <li><a href="#" id="createNewPageBtn" data-branch="{{ branch or 'main' }}">Create a new page</a></li>
+                    {% if can_create_page %}
+                    <a id="createPageBtn"><i class="fas fa-plus"></i> Create Page</a>
+                    {% endif %}
             </ul>
         </div>
         {% endif %}
     </div>
 </div>
+
 {% endblock %}
