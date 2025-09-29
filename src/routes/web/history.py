@@ -802,9 +802,28 @@ async def restore_version(
 
         try:
             # Save current version to history before restoring
+            display_version_number: Optional[int] = None
+
+            total_history_versions = 0
+            if history_collection is not None:
+                total_history_versions = await history_collection.count_documents(
+                    {"title": title, "branch": branch}
+                )
+
             current_page = await pages_collection.find_one(
                 {"title": title, "branch": branch}
             )
+            total_versions_before_restore = (
+                total_history_versions + (1 if current_page else 0)
+            )
+            if (
+                total_versions_before_restore > 0
+                and version_index < total_versions_before_restore
+            ):
+                display_version_number = max(
+                    1, total_versions_before_restore - int(version_index)
+                )
+
             if current_page:
                 history_item = {
                     "title": title,
@@ -816,10 +835,17 @@ async def restore_version(
                 }
                 await history_collection.insert_one(history_item)
 
-            restore_summary = (
-                page.get("edit_summary") or f"Restored version {version_index}"
-            )
-            restore_summary = str(restore_summary).strip()
+            original_summary = str(page.get("edit_summary") or "").strip()
+            if display_version_number is not None:
+                version_label = f"Version {display_version_number}"
+            else:
+                version_label = f"Version {max(1, int(version_index))}"
+            if original_summary:
+                restore_summary = (
+                    f"Reverted to {version_label} (original summary: {original_summary})"
+                )
+            else:
+                restore_summary = f"Reverted to {version_label}"
             if len(restore_summary) > 250:
                 restore_summary = restore_summary[:250]
 
@@ -855,3 +881,5 @@ async def restore_version(
             request, title, branch, error="restore_error"
         )
         return RedirectResponse(url=redirect_url, status_code=303)
+
+
