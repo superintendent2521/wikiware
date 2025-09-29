@@ -39,7 +39,6 @@
 
                 {% endif %}
         </div>
-            <script src="/static/create_page_modal.js"></script>
 
         {% else %}
         <div class="search-instructions">
@@ -49,10 +48,10 @@
             <ul>
                 <li><a href="/?branch={{ branch or 'main' }}">Browse all pages</a></li>
                     {% if can_create_page %}
-                    <a id="createPageBtn"><i class="fas fa-plus"></i> Create Page</a>
+                    <li><a class="create-page-btn"><i class="fas fa-plus"></i> Create Page</a></li>
                     {% endif %}
-            </ul>
-        </div>
+                </ul>
+            </div>
         {% endif %}
     </div>
 </div>

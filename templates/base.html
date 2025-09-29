@@ -21,7 +21,7 @@
                     {% if user %}
                     {% set can_create_page = feature_flags.page_editing_enabled or user.is_admin %}
                     {% if can_create_page %}
-                    <a id="createPageBtn"><i class="fas fa-plus"></i> Create Page</a>
+                    <a class="create-page-btn"><i class="fas fa-plus"></i> Create Page</a>
                     {% endif %}
 
                     <div class="user-dropdown" tabindex="0" role="button" aria-haspopup="menu" aria-expanded="false">

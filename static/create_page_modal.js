@@ -29,22 +29,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('createPageForm');
     const pageTitleInput = document.getElementById('pageTitle');
     
-    // Get create button and branch data
-    const createBtn = document.getElementById('createPageBtn');
-    const branch = createBtn ? createBtn.getAttribute('data-branch') : 'main';
-    
     // Hide modal initially
     modal.style.display = 'none';
     
     // Show modal when create button is clicked
-    if (createBtn) {
+    const createBtns = document.querySelectorAll('.create-page-btn');
+    createBtns.forEach(function(createBtn) {
         createBtn.addEventListener('click', function(e) {
             e.preventDefault();
             modal.style.display = 'block';
             // Focus on title input
             pageTitleInput.focus();
+            // Set branch if available
+            const branch = this.getAttribute('data-branch') || 'main';
+            // Could store branch in a hidden input or something if needed
         });
-    }
+    });
     
     // Close modal when close button is clicked
     closeBtn.addEventListener('click', function() {
