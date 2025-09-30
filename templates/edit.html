@@ -53,14 +53,6 @@
                     <label for="sourceUrl">Source URL<span aria-hidden="true">*</span></label>
                     <input type="url" id="sourceUrl" name="source_url" class="form-control" required placeholder="https://example.com/article">
                 </div>
-                <div class="form-group">
-                    <label for="sourceTitle">Title</label>
-                    <input type="text" id="sourceTitle" name="source_title" class="form-control" placeholder="Optional title for the source">
-                </div>
-                <div class="form-group">
-                    <label for="sourceAuthor">Author</label>
-                    <input type="text" id="sourceAuthor" name="source_author" class="form-control" placeholder="Author name (optional)">
-                </div>
                 <div id="sourceStatus" class="source-status" role="status"></div>
                 <div class="form-actions modal-actions">
                     <button type="submit" class="btn btn-primary">Insert Source</button>
@@ -303,7 +295,7 @@
             <li><code>`code`</code> - Inline code</li>
             <li><code>```code block```</code> - Code block</li>
             <li><code>![alt text](image-url)</code> - Image (use Insert Image button to upload)</li>
-            <li><code>{% raw %}{{source|url=https://example.com|title=Title|author=Author}}{% endraw %}</code> - Insert source citation (use Insert Source button)</li>
+            <li><code>{% raw %}{{source|url=https://example.com}}{% endraw %}</code> - Insert source citation (use Insert Source button)</li>
             <a href="/help/index.html" target="_blank">View global variables</a>
         </ul>
     </div>
@@ -762,8 +754,6 @@
         const sourceModal = document.getElementById('sourceModal');
         const sourceForm = document.getElementById('sourceForm');
         const sourceUrlInput = document.getElementById('sourceUrl');
-        const sourceTitleInput = document.getElementById('sourceTitle');
-        const sourceAuthorInput = document.getElementById('sourceAuthor');
         const sourceCancelBtn = document.getElementById('sourceCancel');
         const sourceStatus = document.getElementById('sourceStatus');
         const sourceCloseBtn = sourceModal ? sourceModal.querySelector('.close') : null;
@@ -803,8 +793,6 @@
         function submitSource(event) {
             event.preventDefault();
             const url = sourceUrlInput ? sourceUrlInput.value.trim() : '';
-            const title = sourceTitleInput ? sourceTitleInput.value.trim() : '';
-            const author = sourceAuthorInput ? sourceAuthorInput.value.trim() : '';
             if (!url) {
                 if (sourceStatus) {
                     sourceStatus.innerHTML = '<div class="alert alert-error">URL is required.</div>';
@@ -813,8 +801,7 @@
                 return;
             }
             const encodedUrl = encodeURIComponent(url);
-            const effectiveTitle = title || url;
-            const markdown = '{' + '{source|url=' + encodedUrl + '|title=' + effectiveTitle + '|author=' + author + '}' + '}';
+            const markdown = '{' + '{source|url=' + encodedUrl + '}' + '}';
             const contentTextarea = document.getElementById('content');
             if (contentTextarea) {
                 const start = contentTextarea.selectionStart;
@@ -880,6 +867,9 @@
     });
 </script>
 {% endblock %}
+
+
+
 
 
 
