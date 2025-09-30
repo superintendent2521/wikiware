@@ -43,6 +43,32 @@
         </div>
     </div>
 
+    <!-- Source Citation Modal -->
+    <div id="sourceModal" class="modal" style="display: none;">
+        <div class="modal-content source-modal">
+            <span class="close" aria-label="Close">&times;</span>
+            <h3 class="modal-title">Insert Source</h3>
+            <form id="sourceForm" class="source-form">
+                <div class="form-group">
+                    <label for="sourceUrl">Source URL<span aria-hidden="true">*</span></label>
+                    <input type="url" id="sourceUrl" name="source_url" class="form-control" required placeholder="https://example.com/article">
+                </div>
+                <div class="form-group">
+                    <label for="sourceTitle">Title</label>
+                    <input type="text" id="sourceTitle" name="source_title" class="form-control" placeholder="Optional title for the source">
+                </div>
+                <div class="form-group">
+                    <label for="sourceAuthor">Author</label>
+                    <input type="text" id="sourceAuthor" name="source_author" class="form-control" placeholder="Author name (optional)">
+                </div>
+                <div id="sourceStatus" class="source-status" role="status"></div>
+                <div class="form-actions modal-actions">
+                    <button type="submit" class="btn btn-primary">Insert Source</button>
+                    <button type="button" id="sourceCancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <!-- Image Upload Modal -->
     <div id="imageUploadModal" class="modal" style="display: none;">
         <div class="modal-content image-modal">
@@ -226,6 +252,9 @@
                     <button type="button" id="insertImageBtn" class="btn btn-secondary btn-small" title="Insert Image">
                         <i class="fas fa-image"></i> Image
                     </button>
+                    <button type="button" id="insertSourceBtn" class="btn btn-secondary btn-small" title="Insert Source">
+                        <i class="fas fa-bookmark"></i> Source
+                    </button>
                     <span class="sep"></span>
                     <button type="button" id="toggleRawBtn" class="btn btn-secondary btn-small" title="Toggle raw Markdown view">
                         <i class="fas fa-code"></i> Raw Markdown
@@ -274,6 +303,7 @@
             <li><code>`code`</code> - Inline code</li>
             <li><code>```code block```</code> - Code block</li>
             <li><code>![alt text](image-url)</code> - Image (use Insert Image button to upload)</li>
+            <li><code>{% raw %}{{source|url=https://example.com|title=Title|author=Author}}{% endraw %}</code> - Insert source citation (use Insert Source button)</li>
             <a href="/help/index.html" target="_blank">View global variables</a>
         </ul>
     </div>
@@ -572,6 +602,9 @@
             if (event.target === wikiLinkModal) {
                 hideWikiLinkModal();
             }
+            if (event.target === sourceModal) {
+                hideSourceModal();
+            }
         });
         if (refreshImageLibraryBtn) {
             refreshImageLibraryBtn.addEventListener('click', () => loadImageLibrary(true));
@@ -847,3 +880,6 @@
     });
 </script>
 {% endblock %}
+
+
+
