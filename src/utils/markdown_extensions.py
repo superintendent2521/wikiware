@@ -207,3 +207,87 @@ class UnixTimestampProcessor(InlineProcessor):
                 span.set("title", "Timestamp missing for {{ global.unix }}")
             span.text = "Invalid timestamp"
             return span, m.start(0), m.end(0)
+
+
+class SourceCollectorProcessor(InlineProcessor):
+    """Process {{source|url=...|title=...|author=...}} and collect sources, replacing with citation."""
+
+    def __init__(self, pattern, md):
+        super().__init__(pattern, md)
+        if not hasattr(md, 'sources'):
+            md.sources = []
+        if not hasattr(md, '_source_counter'):
+            md._source_counter = 0
+        if not hasattr(md, '_source_map'):
+            md._source_map = {}  # url -> id for deduping
+
+    def handleMatch(self, m, data):
+        params_str = m.group(1).strip()
+        params = {}
+        for param in params_str.split('|'):
+            if '=' in param:
+                key, value = param.split('=', 1)
+                params[key.strip()] = value.strip()
+
+        url = params.get('url', '')
+        title = params.get('title', url or 'Untitled Source')
+        author = params.get('author', '')
+
+        if not url:
+            # Invalid, replace with error
+            return AtomicString('<span class="source-error">[Invalid source: missing URL]</span>'), m.start(0), m.end(0)
+
+        # Dedupe by URL
+        if url in self.md._source_map:
+            source_id = self.md._source_map[url]
+        else:
+            self.md._source_counter += 1
+            source_id = self.md._source_counter
+            self.md._source_map[url] = source_id
+            self.md.sources.append({
+                'id': source_id,
+                'url': url,
+                'title': title,
+                'author': author
+            })
+
+        # Replace with citation link
+        citation = f'<sup><a href="#source-{source_id}" class="source-citation">[ {source_id} ]</a></sup>'
+        return AtomicString(citation), m.start(0), m.end(0)
+
+
+class SourceCitationProcessor(InlineProcessor):
+    """Process manual [1] citations and replace with links if valid source exists."""
+
+    def __init__(self, pattern, md):
+        super().__init__(pattern, md)
+
+    def handleMatch(self, m, data):
+        id_str = m.group(1).strip()
+        try:
+            source_id = int(id_str)
+            # Check if exists (after all processing, but approx)
+            if hasattr(self.md, 'sources') and any(s['id'] == source_id for s in self.md.sources):
+                citation = f'<sup><a href="#source-{source_id}" class="source-citation">[ {source_id} ]</a></sup>'
+                return AtomicString(citation), m.start(0), m.end(0)
+            else:
+                return AtomicString(f'<sup class="source-invalid">[ {source_id} ]</sup>'), m.start(0), m.end(0)
+        except ValueError:
+            return AtomicString(m.group(0)), m.start(0), m.end(0)  # Keep as is
+
+
+class SourceExtension(Extension):
+    """Markdown extension to support source citations."""
+
+    def extendMarkdown(self, md):
+        # Source collector pattern: {{source|key=val|...}}
+        source_pattern = r'\{\{source\|([^}]+)\}\}'
+        md.inlinePatterns.register(
+            SourceCollectorProcessor(source_pattern, md), 'source_collector', 160
+        )
+
+        # Citation pattern: [1], [2], etc.
+        citation_pattern = r'\[(\d+)\]'
+        md.inlinePatterns.register(
+            SourceCitationProcessor(citation_pattern, md), 'source_citation', 155
+        )

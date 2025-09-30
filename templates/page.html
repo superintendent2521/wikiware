@@ -113,6 +113,21 @@
             <div class="page-content">
                 {{ page.html_content | safe }}
             </div>
+            {% if sources %}
+            <section id="sources" class="sources-section" aria-label="Sources">
+                <h3>Sources</h3>
+                <ol class="sources-list">
+                    {% for source in sources %}
+                    <li id="source-{{ source.id }}">
+                        <a href="{{ source.url }}" target="_blank" rel="noopener">{{ source.title }}</a>
+                        {% if source.author %}
+                        <span class="source-author"> ({{ source.author }})</span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ol>
+            </section>
+            {% endif %}
             <div class="page-footer">
                 {% if can_edit_page %}
                 <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit this page</a>

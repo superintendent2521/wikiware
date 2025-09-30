@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Edit {{ title }} - {{ config.NAME }}{% endblock %}
 
@@ -723,6 +723,94 @@
             wikiLinkCloseBtn.addEventListener('click', hideWikiLinkModal);
         }
         document.addEventListener('wikiLink:open', showWikiLinkModal);
+
+        // Source modal elements
+        const sourceBtn = document.getElementById('insertSourceBtn');
+        const sourceModal = document.getElementById('sourceModal');
+        const sourceForm = document.getElementById('sourceForm');
+        const sourceUrlInput = document.getElementById('sourceUrl');
+        const sourceTitleInput = document.getElementById('sourceTitle');
+        const sourceAuthorInput = document.getElementById('sourceAuthor');
+        const sourceCancelBtn = document.getElementById('sourceCancel');
+        const sourceStatus = document.getElementById('sourceStatus');
+        const sourceCloseBtn = sourceModal ? sourceModal.querySelector('.close') : null;
+
+        function clearSourceStatus() {
+            if (sourceStatus) sourceStatus.innerHTML = '';
+        }
+
+        function resetSourceForm() {
+            if (sourceForm) sourceForm.reset();
+            clearSourceStatus();
+        }
+
+        function hideSourceModal() {
+            if (!sourceModal) return;
+            sourceModal.style.display = 'none';
+            sourceModal.setAttribute('aria-hidden', 'true');
+            resetSourceForm();
+        }
+
+        function showSourceModal() {
+            if (!sourceModal) return;
+            resetSourceForm();
+            sourceModal.style.display = 'block';
+            sourceModal.setAttribute('aria-hidden', 'false');
+            if (sourceUrlInput) {
+                requestAnimationFrame(() => {
+                    try {
+                        sourceUrlInput.focus({ preventScroll: true });
+                    } catch (_) {
+                        sourceUrlInput.focus();
+                    }
+                });
+            }
+        }
+
+        function submitSource(event) {
+            event.preventDefault();
+            const url = sourceUrlInput ? sourceUrlInput.value.trim() : '';
+            const title = sourceTitleInput ? sourceTitleInput.value.trim() : '';
+            const author = sourceAuthorInput ? sourceAuthorInput.value.trim() : '';
+            if (!url) {
+                if (sourceStatus) {
+                    sourceStatus.innerHTML = '<div class="alert alert-error">URL is required.</div>';
+                }
+                if (sourceUrlInput) sourceUrlInput.focus();
+                return;
+            }
+            const encodedUrl = encodeURIComponent(url);
+            const effectiveTitle = title || url;
+            const markdown = '{' + '{source|url=' + encodedUrl + '|title=' + effectiveTitle + '|author=' + author + '}' + '}';
+            const contentTextarea = document.getElementById('content');
+            if (contentTextarea) {
+                const start = contentTextarea.selectionStart;
+                const end = contentTextarea.selectionEnd;
+                const value = contentTextarea.value;
+                contentTextarea.value = value.substring(0, start) + markdown + value.substring(end);
+                contentTextarea.focus();
+                contentTextarea.setSelectionRange(start + markdown.length, start + markdown.length);
+            }
+            // If WikiEditor exists, trigger update
+            if (window.WikiEditor && typeof window.WikiEditor.updateVisual === 'function') {
+                window.WikiEditor.updateVisual();
+            }
+            hideSourceModal();
+        }
+
+        if (sourceForm) {
+            sourceForm.addEventListener('submit', submitSource);
+        }
+        if (sourceCancelBtn) {
+            sourceCancelBtn.addEventListener('click', hideSourceModal);
+        }
+        if (sourceCloseBtn) {
+            sourceCloseBtn.addEventListener('click', hideSourceModal);
+        }
+        if (sourceBtn) {
+            sourceBtn.addEventListener('click', showSourceModal);
+        }
+
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 if (modal && modal.style.display === 'block') {
@@ -730,6 +818,9 @@
                 }
                 if (wikiLinkModal && wikiLinkModal.style.display === 'block') {
                     hideWikiLinkModal();
+                }
+                if (sourceModal && sourceModal.style.display === 'block') {
+                    hideSourceModal();
                 }
                 if (editSummaryPanel && !editSummaryPanel.hidden) {
                     summaryConfirmed = false;
