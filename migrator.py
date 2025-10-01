@@ -112,7 +112,7 @@ def rotate_backups(db: str, keep: int):
 
 def run(cmd: list) -> bool:
     try:
-        print(f"\nRunning:\n  {' '.join(cmd)}")
+        print(f"\nRunning:\n  {shlex.join(cmd)}")
         subprocess.run(cmd, check=True)
         return True
     except subprocess.CalledProcessError as e:
