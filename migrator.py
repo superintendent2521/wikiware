@@ -1,26 +1,11 @@
 #!/usr/bin/env python3
 """
-WikiWare MongoDB Backup & Restore (menu-driven)
+WikiWare MongoDB Backup & Restore (menu-driven, URI-with-DB only)
 
-- No command-line flags. Navigate with 1-5 and numeric inputs.
-- Uses mongodump/mongorestore under the hood.
+- Navigate with 1-5 and numeric inputs (no CLI flags).
+- Uses mongodump/mongorestore; always embeds DB in --uri to avoid --db conflicts.
 - Stores settings in .wikiware_backup_config.json beside this script.
 - Backups saved to ./backups/ (beside this script).
-
-Menu
-  1) Backup now
-  2) Restore (latest)
-  3) Restore (choose backup)
-  4) List backups
-  5) Settings / Exit
-
-Requirements:
-  - MongoDB Database Tools installed (mongodump, mongorestore on PATH)
-  - Python 3.8+
-
-Environment defaults (optional):
-  - MONGODB_URL (e.g. mongodb://localhost:27017 or mongodb+srv://...)
-  - MONGODB_DB  (defaults to "wikiware")
 """
 
 import os
@@ -30,9 +15,9 @@ import shutil
 import datetime as dt
 import subprocess
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List
 import shlex
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse, urlunparse, ParseResult
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKUP_DIR = SCRIPT_DIR / "backups"
@@ -150,20 +135,27 @@ def prompt_yes_no(prompt_text: str, default: bool = False) -> bool:
             return False
         print("Please answer y or n.")
 
-def split_mongo_uri(uri: str) -> Tuple[str, Optional[str]]:
+def uri_with_db(uri: str, db: str) -> str:
     """
-    Returns (base_uri_without_db, db_in_uri or None).
-
-    Examples:
-      mongodb://host:27017           -> ("mongodb://host:27017", None)
-      mongodb://host:27017/wikiware  -> ("mongodb://host:27017", "wikiware")
-      mongodb+srv://x/test?retry=1   -> ("mongodb+srv://x?retry=1", "test")
+    Ensure the MongoDB URI includes the database path.
+    Preserves query parameters and fragments.
+      mongodb://h:27017        -> mongodb://h:27017/wikiware
+      mongodb://h:27017/foo    -> mongodb://h:27017/wikiware   (we force to selected DB)
+      mongodb+srv://x/?opt=1   -> mongodb+srv://x/wikiware?opt=1
     """
     p = urlparse(uri)
-    db_in_uri = p.path.lstrip('/') or None
-    # rebuild base without a path
-    base = urlunparse((p.scheme, p.netloc, "", p.params, p.query, p.fragment))
-    return base, db_in_uri
+    # Normalize empty path or root-only path to our db
+    new_path = f"/{db}"
+    # Rebuild ParseResult with forced path
+    forced = ParseResult(
+        scheme=p.scheme,
+        netloc=p.netloc,
+        path=new_path,
+        params=p.params,
+        query=p.query,
+        fragment=p.fragment,
+    )
+    return urlunparse(forced)
 
 # --------------------------- Actions ---------------------------
 
@@ -175,24 +167,13 @@ def action_backup(conf: dict):
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     archive = BACKUP_DIR / f"{conf['db']}-{timestamp()}.archive.gz"
 
-    base_uri, db_in_uri = split_mongo_uri(conf["uri"])
-    if db_in_uri:
-        # DB already in URI: don't pass --db
-        cmd = [
-            "mongodump",
-            f"--uri={conf['uri']}",
-            f"--archive={str(archive)}",
-            "--gzip",
-        ]
-    else:
-        # No DB in URI: pass --db explicitly
-        cmd = [
-            "mongodump",
-            f"--uri={base_uri}",
-            f"--db={conf['db']}",
-            f"--archive={str(archive)}",
-            "--gzip",
-        ]
+    uri_db = uri_with_db(conf["uri"], conf["db"])
+    cmd = [
+        "mongodump",
+        f"--uri={uri_db}",
+        f"--archive={str(archive)}",
+        "--gzip",
+    ]
 
     ok = run(cmd)
     if ok:
@@ -216,18 +197,10 @@ def action_restore_latest(conf: dict):
     if not prompt_yes_no(f"Proceed restoring into '{conf['db']}' from '{arc.name}'? (--drop={drop})", default=False):
         return
 
-    base_uri, db_in_uri = split_mongo_uri(conf["uri"])
-    # We'll keep using ns remap to ensure it lands in conf['db'] even if the archive was made with that same name.
-    if db_in_uri:
-        uri_for_restore = conf["uri"]
-    else:
-        uri_for_restore = base_uri
-
+    uri_db = uri_with_db(conf["uri"], conf["db"])
     cmd = [
         "mongorestore",
-        f"--uri={uri_for_restore}",
-        f"--nsFrom={conf['db']}.*",
-        f"--nsTo={conf['db']}.*",
+        f"--uri={uri_db}",
         f"--archive={str(arc)}",
         "--gzip",
     ]
@@ -260,17 +233,10 @@ def action_restore_choose(conf: dict):
     if not prompt_yes_no(f"Proceed restoring into '{conf['db']}' from '{arc.name}'? (--drop={drop})", default=False):
         return
 
-    base_uri, db_in_uri = split_mongo_uri(conf["uri"])
-    if db_in_uri:
-        uri_for_restore = conf["uri"]
-    else:
-        uri_for_restore = base_uri
-
+    uri_db = uri_with_db(conf["uri"], conf["db"])
     cmd = [
         "mongorestore",
-        f"--uri={uri_for_restore}",
-        f"--nsFrom={conf['db']}.*",
-        f"--nsTo={conf['db']}.*",
+        f"--uri={uri_db}",
         f"--archive={str(arc)}",
         "--gzip",
     ]
