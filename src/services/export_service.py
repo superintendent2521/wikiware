@@ -19,6 +19,7 @@ from ..database import (
     get_history_collection,
     get_pages_collection,
     get_users_collection,
+    get_image_hashes_collection,
 )
 from ..services.user_service import UserService
 
@@ -152,7 +153,7 @@ class ExportService:
         *,
         filename: Optional[str] = None,
     ) -> AsyncIterator[bytes]:
-        """Stream a ZIP archive containing pages, history, and branches collections."""
+        """Stream a ZIP archive containing pages, history, picture_shas, and branches collections."""
         if not db_instance.is_connected:
             raise ExportUnavailableError("Database connection is not available")
 
@@ -165,13 +166,14 @@ class ExportService:
         pages_collection = get_pages_collection()
         history_collection = get_history_collection()
         branches_collection = get_branches_collection()
-
+        image_collection = get_image_hashes_collection() # its just sha256s
         missing_collections = [
             name
             for name, coll in (
                 ("pages", pages_collection),
                 ("history", history_collection),
                 ("branches", branches_collection),
+                ("images", image_collection)
             )
             if coll is None
         ]
@@ -190,6 +192,11 @@ class ExportService:
             {
                 "stream": cls._stream_collection_json(history_collection, "history"),
                 "name": "history.json",
+                "compression": "deflate",
+            },
+                        {
+                "stream": cls._stream_collection_json(image_collection, "picture_shas"),
+                "name": "image.json",
                 "compression": "deflate",
             },
             {
