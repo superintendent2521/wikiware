@@ -30,8 +30,9 @@ import shutil
 import datetime as dt
 import subprocess
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import shlex
+from urllib.parse import urlparse, urlunparse
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKUP_DIR = SCRIPT_DIR / "backups"
@@ -149,6 +150,21 @@ def prompt_yes_no(prompt_text: str, default: bool = False) -> bool:
             return False
         print("Please answer y or n.")
 
+def split_mongo_uri(uri: str) -> Tuple[str, Optional[str]]:
+    """
+    Returns (base_uri_without_db, db_in_uri or None).
+
+    Examples:
+      mongodb://host:27017           -> ("mongodb://host:27017", None)
+      mongodb://host:27017/wikiware  -> ("mongodb://host:27017", "wikiware")
+      mongodb+srv://x/test?retry=1   -> ("mongodb+srv://x?retry=1", "test")
+    """
+    p = urlparse(uri)
+    db_in_uri = p.path.lstrip('/') or None
+    # rebuild base without a path
+    base = urlunparse((p.scheme, p.netloc, "", p.params, p.query, p.fragment))
+    return base, db_in_uri
+
 # --------------------------- Actions ---------------------------
 
 def action_backup(conf: dict):
@@ -158,13 +174,26 @@ def action_backup(conf: dict):
         return
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     archive = BACKUP_DIR / f"{conf['db']}-{timestamp()}.archive.gz"
-    cmd = [
-        "mongodump",
-        f"--uri={conf['uri']}",
-        f"--db={conf['db']}",
-        f"--archive={str(archive)}",
-        "--gzip",
-    ]
+
+    base_uri, db_in_uri = split_mongo_uri(conf["uri"])
+    if db_in_uri:
+        # DB already in URI: don't pass --db
+        cmd = [
+            "mongodump",
+            f"--uri={conf['uri']}",
+            f"--archive={str(archive)}",
+            "--gzip",
+        ]
+    else:
+        # No DB in URI: pass --db explicitly
+        cmd = [
+            "mongodump",
+            f"--uri={base_uri}",
+            f"--db={conf['db']}",
+            f"--archive={str(archive)}",
+            "--gzip",
+        ]
+
     ok = run(cmd)
     if ok:
         print(f"\n✅ Backup created: {archive}")
@@ -187,9 +216,16 @@ def action_restore_latest(conf: dict):
     if not prompt_yes_no(f"Proceed restoring into '{conf['db']}' from '{arc.name}'? (--drop={drop})", default=False):
         return
 
+    base_uri, db_in_uri = split_mongo_uri(conf["uri"])
+    # We'll keep using ns remap to ensure it lands in conf['db'] even if the archive was made with that same name.
+    if db_in_uri:
+        uri_for_restore = conf["uri"]
+    else:
+        uri_for_restore = base_uri
+
     cmd = [
         "mongorestore",
-        f"--uri={conf['uri']}",
+        f"--uri={uri_for_restore}",
         f"--nsFrom={conf['db']}.*",
         f"--nsTo={conf['db']}.*",
         f"--archive={str(arc)}",
@@ -224,9 +260,15 @@ def action_restore_choose(conf: dict):
     if not prompt_yes_no(f"Proceed restoring into '{conf['db']}' from '{arc.name}'? (--drop={drop})", default=False):
         return
 
+    base_uri, db_in_uri = split_mongo_uri(conf["uri"])
+    if db_in_uri:
+        uri_for_restore = conf["uri"]
+    else:
+        uri_for_restore = base_uri
+
     cmd = [
         "mongorestore",
-        f"--uri={conf['uri']}",
+        f"--uri={uri_for_restore}",
         f"--nsFrom={conf['db']}.*",
         f"--nsTo={conf['db']}.*",
         f"--archive={str(arc)}",
@@ -314,12 +356,13 @@ def main():
             action_list(conf)
         elif choice == "5":
             action_settings(conf)
-        elif choice == "6":
             clear()
-            print("Bye.")
-            return
+            if prompt_yes_no("Exit now?", default=False):
+                clear()
+                print("Bye.")
+                return
         else:
-            print("Please choose 1-6.")
+            print("Please choose 1-5.")
             pause("")
 
 if __name__ == "__main__":
