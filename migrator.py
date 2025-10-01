@@ -31,6 +31,7 @@ import datetime as dt
 import subprocess
 from pathlib import Path
 from typing import Optional, List
+import shlex
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKUP_DIR = SCRIPT_DIR / "backups"
