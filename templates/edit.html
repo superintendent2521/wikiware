@@ -776,6 +776,10 @@
 
         function showSourceModal() {
             if (!sourceModal) return;
+            // shit is still broken i cba atp bruh
+            if (window.WikiEditor && typeof window.WikiEditor.captureSelection === 'function') {
+                window.WikiEditor.captureSelection();
+            }
             resetSourceForm();
             sourceModal.style.display = 'block';
             sourceModal.setAttribute('aria-hidden', 'false');
@@ -800,20 +804,39 @@
                 if (sourceUrlInput) sourceUrlInput.focus();
                 return;
             }
-            const encodedUrl = encodeURIComponent(url);
-            const markdown = '{' + '{source|url=' + encodedUrl + '}' + '}';
-            const contentTextarea = document.getElementById('content');
-            if (contentTextarea) {
-                const start = contentTextarea.selectionStart;
-                const end = contentTextarea.selectionEnd;
-                const value = contentTextarea.value;
-                contentTextarea.value = value.substring(0, start) + markdown + value.substring(end);
-                contentTextarea.focus();
-                contentTextarea.setSelectionRange(start + markdown.length, start + markdown.length);
+            const markdownUrl = url.split('|').join('%7C');
+            const markdown = '{' + '{source|url=' + markdownUrl + '}' + '}';
+            let handledByEditor = false;
+            if (window.WikiEditor && typeof window.WikiEditor.insertSnippet === 'function') {
+                if (typeof window.WikiEditor.restoreSelection === 'function') {
+                    window.WikiEditor.restoreSelection();
+                }
+                handledByEditor = !!window.WikiEditor.insertSnippet(markdown);
             }
-            // If WikiEditor exists, trigger update
-            if (window.WikiEditor && typeof window.WikiEditor.updateVisual === 'function') {
-                window.WikiEditor.updateVisual();
+            if (!handledByEditor && contentTextarea) {
+                const start = typeof contentTextarea.selectionStart === 'number' ? contentTextarea.selectionStart : (contentTextarea.value ? contentTextarea.value.length : 0);
+                const end = typeof contentTextarea.selectionEnd === 'number' ? contentTextarea.selectionEnd : start;
+                const value = contentTextarea.value || '';
+                contentTextarea.value = value.substring(0, start) + markdown + value.substring(end);
+                const pos = start + markdown.length;
+                try {
+                    contentTextarea.focus({ preventScroll: true });
+                } catch (_) {
+                    contentTextarea.focus();
+                }
+                if (typeof contentTextarea.setSelectionRange === 'function') {
+                    contentTextarea.setSelectionRange(pos, pos);
+                }
+                try {
+                    contentTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                } catch (_) {
+                    const fallbackEvent = document.createEvent('Event');
+                    fallbackEvent.initEvent('input', true, false);
+                    contentTextarea.dispatchEvent(fallbackEvent);
+                }
+                if (window.WikiEditor && typeof window.WikiEditor.updateVisual === 'function') {
+                    window.WikiEditor.updateVisual();
+                }
             }
             hideSourceModal();
         }
@@ -827,7 +850,24 @@
         if (sourceCloseBtn) {
             sourceCloseBtn.addEventListener('click', hideSourceModal);
         }
+
+        function captureSourceSelectionBeforeOpen() {
+            if (window.WikiEditor && typeof window.WikiEditor.captureSelection === 'function') {
+                window.WikiEditor.captureSelection();
+            }
+        }
+
+        function handleSourceButtonKeydown(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                captureSourceSelectionBeforeOpen();
+            }
+        }
+
         if (sourceBtn) {
+            sourceBtn.addEventListener('pointerdown', captureSourceSelectionBeforeOpen);
+            sourceBtn.addEventListener('mousedown', captureSourceSelectionBeforeOpen);
+            sourceBtn.addEventListener('touchstart', captureSourceSelectionBeforeOpen);
+            sourceBtn.addEventListener('keydown', handleSourceButtonKeydown);
             sourceBtn.addEventListener('click', showSourceModal);
         }
 
@@ -867,9 +907,3 @@
     });
 </script>
 {% endblock %}
-
-
-
-
-
-

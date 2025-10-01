@@ -1,4 +1,4 @@
-﻿// WikiWare client-side visual editor (M1 + M2)
+// WikiWare client-side visual editor (M1 + M2)
 // No external deps; serializes back to Markdown on submit
 
 (function () {
@@ -329,7 +329,7 @@
       }
 
       function insertSnippet(snippet) {
-        if (!snippet) return;
+        if (!snippet) return false;
         if (isRawMode && textarea) {
           textarea.focus();
           const start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : textarea.value.length;
@@ -347,15 +347,27 @@
             evt.initEvent('input', true, false);
             textarea.dispatchEvent(evt);
           }
-          return;
+          return true;
         }
-        if (!editor) return;
+        if (!editor) return false;
+        if (typeof restoreSavedSelection === 'function') {
+          const sel = window.getSelection();
+          let needsRestore = true;
+          if (sel && sel.rangeCount) {
+            const currentRange = sel.getRangeAt(0);
+            const ancestor = currentRange && currentRange.commonAncestorContainer;
+            needsRestore = !ancestor || !editor.contains(ancestor);
+          }
+          if (needsRestore && lastSelectionRange && lastSelectionEditor) {
+            restoreSavedSelection();
+          }
+        }
         editor.focus();
         let didInsert = false;
         try {
           if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
             didInsert = document.execCommand('insertText', false, snippet);
-          } else {
+          } else if (document.execCommand) {
             didInsert = document.execCommand('insertText', false, snippet);
           }
         } catch (_) {
@@ -374,13 +386,18 @@
               sel.removeAllRanges();
               sel.addRange(range);
             }
+            didInsert = true;
           } else {
             editor.appendChild(document.createTextNode(snippet));
+            didInsert = true;
           }
         }
-        dispatchEditorInput();
-        captureSelection();
-        updateToolbarState();
+        if (didInsert) {
+          dispatchEditorInput();
+          captureSelection();
+          updateToolbarState();
+        }
+        return didInsert;
       }
 
       function setRawMode(enabled) {
@@ -788,6 +805,7 @@
         return true;
       };
       WikiEditor.requestWikiLinkModal = requestWikiLinkModal;
+      WikiEditor.insertSnippet = insertSnippet;
 
       // Initial state
       updateToolbarState();
@@ -836,3 +854,4 @@
 
   window.WikiEditor = WikiEditor;
 })();
+
