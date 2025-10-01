@@ -168,13 +168,12 @@
         </div>
     </div>
 
-    {% if branch %}
-    <div class="branch-info">
-        <p><strong>Current Branch:</strong> {{ branch }}</p>
-    </div>
-    {% endif %}
+
 
     <div class="branch-info">
+            {% if branch %}
+        <p><strong>Current Branch:</strong> {{ branch }}</p>
+    {% endif %}
         <details>
             <summary>Branch Management</summary>
             <form action="/branches/{{ title }}/create" method="post">
