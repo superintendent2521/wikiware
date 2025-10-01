@@ -328,6 +328,15 @@
         }
       }
 
+      function syncTextareaFromEditor() {
+        if (!textarea || isRawMode) return;
+        try {
+          textarea.value = htmlToMd(editor);
+        } catch (_) {
+          textarea.value = editor ? editor.textContent || '' : (textarea.value || '');
+        }
+      }
+
       function insertSnippet(snippet) {
         if (!snippet) return false;
         if (isRawMode && textarea) {
@@ -362,7 +371,11 @@
             restoreSavedSelection();
           }
         }
-        editor.focus();
+        try {
+          editor.focus({ preventScroll: true });
+        } catch (_) {
+          editor.focus();
+        }
         let didInsert = false;
         try {
           if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
@@ -396,9 +409,46 @@
           dispatchEditorInput();
           captureSelection();
           updateToolbarState();
+          syncTextareaFromEditor();
         }
         return didInsert;
       }
+
+      function insertSourceCitation(rawUrl) {
+        const url = (rawUrl || '').trim();
+        if (!url) return false;
+        let encoded = url;
+        try {
+          encoded = encodeURI(url);
+        } catch (_) {
+          encoded = url;
+        }
+        const markdownUrl = encoded.replace(/\|/g, '%7C');
+        const snippet = '{{source|url=' + markdownUrl + '}}';
+        let inserted = insertSnippet(snippet);
+        if (inserted) return true;
+        if (textarea) {
+          textarea.focus();
+          const value = textarea.value || '';
+          const start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : value.length;
+          const end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : start;
+          textarea.value = value.slice(0, start) + snippet + value.slice(end);
+          const pos = start + snippet.length;
+          if (typeof textarea.setSelectionRange === 'function') {
+            textarea.setSelectionRange(pos, pos);
+          }
+          try {
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (_) {
+            const fallbackEvt = document.createEvent('Event');
+            fallbackEvt.initEvent('input', true, false);
+            textarea.dispatchEvent(fallbackEvt);
+          }
+          return true;
+        }
+        return false;
+      }
+
 
       function setRawMode(enabled) {
         if (!textarea || !editor) return;
@@ -787,7 +837,7 @@
         updateToolbarState();
       }
 
-      ['keyup','mouseup','mouseleave','input','focus'].forEach(ev => {
+      ['keyup','mouseup','mouseleave','input','focus','blur'].forEach(ev => {
         editor.addEventListener(ev, handleEditorInteraction);
       });
       document.addEventListener('selectionchange', handleEditorInteraction);
@@ -806,6 +856,9 @@
       };
       WikiEditor.requestWikiLinkModal = requestWikiLinkModal;
       WikiEditor.insertSnippet = insertSnippet;
+      WikiEditor.insertSourceCitation = insertSourceCitation;
+      WikiEditor.syncTextareaFromEditor = syncTextareaFromEditor;
+      WikiEditor.isRawMode = () => isRawMode;
 
       // Initial state
       updateToolbarState();

@@ -804,21 +804,35 @@
                 if (sourceUrlInput) sourceUrlInput.focus();
                 return;
             }
-            const markdownUrl = url.split('|').join('%7C');
-            const markdown = '{' + '{source|url=' + markdownUrl + '}' + '}';
-            let handledByEditor = false;
-            if (window.WikiEditor && typeof window.WikiEditor.insertSnippet === 'function') {
-                if (typeof window.WikiEditor.restoreSelection === 'function') {
-                    window.WikiEditor.restoreSelection();
-                }
-                handledByEditor = !!window.WikiEditor.insertSnippet(markdown);
+            let encodedUrl;
+            try {
+                encodedUrl = encodeURI(url);
+            } catch (_) {
+                encodedUrl = url;
             }
-            if (!handledByEditor && contentTextarea) {
+            const markdownUrl = encodedUrl.replace(/\|/g, '%7C');
+            const snippet = '{' + '{source|url=' + markdownUrl + '}' + '}';
+            let inserted = false;
+            const editorApi = window.WikiEditor;
+            if (editorApi) {
+                if (typeof editorApi.insertSourceCitation === 'function') {
+                    inserted = !!editorApi.insertSourceCitation(url);
+                } else if (typeof editorApi.insertSnippet === 'function') {
+                    if (typeof editorApi.restoreSelection === 'function') {
+                        editorApi.restoreSelection();
+                    }
+                    inserted = !!editorApi.insertSnippet(snippet);
+                    if (inserted && typeof editorApi.syncTextareaFromEditor === 'function') {
+                        editorApi.syncTextareaFromEditor();
+                    }
+                }
+            }
+            if (!inserted && contentTextarea) {
                 const start = typeof contentTextarea.selectionStart === 'number' ? contentTextarea.selectionStart : (contentTextarea.value ? contentTextarea.value.length : 0);
                 const end = typeof contentTextarea.selectionEnd === 'number' ? contentTextarea.selectionEnd : start;
                 const value = contentTextarea.value || '';
-                contentTextarea.value = value.substring(0, start) + markdown + value.substring(end);
-                const pos = start + markdown.length;
+                contentTextarea.value = value.substring(0, start) + snippet + value.substring(end);
+                const pos = start + snippet.length;
                 try {
                     contentTextarea.focus({ preventScroll: true });
                 } catch (_) {
@@ -834,11 +848,13 @@
                     fallbackEvent.initEvent('input', true, false);
                     contentTextarea.dispatchEvent(fallbackEvent);
                 }
-                if (window.WikiEditor && typeof window.WikiEditor.updateVisual === 'function') {
-                    window.WikiEditor.updateVisual();
-                }
+                inserted = true;
             }
-            hideSourceModal();
+            if (inserted) {
+                hideSourceModal();
+            } else if (sourceStatus) {
+                sourceStatus.innerHTML = '<div class="alert alert-error">Unable to insert source. Please try again.</div>';
+            }
         }
 
         if (sourceForm) {
