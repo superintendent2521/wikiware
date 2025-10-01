@@ -274,22 +274,47 @@ class SourceCitationProcessor(InlineProcessor):
         id_str = m.group(1).strip()
         try:
             source_id = int(id_str)
-            # Check if exists (after all processing, but approx)
-            if hasattr(self.md, 'sources') and any(s['id'] == source_id for s in self.md.sources):
-                citation_sup = Element("sup")
+            citation_sup = Element("sup")
+            citation_sup.set("data-source-id", str(source_id))
+            citation_sup.text = f"[ {source_id} ]"
+            return citation_sup, m.start(0), m.end(0)
+        except ValueError:
+            return AtomicString(m.group(0)), m.start(0), m.end(0)  # Keep as is
+
+
+class SourceFinalizeTreeprocessor(Treeprocessor):
+    """Finalize source citations after all inline processing has completed."""
+
+    def run(self, root):
+        sources = getattr(self.md, 'sources', [])
+        sources_by_id = {str(source['id']): source for source in sources}
+
+        for element in root.iter():
+            if element.tag != "sup":
+                continue
+
+            source_id = element.attrib.pop("data-source-id", None)
+            if source_id is None:
+                continue
+
+            # Remove any placeholder children/text before building the final markup
+            element.text = ""
+            for child in list(element):
+                element.remove(child)
+
+            source = sources_by_id.get(source_id)
+            if source is not None:
+                element.attrib.pop("class", None)
                 citation_link = Element("a")
                 citation_link.set("href", f"#source-{source_id}")
                 citation_link.set("class", "source-citation")
                 citation_link.text = f"[ {source_id} ]"
-                citation_sup.append(citation_link)
-                return citation_sup, m.start(0), m.end(0)
+                element.append(citation_link)
             else:
-                invalid_sup = Element("sup")
-                invalid_sup.set("class", "source-invalid")
-                invalid_sup.text = f"[ {source_id} ]"
-                return invalid_sup, m.start(0), m.end(0)
-        except ValueError:
-            return AtomicString(m.group(0)), m.start(0), m.end(0)  # Keep as is
+                element.set("class", "source-invalid")
+                element.text = f"[ {source_id} ]"
+
+        return root
 
 
 class SourceExtension(Extension):
@@ -306,4 +331,9 @@ class SourceExtension(Extension):
         citation_pattern = r'\[(\d+)\]'
         md.inlinePatterns.register(
             SourceCitationProcessor(citation_pattern, md), 'source_citation', 155
+        )
+
+        # Finalize citations after the inline phase so manual references resolve correctly
+        md.treeprocessors.register(
+            SourceFinalizeTreeprocessor(md), 'source_finalize', 5
         )
