@@ -58,23 +58,74 @@
 
     let sourceCounter = 0;
 
+    const sourceKeyPattern = /^\s*([A-Za-z0-9_-]+)\s*=/;
+
+    function parseSourceParams(paramStr) {
+      if (!paramStr) return {};
+
+      const segments = [];
+      let current = '';
+      let index = 0;
+
+      while (index < paramStr.length) {
+        const ch = paramStr[index];
+
+        if (ch === '\\') {
+          index += 1;
+          if (index < paramStr.length) {
+            current += paramStr[index];
+            index += 1;
+          } else {
+            current += ch;
+          }
+          continue;
+        }
+
+        if (ch === '|') {
+          const rest = paramStr.slice(index + 1);
+          if (sourceKeyPattern.test(rest)) {
+            segments.push(current);
+            current = '';
+            index += 1;
+            continue;
+          }
+        }
+
+        current += ch;
+        index += 1;
+      }
+
+      segments.push(current);
+
+      const params = {};
+      segments.forEach((segment) => {
+        if (!segment) return;
+        const eqIndex = segment.indexOf('=');
+        if (eqIndex === -1) return;
+        const key = segment.slice(0, eqIndex).trim().toLowerCase();
+        if (!key) return;
+        let value = segment.slice(eqIndex + 1).trim();
+        if (value.length >= 2 && value[0] === value[value.length - 1] && (value[0] === '"' || value[0] === '\'')) {
+          value = value.slice(1, -1);
+        }
+        params[key] = value;
+      });
+
+      return params;
+    }
+
     // Inline replacements: bold, italic, code, links, images
     function renderInline(text) {
       if (!text) return '';
       // Escape first
       text = escapeHtml(text);
       text = text.replace(/\{\{source\|([^}]+)\}\}/gi, (_, body) => {
-        const meta = { url: '', title: '', author: '' };
-        body.split('|').forEach((segment) => {
-          const [rawKey, ...rawValue] = segment.split('=');
-          if (!rawKey) return;
-          const key = rawKey.trim().toLowerCase();
-          const value = rawValue.join('=').trim();
-          if (!value) return;
-          if (key === 'url') meta.url = value;
-          if (key === 'title') meta.title = value;
-          if (key === 'author') meta.author = value;
-        });
+        const parsed = parseSourceParams(body);
+        const meta = {
+          url: parsed.url || '',
+          title: parsed.title || '',
+          author: parsed.author || '',
+        };
         const index = ++sourceCounter;
         const supAttrs = [
           'class="source-ref"',

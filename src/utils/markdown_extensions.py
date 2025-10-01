@@ -4,6 +4,7 @@ Adds support for [[Page Title]] internal linking syntax and table rendering with
 """
 
 from urllib.parse import quote
+import re
 import html as _html
 from xml.etree.ElementTree import Element
 from datetime import datetime, timezone
@@ -12,6 +13,65 @@ from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString
 from markdown.treeprocessors import Treeprocessor
 from markdown.extensions.tables import TableExtension
+
+
+_SOURCE_PARAM_KEY_PATTERN = re.compile(r"^\s*([A-Za-z0-9_-]+)\s*=")
+
+
+def _parse_source_params(params_str):
+    """Split source parameters while tolerating pipes within values."""
+    if not params_str:
+        return {}
+
+    segments = []
+    buf = []
+    length = len(params_str)
+    index = 0
+
+    while index < length:
+        char = params_str[index]
+
+        if char == '\\':
+            index += 1
+            if index < length:
+                buf.append(params_str[index])
+                index += 1
+            else:
+                buf.append('\\')
+            continue
+
+        if char == '|':
+            remainder = params_str[index + 1:]
+            if _SOURCE_PARAM_KEY_PATTERN.match(remainder):
+                segments.append(''.join(buf))
+                buf = []
+                index += 1
+                continue
+
+        buf.append(char)
+        index += 1
+
+    segments.append(''.join(buf))
+
+    params = {}
+    for segment in segments:
+        if not segment:
+            continue
+        if '=' not in segment:
+            continue
+
+        key, value = segment.split('=', 1)
+        key = key.strip().lower()
+        if not key:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and ((value[0] == value[-1]) and value[0] in ('"', "'")):
+            value = value[1:-1]
+
+        params[key] = value
+
+    return params
 
 
 class InternalLinkProcessor(InlineProcessor):
@@ -223,11 +283,7 @@ class SourceCollectorProcessor(InlineProcessor):
 
     def handleMatch(self, m, data):
         params_str = m.group(1).strip()
-        params = {}
-        for param in params_str.split('|'):
-            if '=' in param:
-                key, value = param.split('=', 1)
-                params[key.strip()] = value.strip()
+        params = _parse_source_params(params_str)
 
         url = params.get('url', '')
         title = params.get('title', url or 'Untitled Source')
