@@ -234,8 +234,11 @@ class SourceCollectorProcessor(InlineProcessor):
         author = params.get('author', '')
 
         if not url:
-            # Invalid, replace with error
-            return AtomicString('<span class="source-error">[Invalid source: missing URL]</span>'), m.start(0), m.end(0)
+            # Invalid, replace with error element so markup isn't escaped
+            error_span = Element("span")
+            error_span.set("class", "source-error")
+            error_span.text = "[Invalid source: missing URL]"
+            return error_span, m.start(0), m.end(0)
 
         # Dedupe by URL
         if url in self.md._source_map:
@@ -251,9 +254,14 @@ class SourceCollectorProcessor(InlineProcessor):
                 'author': author
             })
 
-        # Replace with citation link
-        citation = f'<sup><a href="#source-{source_id}" class="source-citation">[ {source_id} ]</a></sup>'
-        return AtomicString(citation), m.start(0), m.end(0)
+        # Replace with citation link element so the HTML renders server-side
+        citation_sup = Element("sup")
+        citation_link = Element("a")
+        citation_link.set("href", f"#source-{source_id}")
+        citation_link.set("class", "source-citation")
+        citation_link.text = f"[ {source_id} ]"
+        citation_sup.append(citation_link)
+        return citation_sup, m.start(0), m.end(0)
 
 
 class SourceCitationProcessor(InlineProcessor):
@@ -268,10 +276,18 @@ class SourceCitationProcessor(InlineProcessor):
             source_id = int(id_str)
             # Check if exists (after all processing, but approx)
             if hasattr(self.md, 'sources') and any(s['id'] == source_id for s in self.md.sources):
-                citation = f'<sup><a href="#source-{source_id}" class="source-citation">[ {source_id} ]</a></sup>'
-                return AtomicString(citation), m.start(0), m.end(0)
+                citation_sup = Element("sup")
+                citation_link = Element("a")
+                citation_link.set("href", f"#source-{source_id}")
+                citation_link.set("class", "source-citation")
+                citation_link.text = f"[ {source_id} ]"
+                citation_sup.append(citation_link)
+                return citation_sup, m.start(0), m.end(0)
             else:
-                return AtomicString(f'<sup class="source-invalid">[ {source_id} ]</sup>'), m.start(0), m.end(0)
+                invalid_sup = Element("sup")
+                invalid_sup.set("class", "source-invalid")
+                invalid_sup.text = f"[ {source_id} ]"
+                return invalid_sup, m.start(0), m.end(0)
         except ValueError:
             return AtomicString(m.group(0)), m.start(0), m.end(0)  # Keep as is
 

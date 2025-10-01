@@ -801,59 +801,25 @@
                 if (sourceStatus) {
                     sourceStatus.innerHTML = '<div class="alert alert-error">URL is required.</div>';
                 }
-                if (sourceUrlInput) sourceUrlInput.focus();
+                if (sourceUrlInput) {
+                    sourceUrlInput.focus();
+                }
                 return;
             }
-            let encodedUrl;
-            try {
-                encodedUrl = encodeURI(url);
-            } catch (_) {
-                encodedUrl = url;
-            }
-            const markdownUrl = encodedUrl.replace(/\|/g, '%7C');
-            const snippet = '{' + '{source|url=' + markdownUrl + '}' + '}';
-            let inserted = false;
+
             const editorApi = window.WikiEditor;
-            if (editorApi) {
-                if (typeof editorApi.insertSourceCitation === 'function') {
-                    inserted = !!editorApi.insertSourceCitation(url);
-                } else if (typeof editorApi.insertSnippet === 'function') {
-                    if (typeof editorApi.restoreSelection === 'function') {
-                        editorApi.restoreSelection();
-                    }
-                    inserted = !!editorApi.insertSnippet(snippet);
-                    if (inserted && typeof editorApi.syncTextareaFromEditor === 'function') {
-                        editorApi.syncTextareaFromEditor();
-                    }
+            if (editorApi && typeof editorApi.insertSourceCitation === 'function') {
+                const inserted = editorApi.insertSourceCitation(url);
+                if (inserted) {
+                    hideSourceModal();
+                } else if (sourceStatus) {
+                    sourceStatus.innerHTML = '<div class="alert alert-error">Unable to insert source. Please try again.</div>';
                 }
+                return;
             }
-            if (!inserted && contentTextarea) {
-                const start = typeof contentTextarea.selectionStart === 'number' ? contentTextarea.selectionStart : (contentTextarea.value ? contentTextarea.value.length : 0);
-                const end = typeof contentTextarea.selectionEnd === 'number' ? contentTextarea.selectionEnd : start;
-                const value = contentTextarea.value || '';
-                contentTextarea.value = value.substring(0, start) + snippet + value.substring(end);
-                const pos = start + snippet.length;
-                try {
-                    contentTextarea.focus({ preventScroll: true });
-                } catch (_) {
-                    contentTextarea.focus();
-                }
-                if (typeof contentTextarea.setSelectionRange === 'function') {
-                    contentTextarea.setSelectionRange(pos, pos);
-                }
-                try {
-                    contentTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-                } catch (_) {
-                    const fallbackEvent = document.createEvent('Event');
-                    fallbackEvent.initEvent('input', true, false);
-                    contentTextarea.dispatchEvent(fallbackEvent);
-                }
-                inserted = true;
-            }
-            if (inserted) {
-                hideSourceModal();
-            } else if (sourceStatus) {
-                sourceStatus.innerHTML = '<div class="alert alert-error">Unable to insert source. Please try again.</div>';
+
+            if (sourceStatus) {
+                sourceStatus.innerHTML = '<div class="alert alert-error">Editor is not available.</div>';
             }
         }
 
