@@ -313,13 +313,12 @@ def main():
             action_list(conf)
         elif choice == "5":
             action_settings(conf)
+        elif choice == "6":
             clear()
-            if prompt_yes_no("Exit now?", default=False):
-                clear()
-                print("Bye.")
-                return
+            print("Bye.")
+            return
         else:
-            print("Please choose 1-5.")
+            print("Please choose 1-6.")
             pause("")
 
 if __name__ == "__main__":
