@@ -49,11 +49,43 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
+    const escapeAttr = s => String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    let sourceCounter = 0;
+
     // Inline replacements: bold, italic, code, links, images
     function renderInline(text) {
       if (!text) return '';
       // Escape first
       text = escapeHtml(text);
+      text = text.replace(/\{\{source\|([^}]+)\}\}/gi, (_, body) => {
+        const meta = { url: '', title: '', author: '' };
+        body.split('|').forEach((segment) => {
+          const [rawKey, ...rawValue] = segment.split('=');
+          if (!rawKey) return;
+          const key = rawKey.trim().toLowerCase();
+          const value = rawValue.join('=').trim();
+          if (!value) return;
+          if (key === 'url') meta.url = value;
+          if (key === 'title') meta.title = value;
+          if (key === 'author') meta.author = value;
+        });
+        const index = ++sourceCounter;
+        const supAttrs = [
+          'class="source-ref"',
+          `data-source-index="${index}"`,
+          `data-source-url="${escapeAttr(meta.url)}"`,
+        ];
+        if (meta.title) supAttrs.push(`data-source-title="${escapeAttr(meta.title)}"`);
+        if (meta.author) supAttrs.push(`data-source-author="${escapeAttr(meta.author)}"`);
+        const hrefAttr = ` href="#source-${index}"`;
+        return `<sup ${supAttrs.join(' ')}><a${hrefAttr} class="source-citation">[ ${index} ]</a></sup>`;
+      });
       // code `code`
       text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
       // images ![alt](url)
@@ -155,6 +187,21 @@
       const name = node.nodeName;
       const children = Array.from(node.childNodes).map(serialize).join('');
       switch (name) {
+        case 'SUP': {
+          if (node.classList && node.classList.contains('source-ref')) {
+            const url = node.getAttribute('data-source-url') || '';
+            const title = node.getAttribute('data-source-title') || '';
+            const author = node.getAttribute('data-source-author') || '';
+            const parts = [];
+            if (url) parts.push(`url=${url}`);
+            if (title) parts.push(`title=${title}`);
+            if (author) parts.push(`author=${author}`);
+            if (parts.length) {
+              return `{{source|${parts.join('|')}}}`;
+            }
+          }
+          return children;
+        }
         case 'H1': return `# ${children}\n\n`;
         case 'H2': return `## ${children}\n\n`;
         case 'H3': return `### ${children}\n\n`;
@@ -337,6 +384,35 @@
         }
       }
 
+      function refreshVisualAfterSnippet(meta = {}) {
+        if (isRawMode || !editor) return;
+        const markdown = meta.markdown || htmlToMd(editor);
+        editor.innerHTML = mdToHtml(markdown);
+        if (textarea) textarea.value = markdown;
+        updateToolbarState();
+        dispatchEditorInput();
+        const targetUrl = meta.url || '';
+        let targetSup = null;
+        if (targetUrl) {
+          const candidates = Array.from(editor.querySelectorAll('sup.source-ref'));
+          targetSup = candidates.find(node => (node.getAttribute('data-source-url') || '') === targetUrl) || null;
+          if (!targetSup && candidates.length) {
+            targetSup = candidates[candidates.length - 1];
+          }
+        }
+        if (targetSup) {
+          const range = document.createRange();
+          range.setStartAfter(targetSup);
+          range.collapse(true);
+          const selection = window.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+        captureSelection();
+      }
+
       function insertSnippet(snippet) {
         if (!snippet) return false;
         if (isRawMode && textarea) {
@@ -426,7 +502,12 @@
         const markdownUrl = encoded.replace(/\|/g, '%7C');
         const snippet = '{{source|url=' + markdownUrl + '}}';
         let inserted = insertSnippet(snippet);
-        if (inserted) return true;
+        if (inserted) {
+          if (!isRawMode) {
+            requestAnimationFrame(() => refreshVisualAfterSnippet({ url: markdownUrl }));
+          }
+          return true;
+        }
         if (textarea) {
           textarea.focus();
           const value = textarea.value || '';
@@ -443,6 +524,9 @@
             const fallbackEvt = document.createEvent('Event');
             fallbackEvt.initEvent('input', true, false);
             textarea.dispatchEvent(fallbackEvt);
+          }
+          if (!isRawMode) {
+            requestAnimationFrame(() => refreshVisualAfterSnippet({ url: markdownUrl, markdown: textarea ? textarea.value : undefined }));
           }
           return true;
         }

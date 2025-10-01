@@ -46,6 +46,13 @@ ALLOWED_TAGS: Iterable[str] = {
 
 ALLOWED_ATTRIBUTES = {
     "a": ["href", "title", "rel", "class"],
+    "sup": [
+        "class",
+        "data-source-index",
+        "data-source-url",
+        "data-source-title",
+        "data-source-author",
+    ],
     "img": ["src", "alt", "title", "width", "height"],
     "figure": ["class"],
     "figcaption": ["class"],

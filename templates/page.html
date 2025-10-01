@@ -119,7 +119,7 @@
                 <ol class="sources-list">
                     {% for source in sources %}
                     <li id="source-{{ source.id }}">
-                        <a href="{{ source.url }}" target="_blank" rel="noopener">{{ source.title }}</a>
+                        <a href="{{ source.url }}" target="_blank" rel="noopener">{{ source.title or source.url }}</a>
                         {% if source.author %}
                         <span class="source-author"> ({{ source.author }})</span>
                         {% endif %}
@@ -136,4 +136,33 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ request.state.csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function() {
+        const contentRoot = document.querySelector('.page-content');
+        if (!contentRoot) {
+            return;
+        }
+
+        const walker = document.createTreeWalker(contentRoot, NodeFilter.SHOW_TEXT, null);
+        const textNodes = [];
+        while (walker.nextNode()) {
+            textNodes.push(walker.currentNode);
+        }
+
+        textNodes.forEach((node) => {
+            const value = node.nodeValue || '';
+            if (!value.includes('<sup') || !value.includes('source-citation')) {
+                return;
+            }
+            const range = document.createRange();
+            range.selectNode(node);
+            const fragment = range.createContextualFragment(value);
+            node.parentNode.replaceChild(fragment, node);
+        });
+    });
+</script>
 {% endblock %}
