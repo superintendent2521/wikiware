@@ -82,7 +82,7 @@ def save_conf(conf: dict):
     try:
         with open(CONF_PATH, "w", encoding="utf-8") as f:
             json.dump(conf, f, indent=2)
-    except Exception as e:
+    except OSError as e:
         print(f"Warning: failed to save settings: {e}")
 
 def timestamp() -> str:
