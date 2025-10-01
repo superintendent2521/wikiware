@@ -10,6 +10,7 @@ import bleach
 # Allow a conservative set of HTML tags typically produced by Markdown
 ALLOWED_TAGS: Iterable[str] = {
     "a",
+    "sup",
     "abbr",
     "acronym",
     "b",
@@ -44,7 +45,7 @@ ALLOWED_TAGS: Iterable[str] = {
 }
 
 ALLOWED_ATTRIBUTES = {
-    "a": ["href", "title", "rel"],
+    "a": ["href", "title", "rel", "class"],
     "img": ["src", "alt", "title", "width", "height"],
     "figure": ["class"],
     "figcaption": ["class"],
