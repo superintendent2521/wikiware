@@ -4,6 +4,7 @@ Adds support for [[Page Title]] internal linking syntax and table rendering with
 """
 
 from urllib.parse import quote
+import re
 import html as _html
 from xml.etree.ElementTree import Element
 from datetime import datetime, timezone
@@ -12,6 +13,65 @@ from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString
 from markdown.treeprocessors import Treeprocessor
 from markdown.extensions.tables import TableExtension
+
+
+_SOURCE_PARAM_KEY_PATTERN = re.compile(r"^\s*([A-Za-z0-9_-]+)\s*=")
+
+
+def _parse_source_params(params_str):
+    """Split source parameters while tolerating pipes within values."""
+    if not params_str:
+        return {}
+
+    segments = []
+    buf = []
+    length = len(params_str)
+    index = 0
+
+    while index < length:
+        char = params_str[index]
+
+        if char == '\\':
+            index += 1
+            if index < length:
+                buf.append(params_str[index])
+                index += 1
+            else:
+                buf.append('\\')
+            continue
+
+        if char == '|':
+            remainder = params_str[index + 1:]
+            if _SOURCE_PARAM_KEY_PATTERN.match(remainder):
+                segments.append(''.join(buf))
+                buf = []
+                index += 1
+                continue
+
+        buf.append(char)
+        index += 1
+
+    segments.append(''.join(buf))
+
+    params = {}
+    for segment in segments:
+        if not segment:
+            continue
+        if '=' not in segment:
+            continue
+
+        key, value = segment.split('=', 1)
+        key = key.strip().lower()
+        if not key:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and ((value[0] == value[-1]) and value[0] in ('"', "'")):
+            value = value[1:-1]
+
+        params[key] = value
+
+    return params
 
 
 class InternalLinkProcessor(InlineProcessor):
@@ -207,3 +267,129 @@ class UnixTimestampProcessor(InlineProcessor):
                 span.set("title", "Timestamp missing for {{ global.unix }}")
             span.text = "Invalid timestamp"
             return span, m.start(0), m.end(0)
+
+
+class SourceCollectorProcessor(InlineProcessor):
+    """Process {{source|url=...|title=...|author=...}} and collect sources, replacing with citation."""
+
+    def __init__(self, pattern, md):
+        super().__init__(pattern, md)
+        if not hasattr(md, 'sources'):
+            md.sources = []
+        if not hasattr(md, '_source_counter'):
+            md._source_counter = 0
+        if not hasattr(md, '_source_map'):
+            md._source_map = {}  # url -> id for deduping
+
+    def handleMatch(self, m, data):
+        params_str = m.group(1).strip()
+        params = _parse_source_params(params_str)
+
+        url = params.get('url', '')
+        title = params.get('title', url or 'Untitled Source')
+        author = params.get('author', '')
+
+        if not url:
+            # Invalid, replace with error element so markup isn't escaped
+            error_span = Element("span")
+            error_span.set("class", "source-error")
+            error_span.text = "[Invalid source: missing URL]"
+            return error_span, m.start(0), m.end(0)
+
+        # Dedupe by URL
+        if url in self.md._source_map:
+            source_id = self.md._source_map[url]
+        else:
+            self.md._source_counter += 1
+            source_id = self.md._source_counter
+            self.md._source_map[url] = source_id
+            self.md.sources.append({
+                'id': source_id,
+                'url': url,
+                'title': title,
+                'author': author
+            })
+
+        # Replace with citation link element so the HTML renders server-side
+        citation_sup = Element("sup")
+        citation_link = Element("a")
+        citation_link.set("href", f"#source-{source_id}")
+        citation_link.set("class", "source-citation")
+        citation_link.text = f"[ {source_id} ]"
+        citation_sup.append(citation_link)
+        return citation_sup, m.start(0), m.end(0)
+
+
+class SourceCitationProcessor(InlineProcessor):
+    """Process manual [1] citations and replace with links if valid source exists."""
+
+    def __init__(self, pattern, md):
+        super().__init__(pattern, md)
+
+    def handleMatch(self, m, data):
+        id_str = m.group(1).strip()
+        try:
+            source_id = int(id_str)
+            citation_sup = Element("sup")
+            citation_sup.set("data-source-id", str(source_id))
+            citation_sup.text = f"[ {source_id} ]"
+            return citation_sup, m.start(0), m.end(0)
+        except ValueError:
+            return AtomicString(m.group(0)), m.start(0), m.end(0)  # Keep as is
+
+
+class SourceFinalizeTreeprocessor(Treeprocessor):
+    """Finalize source citations after all inline processing has completed."""
+
+    def run(self, root):
+        sources = getattr(self.md, 'sources', [])
+        sources_by_id = {str(source['id']): source for source in sources}
+
+        for element in root.iter():
+            if element.tag != "sup":
+                continue
+
+            source_id = element.attrib.pop("data-source-id", None)
+            if source_id is None:
+                continue
+
+            # Remove any placeholder children/text before building the final markup
+            element.text = ""
+            for child in list(element):
+                element.remove(child)
+
+            source = sources_by_id.get(source_id)
+            if source is not None:
+                element.attrib.pop("class", None)
+                citation_link = Element("a")
+                citation_link.set("href", f"#source-{source_id}")
+                citation_link.set("class", "source-citation")
+                citation_link.text = f"[ {source_id} ]"
+                element.append(citation_link)
+            else:
+                element.set("class", "source-invalid")
+                element.text = f"[ {source_id} ]"
+
+        return root
+
+
+class SourceExtension(Extension):
+    """Markdown extension to support source citations."""
+
+    def extendMarkdown(self, md):
+        # Source collector pattern: {{source|key=val|...}}
+        source_pattern = r'\{\{source\|([^}]+)\}\}'
+        md.inlinePatterns.register(
+            SourceCollectorProcessor(source_pattern, md), 'source_collector', 160
+        )
+
+        # Citation pattern: [1], [2], etc.
+        citation_pattern = r'\[(\d+)\]'
+        md.inlinePatterns.register(
+            SourceCitationProcessor(citation_pattern, md), 'source_citation', 155
+        )
+
+        # Finalize citations after the inline phase so manual references resolve correctly
+        md.treeprocessors.register(
+            SourceFinalizeTreeprocessor(md), 'source_finalize', 5
+        )

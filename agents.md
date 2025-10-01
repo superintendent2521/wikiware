@@ -1,0 +1,1 @@
+Use your tools, like `apply_patch`. Don't use python or powershell. Keep the code you write in a style that is consistent with the rest of the codebase. Don't needlessly refactor things unless the user tells you to.

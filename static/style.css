@@ -1992,3 +1992,100 @@ footer p {
         padding: var(--space-lg);
     }
 }
+
+/* Sources Styles */
+.sources-section {
+    background: var(--primary-white);
+    padding: var(--space-xl);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--box-shadow-sm);
+    margin-top: var(--space-lg);
+    border-top: 4px solid var(--accent-teal);
+}
+
+.sources-section h3 {
+    color: var(--darker-gray);
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--space-md);
+    font-weight: var(--font-weight-bold);
+}
+
+.sources-list {
+    list-style: decimal;
+    padding-left: var(--space-lg);
+    margin: 0;
+}
+
+.sources-list li {
+    margin-bottom: var(--space-sm);
+    font-size: var(--font-size-sm);
+}
+
+.sources-list a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-weight: var(--font-weight-medium);
+    transition: color var(--transition-fast);
+}
+
+.sources-list a:hover {
+    color: var(--accent-blue-dark);
+    text-decoration: underline;
+}
+
+.source-author {
+    font-size: var(--font-size-xs);
+    color: var(--dark-gray);
+    font-style: italic;
+}
+
+.source-citation {
+    font-size: var(--font-size-xs);
+    text-decoration: none;
+    color: var(--accent-blue);
+}
+
+.source-citation:hover {
+    color: var(--accent-blue-dark);
+    text-decoration: underline;
+}
+
+.source-invalid {
+    color: var(--error);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+}
+
+.source-error {
+    color: var(--error);
+    background: rgba(231, 76, 60, 0.1);
+    padding: 2px 4px;
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-xs);
+}
+
+[data-theme="dark"] .sources-section {
+    background: var(--surface-raised);
+    border-top-color: var(--accent-teal);
+}
+
+[data-theme="dark"] .sources-list a {
+    color: var(--accent-blue);
+}
+
+[data-theme="dark"] .source-author {
+    color: var(--dark-gray);
+}
+
+[data-theme="dark"] .source-citation {
+    color: var(--accent-blue);
+}
+
+[data-theme="dark"] .source-invalid {
+    color: var(--error);
+}
+
+[data-theme="dark"] .source-error {
+    color: var(--error);
+    background: rgba(231, 76, 60, 0.2);
+}

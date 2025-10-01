@@ -25,7 +25,7 @@ from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
 from ...utils.template_env import get_templates
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
-from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExtension
+from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExtension, SourceExtension
 from ...utils.error_utils import render_error_page
 
 router = APIRouter()
@@ -114,7 +114,7 @@ def _count_toc_entries(items: List[dict]) -> int:
     return total
 
 
-async def _render_markdown_with_toc(content: str) -> tuple[str, List[dict]]:
+async def _render_markdown_with_toc(content: str) -> tuple[str, List[dict], list]:
     """Renders markdown content to HTML and extracts a table of contents."""
     # Process internal links first
     processed_content = await process_internal_links(content)
@@ -123,6 +123,7 @@ async def _render_markdown_with_toc(content: str) -> tuple[str, List[dict]]:
     md = markdown.Markdown(
         extensions=[
             TableExtensionWrapper(),
+            SourceExtension(),
             ImageFigureExtension(),
             TocExtension(permalink=False),
         ]
@@ -132,12 +133,15 @@ async def _render_markdown_with_toc(content: str) -> tuple[str, List[dict]]:
     html_content = md.convert(processed_content)
     sanitized_html = sanitize_html(html_content)
 
+    # Extract sources
+    sources = getattr(md, 'sources', [])
+
     # Extract and transform TOC tokens
     toc_items = _transform_toc_tokens(getattr(md, "toc_tokens", []))
     if _count_toc_entries(toc_items) < 2:
         toc_items = []
 
-    return sanitized_html, toc_items
+    return sanitized_html, toc_items, sources
 
 
 async def _is_user_page_title(title: str) -> bool:
@@ -223,10 +227,12 @@ async def home(
             "author": "",
             "updated_at": "",
             "branch": branch,
+            "sources": [],
         }
 
     # Process internal links and render as Markdown
-    page["html_content"], toc_items = await _render_markdown_with_toc(page["content"])
+    page["html_content"], toc_items, sources = await _render_markdown_with_toc(page["content"])
+    page["sources"] = sources
 
     template = templates.TemplateResponse(
         "page.html",
@@ -236,6 +242,7 @@ async def home(
             "offline": not db_instance.is_connected,
             "branch": branch,
             "toc_items": toc_items,
+            "sources": page.get("sources", []),
             "user": user,
             "csrf_token": csrf_token,
         },
@@ -309,9 +316,10 @@ async def get_page(
             return template
 
         # Process internal links and render as Markdown
-        page["html_content"], toc_items = await _render_markdown_with_toc(
+        page["html_content"], toc_items, sources = await _render_markdown_with_toc(
             page["content"]
         )
+        page["sources"] = sources
         logger.info(f"Page viewed: {title} on branch: {branch}")
         template = templates.TemplateResponse(
             "page.html",
@@ -322,6 +330,7 @@ async def get_page(
                 "offline": False,
                 "branches": branches,
                 "toc_items": toc_items,
+                "sources": page.get("sources", []),
                 "user": user,
                 "csrf_token": csrf_token,
             },

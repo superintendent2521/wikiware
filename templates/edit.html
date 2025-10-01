@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Edit {{ title }} - {{ config.NAME }}{% endblock %}
 
@@ -43,6 +43,24 @@
         </div>
     </div>
 
+    <!-- Source Citation Modal -->
+    <div id="sourceModal" class="modal" style="display: none;">
+        <div class="modal-content source-modal">
+            <span class="close" aria-label="Close">&times;</span>
+            <h3 class="modal-title">Insert Source</h3>
+            <form id="sourceForm" class="source-form">
+                <div class="form-group">
+                    <label for="sourceUrl">Source URL<span aria-hidden="true">*</span></label>
+                    <input type="url" id="sourceUrl" name="source_url" class="form-control" required placeholder="https://example.com/article">
+                </div>
+                <div id="sourceStatus" class="source-status" role="status"></div>
+                <div class="form-actions modal-actions">
+                    <button type="submit" class="btn btn-primary">Insert Source</button>
+                    <button type="button" id="sourceCancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <!-- Image Upload Modal -->
     <div id="imageUploadModal" class="modal" style="display: none;">
         <div class="modal-content image-modal">
@@ -226,6 +244,9 @@
                     <button type="button" id="insertImageBtn" class="btn btn-secondary btn-small" title="Insert Image">
                         <i class="fas fa-image"></i> Image
                     </button>
+                    <button type="button" id="insertSourceBtn" class="btn btn-secondary btn-small" title="Insert Source">
+                        <i class="fas fa-bookmark"></i> Source
+                    </button>
                     <span class="sep"></span>
                     <button type="button" id="toggleRawBtn" class="btn btn-secondary btn-small" title="Toggle raw Markdown view">
                         <i class="fas fa-code"></i> Raw Markdown
@@ -274,6 +295,7 @@
             <li><code>`code`</code> - Inline code</li>
             <li><code>```code block```</code> - Code block</li>
             <li><code>![alt text](image-url)</code> - Image (use Insert Image button to upload)</li>
+            <li><code>{% raw %}{{source|url=https://example.com}}{% endraw %}</code> - Insert source citation (use Insert Source button)</li>
             <a href="/help/index.html" target="_blank">View global variables</a>
         </ul>
     </div>
@@ -572,6 +594,9 @@
             if (event.target === wikiLinkModal) {
                 hideWikiLinkModal();
             }
+            if (event.target === sourceModal) {
+                hideSourceModal();
+            }
         });
         if (refreshImageLibraryBtn) {
             refreshImageLibraryBtn.addEventListener('click', () => loadImageLibrary(true));
@@ -723,6 +748,111 @@
             wikiLinkCloseBtn.addEventListener('click', hideWikiLinkModal);
         }
         document.addEventListener('wikiLink:open', showWikiLinkModal);
+
+        // Source modal elements
+        const sourceBtn = document.getElementById('insertSourceBtn');
+        const sourceModal = document.getElementById('sourceModal');
+        const sourceForm = document.getElementById('sourceForm');
+        const sourceUrlInput = document.getElementById('sourceUrl');
+        const sourceCancelBtn = document.getElementById('sourceCancel');
+        const sourceStatus = document.getElementById('sourceStatus');
+        const sourceCloseBtn = sourceModal ? sourceModal.querySelector('.close') : null;
+
+        function clearSourceStatus() {
+            if (sourceStatus) sourceStatus.innerHTML = '';
+        }
+
+        function resetSourceForm() {
+            if (sourceForm) sourceForm.reset();
+            clearSourceStatus();
+        }
+
+        function hideSourceModal() {
+            if (!sourceModal) return;
+            sourceModal.style.display = 'none';
+            sourceModal.setAttribute('aria-hidden', 'true');
+            resetSourceForm();
+        }
+
+        function showSourceModal() {
+            if (!sourceModal) return;
+            // shit is still broken i cba atp bruh
+            if (window.WikiEditor && typeof window.WikiEditor.captureSelection === 'function') {
+                window.WikiEditor.captureSelection();
+            }
+            resetSourceForm();
+            sourceModal.style.display = 'block';
+            sourceModal.setAttribute('aria-hidden', 'false');
+            if (sourceUrlInput) {
+                requestAnimationFrame(() => {
+                    try {
+                        sourceUrlInput.focus({ preventScroll: true });
+                    } catch (_) {
+                        sourceUrlInput.focus();
+                    }
+                });
+            }
+        }
+
+        function submitSource(event) {
+            event.preventDefault();
+            const url = sourceUrlInput ? sourceUrlInput.value.trim() : '';
+            if (!url) {
+                if (sourceStatus) {
+                    sourceStatus.innerHTML = '<div class="alert alert-error">URL is required.</div>';
+                }
+                if (sourceUrlInput) {
+                    sourceUrlInput.focus();
+                }
+                return;
+            }
+
+            const editorApi = window.WikiEditor;
+            if (editorApi && typeof editorApi.insertSourceCitation === 'function') {
+                const inserted = editorApi.insertSourceCitation(url);
+                if (inserted) {
+                    hideSourceModal();
+                } else if (sourceStatus) {
+                    sourceStatus.innerHTML = '<div class="alert alert-error">Unable to insert source. Please try again.</div>';
+                }
+                return;
+            }
+
+            if (sourceStatus) {
+                sourceStatus.innerHTML = '<div class="alert alert-error">Editor is not available.</div>';
+            }
+        }
+
+        if (sourceForm) {
+            sourceForm.addEventListener('submit', submitSource);
+        }
+        if (sourceCancelBtn) {
+            sourceCancelBtn.addEventListener('click', hideSourceModal);
+        }
+        if (sourceCloseBtn) {
+            sourceCloseBtn.addEventListener('click', hideSourceModal);
+        }
+
+        function captureSourceSelectionBeforeOpen() {
+            if (window.WikiEditor && typeof window.WikiEditor.captureSelection === 'function') {
+                window.WikiEditor.captureSelection();
+            }
+        }
+
+        function handleSourceButtonKeydown(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                captureSourceSelectionBeforeOpen();
+            }
+        }
+
+        if (sourceBtn) {
+            sourceBtn.addEventListener('pointerdown', captureSourceSelectionBeforeOpen);
+            sourceBtn.addEventListener('mousedown', captureSourceSelectionBeforeOpen);
+            sourceBtn.addEventListener('touchstart', captureSourceSelectionBeforeOpen);
+            sourceBtn.addEventListener('keydown', handleSourceButtonKeydown);
+            sourceBtn.addEventListener('click', showSourceModal);
+        }
+
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 if (modal && modal.style.display === 'block') {
@@ -730,6 +860,9 @@
                 }
                 if (wikiLinkModal && wikiLinkModal.style.display === 'block') {
                     hideWikiLinkModal();
+                }
+                if (sourceModal && sourceModal.style.display === 'block') {
+                    hideSourceModal();
                 }
                 if (editSummaryPanel && !editSummaryPanel.hidden) {
                     summaryConfirmed = false;
