@@ -74,8 +74,8 @@ def load_conf() -> dict:
             for k, v in DEFAULTS.items():
                 data.setdefault(k, v)
             return data
-        except Exception:
-            pass
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"Warning: failed to load settings from {CONF_PATH}, using defaults. Error: {e}")
     return DEFAULTS.copy()
 
 def save_conf(conf: dict):
