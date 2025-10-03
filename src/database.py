@@ -1,5 +1,7 @@
 import os
 import asyncio
+import subprocess
+from datetime import datetime
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ServerSelectionTimeoutError
@@ -170,3 +172,101 @@ async def init_database():
             await create_indexes()
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
+
+
+async def create_backup():
+    """Create a database backup using mongodump and save to backups folder."""
+    try:
+        # Check if mongodump is available
+        try:
+            await asyncio.to_thread(
+                subprocess.run,
+                ["mongodump", "--version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            logger.error("mongodump command not found. Please install MongoDB tools.")
+            return {"success": False, "error": "mongodump not available. Install MongoDB tools to enable backups."}
+
+        # Ensure backups directory exists
+        backups_dir = "backups"
+        os.makedirs(backups_dir, exist_ok=True)
+
+        # Generate timestamped filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"backup_{timestamp}.gz"
+        filepath = os.path.join(backups_dir, filename)
+
+        # Parse MongoDB URI to extract host, port, db name
+        from urllib.parse import urlparse
+        parsed_url = urlparse(MONGODB_URL)
+
+        # Determine target connection parameters
+        host = parsed_url.hostname or "localhost"
+        port = parsed_url.port or 27017
+
+        # Build mongodump command arguments for single archive
+        cmd_args = [
+            "mongodump",
+            "--db", "wikiware",  # Database name
+            f"--archive={filepath}",  # Single compressed archive written to file
+            "--gzip",  # Compress the archive
+            "--host", host,
+            "--port", str(port),
+        ]
+
+        # Add authentication if present
+        if parsed_url.username and parsed_url.password:
+            cmd_args.extend(["--username", parsed_url.username, "--password", parsed_url.password])
+
+        # Run mongodump in subprocess
+        logger.info(f"Starting database backup: {filename}")
+        result = await asyncio.to_thread(
+            subprocess.run,
+            cmd_args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        if result.returncode == 0:
+            logger.info(f"Database backup completed: {filename}")
+            return {"success": True, "filename": filename, "path": filepath}
+        else:
+            error_msg = (result.stderr or "").strip()
+            logger.error(f"Backup failed: {error_msg}")
+            return {"success": False, "error": f"mongodump failed: {error_msg}"}
+
+    except Exception as e:
+        logger.error(f"Backup creation error: {str(e)}")
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+
+def list_backups():
+    """List all backup files with metadata."""
+    try:
+        backups_dir = "backups"
+        if not os.path.exists(backups_dir):
+            return []
+
+        backups = []
+        for filename in os.listdir(backups_dir):
+            if filename.startswith("backup_") and filename.endswith(".gz"):
+                filepath = os.path.join(backups_dir, filename)
+                stat = os.stat(filepath)
+                backups.append({
+                    "filename": filename,
+                    "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                    "created_at": datetime.fromtimestamp(stat.st_mtime),
+                    "path": filepath
+                })
+
+        # Sort by creation time, newest first
+        backups.sort(key=lambda x: x["created_at"], reverse=True)
+        return backups
+
+    except Exception as e:
+        logger.error(f"Error listing backups: {e}")
+        return []

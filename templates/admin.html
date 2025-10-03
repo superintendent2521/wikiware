@@ -156,6 +156,47 @@
             </form>
         </div>
 
+        <!-- Database Backup -->
+        <div class="admin-card">
+            <h3><i class="fas fa-database"></i> Database Backup</h3>
+            {% if request.query_params.get("status") == "backup_started" %}
+            <div class="callout callout-success"><i class="fas fa-check-circle"></i> Backup process started. Refresh the page to see the new backup in the list.</div>
+            {% endif %}
+            <form method="post" action="/admin/backup">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-primary" {% if offline %}disabled{% endif %}>
+                    <i class="fas fa-save"></i> Create Backup
+                </button>
+            </form>
+            <div class="backup-list">
+                {% if backups %}
+                <h4>Recent Backups</h4>
+                <table class="backup-table">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Size (MB)</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for backup in backups %}
+                        <tr>
+                            <td>{{ backup.filename }}</td>
+                            <td>{{ backup.size_mb }}</td>
+                            <td>{{ backup.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td><a href="/backups/{{ backup.filename }}" class="btn btn-small btn-primary" download>Download</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p>No backups found.</p>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Live Log Stream Button and Modal -->
         <div class="admin-card">
             <h3><i class="fas fa-stream"></i> Live Log Stream</h3>
@@ -193,6 +234,7 @@
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     transition: transform 0.3s, box-shadow 0.3s;
+    min-width: 0;
 }
 
 .admin-card:hover {
@@ -481,6 +523,45 @@
 .banner-form :disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+.backup-list h4 {
+    font-size: 1.1rem;
+    color: var(--darker-gray);
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+.backup-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.backup-table th,
+.backup-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--light-gray);
+    color: var(--darker-gray);
+    font-size: 0.9rem;
+}
+
+.backup-table th {
+    background-color: var(--secondary-white);
+    font-weight: 600;
+}
+
+.backup-table tr:hover {
+    background-color: var(--secondary-white);
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
 }
 </style>
 

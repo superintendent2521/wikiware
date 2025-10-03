@@ -6,8 +6,9 @@ Only accessible to users with admin: true flag.
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
+import asyncio
 
-from ...database import db_instance, get_users_collection
+from ...database import db_instance, get_users_collection, create_backup, list_backups
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.settings_service import SettingsService
 from ...stats import get_stats
@@ -49,6 +50,8 @@ async def admin_panel(
     recent_logs = await LogUtils.get_paginated_logs(1, 5)
     banner = await SettingsService.get_banner()
     feature_flags = await SettingsService.get_feature_flags()
+    # Get backup files
+    backups = list_backups()
     # CSRF token for templates (logout form in base.html)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     template = templates.TemplateResponse(
@@ -66,6 +69,7 @@ async def admin_panel(
             "banner": banner,
             "banner_levels": ["info", "success", "warning", "danger"],
             "feature_flags": feature_flags,
+            "backups": backups,
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
@@ -116,6 +120,24 @@ async def update_feature_flags(
 
     success = await SettingsService.update_feature_flags(**flags)
     status = "features_saved" if success else "features_error"
+    redirect_url = request.url_for("admin_panel")
+    return RedirectResponse(
+        url=f"{redirect_url}?status={status}",
+        status_code=303,
+    )
+
+
+@router.post("/admin/backup")
+async def create_database_backup(request: Request):
+    """Create a database backup."""
+    user = await AuthMiddleware.require_auth(request)
+    if not user.get("is_admin", False):
+        return RedirectResponse(url="/", status_code=303)
+
+    # Trigger backup in background (don't await)
+    asyncio.create_task(create_backup())
+
+    status = "backup_started"
     redirect_url = request.url_for("admin_panel")
     return RedirectResponse(
         url=f"{redirect_url}?status={status}",
