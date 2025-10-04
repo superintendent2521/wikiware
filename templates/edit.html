@@ -295,7 +295,16 @@
             <li><code>```code block```</code> - Code block</li>
             <li><code>![alt text](image-url)</code> - Image (use Insert Image button to upload)</li>
             <li><code>{% raw %}{{source|url=https://example.com}}{% endraw %}</code> - Insert source citation (use Insert Source button)</li>
-            <a href="/help/index.html" target="_blank">View global variables</a>
+        </ul>
+        <h4>Global Variables</h4>
+        <ul>
+            <li><code>{{ global.edits }}</code> - Total number of edits across the wiki</li>
+            <li><code>{{ global.pages }}</code> - Total number of pages</li>
+            <li><code>{{ global.characters }}</code> - Total number of characters written</li>
+            <li><code>{{ global.images }}</code> - Total number of images uploaded</li>
+            <li><code>{{ global.last_updated }}</code> - Timestamp of the last update</li>
+            <li><code>{{ global.unix:1700000000 }}</code> - Render the given Unix timestamp in UTC (replace with your own value)</li>
+            <li><code>{{ global.color.red }}</code>, <code>{{ global.color.green }}</code>, <code>{{ global.color.blue }}</code>, <code>{{ global.color.purple }}</code>, <code>{{ global.color.pink }}</code>, <code>{{ global.color.orange }}</code>, <code>{{ global.color.yellow }}</code>, <code>{{ global.color.gray }}</code>, <code>{{ global.color.cyan }}</code> - Insert color marker spans for tables</li>
         </ul>
     </div>
 </div>
