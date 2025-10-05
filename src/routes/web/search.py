@@ -25,6 +25,7 @@ async def search(
     response: Response,
     q: str = "",
     branch: str = "main",
+    show_all: bool = False,
     csrf_protect: CsrfProtect = Depends(),
 ):
     """Search pages by query."""
@@ -41,7 +42,9 @@ async def search(
                     "request": request,
                     "pages": [],
                     "query": q,
+                    "branch": branch,
                     "offline": True,
+                    "show_all": show_all,
                     "user": user,
                     "csrf_token": csrf_token,
                 },
@@ -55,6 +58,11 @@ async def search(
         pages = []
         if q:
             pages = await PageService.search_pages(q, branch)
+        elif show_all:
+            pages = await PageService.get_pages_by_branch(branch)
+            logger.info(
+                f"Search accessed via show_all flag on branch '{branch}' returned {len(pages)} pages"
+            )
         else:
             logger.info("Search accessed without query")
 
@@ -65,6 +73,7 @@ async def search(
                 "pages": pages,
                 "query": q,
                 "branch": branch,
+                "show_all": show_all,
                 "offline": not db_instance.is_connected,
                 "branches": branches,
                 "user": user,
@@ -85,7 +94,9 @@ async def search(
                 "request": request,
                 "pages": [],
                 "query": q,
+                "branch": branch,
                 "offline": True,
+                "show_all": show_all,
                 "csrf_token": csrf_token_e,
             },
         )

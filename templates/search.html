@@ -14,9 +14,13 @@
             </form>
         </div>
 
-        {% if query %}
+        {% if query or show_all %}
         <div class="search-results">
+            {% if show_all and not query %}
+            <h3>All Pages</h3>
+            {% else %}
             <h3>Results for "{{ query }}"</h3>
+            {% endif %}
             {% if pages %}
             <div class="page-list">
                 {% for page in pages %}
@@ -40,13 +44,13 @@
                 {% endif %}
         </div>
 
-        {% else %}
+        {% elif not show_all %}
         <div class="search-instructions">
             <h3>Search Instructions</h3>
             <p>Enter a search term above to find wiki pages by title or content.</p>
             <p>You can also:</p>
             <ul>
-                <li><a href="/?branch={{ branch or 'main' }}">Browse all pages</a></li>
+                <li><a href="/search?branch={{ branch or 'main' }}&show_all=true">View all pages</a></li>
                     {% if can_create_page %}
                     <li><a class="create-page-btn"><i class="fas fa-plus"></i> Create Page</a></li>
                     {% endif %}
