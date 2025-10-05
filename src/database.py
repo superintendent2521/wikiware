@@ -137,6 +137,9 @@ async def create_indexes():
             # Create compound unique index on title and branch
             await pages.create_index([("title", 1), ("branch", 1)], unique=True)
             await pages.create_index("updated_at")
+            await pages.create_index(
+                [("title", "text"), ("content", "text")], name="page_text_search"
+            )
             logger.info("Pages collection indexes created")
 
         # Create indexes for users collection

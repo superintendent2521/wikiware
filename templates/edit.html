@@ -19,6 +19,36 @@
     {% set delete_confirm = 'Are you sure you want to delete ' ~ ('this page' if is_main_branch else 'this branch page') ~ '? This action cannot be undone.' %}
     {% set feature_flags = request.state.feature_flags %}
     {% set image_upload_allowed = user.is_admin or feature_flags.image_upload_enabled %}
+    {% set rename_status = request.query_params.get('rename_status') %}
+    {% if rename_status %}
+    <div class="alert {% if rename_status == 'success' %}alert-success{% else %}alert-error{% endif %}">
+        {% if rename_status == 'success' %}
+            <strong>Success:</strong> Page renamed. You are now editing the updated title.
+        {% elif rename_status == 'protected' %}
+            <strong>Unable to rename:</strong> The Home page title is protected.
+        {% elif rename_status == 'missing_title' %}
+            <strong>Unable to rename:</strong> Please provide a new title.
+        {% elif rename_status == 'unchanged' %}
+            <strong>Heads up:</strong> The new title matches the current title.
+        {% elif rename_status == 'invalid' %}
+            <strong>Unable to rename:</strong> That title is not valid.
+        {% elif rename_status == 'user_page' %}
+            <strong>Unable to rename:</strong> Personal user pages cannot be renamed here.
+        {% elif rename_status == 'conflict' %}
+            <strong>Unable to rename:</strong> Another page already uses that title.
+        {% elif rename_status == 'offline' %}
+            <strong>Unable to rename:</strong> Database is offline.
+        {% elif rename_status == 'pages_collection_missing' %}
+            <strong>Unable to rename:</strong> Pages collection is unavailable.
+        {% elif rename_status == 'not_found' %}
+            <strong>Unable to rename:</strong> Original page could not be found.
+        {% elif rename_status == 'csrf' %}
+            <strong>Unable to rename:</strong> Session token expired. Please reload the page and try again.
+        {% else %}
+            <strong>Unable to rename:</strong> An unexpected error occurred.
+        {% endif %}
+    </div>
+    {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', path='editor.css') }}">
     <!-- Wiki Link Modal -->
     <div id="wikiLinkModal" class="modal" style="display: none;">
@@ -204,6 +234,20 @@
                 <button type="submit" class="btn btn-primary">Create Branch</button>
             </form>
         </details>
+        {% if user and user.is_admin %}
+        <details>
+            <summary>Rename Page</summary>
+            <form action="/rename/{{ title }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="branch" value="{{ branch_value }}">
+                <div class="form-group">
+                    <label for="new_title">New Page Title:</label>
+                    <input type="text" id="new_title" name="new_title" value="{{ title }}" required>
+                </div>
+                <button type="submit" class="btn btn-secondary">Rename Page</button>
+            </form>
+        </details>
+        {% endif %}
     </div>
 
 

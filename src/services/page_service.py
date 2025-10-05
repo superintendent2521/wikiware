@@ -6,6 +6,7 @@ Contains business logic for page operations.
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from loguru import logger
+from pymongo.errors import OperationFailure
 from ..database import (
     get_pages_collection,
     get_history_collection,
@@ -313,19 +314,37 @@ class PageService:
                 logger.error("Pages collection not available")
                 return []
 
-            pages = await pages_collection.find(
-                {
-                    "$and": [
-                        {"branch": branch},
+            try:
+                cursor = (
+                    pages_collection.find(
                         {
-                            "$or": [
-                                {"title": {"$regex": query, "$options": "i"}},
-                                {"content": {"$regex": query, "$options": "i"}},
+                            "$and": [
+                                {"branch": branch},
+                                {"$text": {"$search": query}},
                             ]
                         },
-                    ]
-                }
-            ).to_list(limit)
+                        {"score": {"$meta": "textScore"}},
+                    )
+                    .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
+                )
+                pages = await cursor.to_list(limit)
+            except OperationFailure as op_err:
+                logger.warning(
+                    "Text search unavailable, falling back to regex search: {}", str(op_err)
+                )
+                pages = await pages_collection.find(
+                    {
+                        "$and": [
+                            {"branch": branch},
+                            {
+                                "$or": [
+                                    {"title": {"$regex": query, "$options": "i"}},
+                                    {"content": {"$regex": query, "$options": "i"}},
+                                ]
+                            },
+                        ]
+                    }
+                ).to_list(limit)
 
             logger.info(
                 f"Search performed: '{query}' on branch '{branch}' - found {len(pages)} results"
@@ -455,3 +474,98 @@ class PageService:
         except Exception as e:
             logger.error(f"Error deleting branch {branch} from page {title}: {str(e)}")
             return False
+
+    @staticmethod
+    async def rename_page(old_title: str, new_title: str) -> tuple[bool, str | None]:
+        """Rename a page across all related collections."""
+        try:
+            if old_title == new_title:
+                logger.info(
+                    "Rename skipped because the old and new titles are identical: %s",
+                    old_title,
+                )
+                return True, None
+
+            if not db_instance.is_connected:
+                logger.error(
+                    "Database not connected - cannot rename page: %s to %s",
+                    old_title,
+                    new_title,
+                )
+                return False, "offline"
+
+            pages_collection = get_pages_collection()
+            history_collection = get_history_collection()
+            branches_collection = get_branches_collection()
+            users_collection = get_users_collection()
+
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return False, "pages_collection_missing"
+
+            existing_page = await pages_collection.find_one({"title": old_title})
+            if existing_page is None:
+                logger.warning(
+                    "Cannot rename page '%s' because it was not found", old_title
+                )
+                return False, "not_found"
+
+            conflict_page = await pages_collection.find_one({"title": new_title})
+            if conflict_page is not None:
+                logger.warning(
+                    "Cannot rename page '%s' to '%s' because the target title exists",
+                    old_title,
+                    new_title,
+                )
+                return False, "conflict"
+
+            now = datetime.now(timezone.utc)
+            page_update_result = await pages_collection.update_many(
+                {"title": old_title},
+                {"$set": {"title": new_title, "updated_at": now}},
+            )
+
+            if page_update_result.matched_count == 0:
+                logger.error(
+                    "Rename failed because no page documents matched '%s' despite prior lookup",
+                    old_title,
+                )
+                return False, "not_found"
+
+            if history_collection is not None:
+                await history_collection.update_many(
+                    {"title": old_title},
+                    {"$set": {"title": new_title}},
+                )
+
+            if branches_collection is not None:
+                await branches_collection.update_many(
+                    {"page_title": old_title},
+                    {"$set": {"page_title": new_title}},
+                )
+
+            if users_collection is not None:
+                async for user_doc in users_collection.find(
+                    {f"page_edits.{old_title}": {"$exists": True}}
+                ):
+                    page_edits = user_doc.get("page_edits", {})
+                    if not isinstance(page_edits, dict):
+                        continue
+                    edit_count = page_edits.get(old_title)
+                    if edit_count is None:
+                        continue
+                    await users_collection.update_one(
+                        {"_id": user_doc["_id"]},
+                        {
+                            "$set": {f"page_edits.{new_title}": edit_count},
+                            "$unset": {f"page_edits.{old_title}": ""},
+                        },
+                    )
+
+            logger.info("Page renamed from %s to %s", old_title, new_title)
+            return True, None
+        except Exception as e:
+            logger.error(
+                "Error renaming page %s to %s: %s", old_title, new_title, str(e)
+            )
+            return False, "error"

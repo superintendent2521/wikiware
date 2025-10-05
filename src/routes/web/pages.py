@@ -12,6 +12,7 @@ from markdown.extensions.toc import TocExtension
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
+from fastapi_csrf_protect.exceptions import CsrfProtectError
 from loguru import logger
 
 from ...database import db_instance
@@ -646,6 +647,81 @@ async def save_page(
     except Exception as e:
         logger.error(f"Error saving page {title} on branch {branch}: {str(e)}")
         return {"error": "Failed to save page"}
+
+
+@router.post("/rename/{title}")
+async def rename_page(
+    request: Request,
+    title: str,
+    new_title: str = Form(...),
+    branch: str = Form("main"),
+    csrf_protect: CsrfProtect = Depends(),
+):
+    """Rename a page, restricted to administrators."""
+    try:
+        await csrf_protect.validate_csrf(request)
+
+        user = await AuthMiddleware.require_auth(request)
+        if not user.get("is_admin", False):
+            raise HTTPException(status_code=403, detail="Admin privileges required")
+
+        raw_new_title = (new_title or "").strip()
+        raw_branch = (branch or "main").strip()
+        safe_branch = raw_branch if is_safe_branch_parameter(raw_branch) else "main"
+        normalized_title = raw_new_title.strip()
+
+        edit_url = request.url_for("edit_page", title=title)
+        if safe_branch != "main":
+            edit_url = edit_url.include_query_params(branch=safe_branch)
+
+        if title == "Home":
+            edit_url = edit_url.include_query_params(rename_status="protected")
+            return RedirectResponse(url=str(edit_url), status_code=303)
+
+        if not normalized_title:
+            edit_url = edit_url.include_query_params(rename_status="missing_title")
+            return RedirectResponse(url=str(edit_url), status_code=303)
+
+        if normalized_title == title:
+            edit_url = edit_url.include_query_params(rename_status="unchanged")
+            return RedirectResponse(url=str(edit_url), status_code=303)
+
+        if not is_valid_title(normalized_title):
+            edit_url = edit_url.include_query_params(rename_status="invalid")
+            return RedirectResponse(url=str(edit_url), status_code=303)
+
+        if await _is_user_page_title(title):
+            edit_url = edit_url.include_query_params(rename_status="user_page")
+            return RedirectResponse(url=str(edit_url), status_code=303)
+
+        success, reason = await PageService.rename_page(title, normalized_title)
+        if not success:
+            status = reason or "error"
+            edit_url = edit_url.include_query_params(rename_status=status)
+            return RedirectResponse(url=str(edit_url), status_code=303)
+
+        new_edit_url = request.url_for("edit_page", title=normalized_title)
+        if safe_branch != "main":
+            new_edit_url = new_edit_url.include_query_params(branch=safe_branch)
+        new_edit_url = new_edit_url.include_query_params(rename_status="success")
+        return RedirectResponse(url=str(new_edit_url), status_code=303)
+
+    except CsrfProtectError as e:
+        logger.warning(
+            "CSRF validation failed while renaming page %s: %s",
+            title,
+            str(e),
+        )
+        fallback = request.url_for("edit_page", title=title)
+        fallback = fallback.include_query_params(rename_status="csrf")
+        return RedirectResponse(url=str(fallback), status_code=303)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=303)
+    except Exception as e:
+        logger.error(f"Error renaming page {title}: {str(e)}")
+        fallback = request.url_for("edit_page", title=title)
+        fallback = fallback.include_query_params(rename_status="error")
+        return RedirectResponse(url=str(fallback), status_code=303)
 
 
 @router.post("/delete/{title}")
