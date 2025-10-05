@@ -206,40 +206,44 @@ class ImageFigureProcessor(Treeprocessor):
 
             image = None
             link_wrapper = None
+            caption_el = None
+
             for element in figure:
-                if element.tag == "img":
-                    image = element
-                    break
-                if element.tag == "a" and len(element) == 1 and element[0].tag == "img":
-                    link_wrapper = element
-                    image = element[0]
+                if image is None:
+                    if element.tag == "img":
+                        image = element
+                    elif (
+                        element.tag == "a"
+                        and len(element) == 1
+                        and element[0].tag == "img"
+                    ):
+                        link_wrapper = element
+                        image = element[0]
+
+                if caption_el is None and element.tag == "figcaption":
+                    caption_el = element
+
+                if image is not None and caption_el is not None:
                     break
 
             if image is None:
                 continue
 
-            caption_el = None
-            for element in figure:
-                if element.tag == "figcaption":
-                    caption_el = element
-                    break
-
-            caption_text = ""
+            existing_caption = ""
             if caption_el is not None:
-                caption_text = (caption_el.text or "").strip()
+                existing_caption = "".join(caption_el.itertext()).strip()
 
-            if not caption_text:
-                caption_text = (image.get("title") or "").strip()
-                if caption_text:
+            if not existing_caption:
+                fallback_caption = (image.get("title") or "").strip()
+                if fallback_caption:
                     if caption_el is None:
                         caption_el = Element("figcaption")
                         figure.append(caption_el)
-                    caption_el.text = caption_text
+                    caption_el.text = fallback_caption
 
-            if "title" in image.attrib:
-                image.attrib.pop("title")
-            if link_wrapper is not None and "title" in link_wrapper.attrib:
-                link_wrapper.attrib.pop("title")
+            image.attrib.pop("title", None)
+            if link_wrapper is not None:
+                link_wrapper.attrib.pop("title", None)
 
 
 class ImageFigureExtension(Extension):
