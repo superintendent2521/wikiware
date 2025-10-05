@@ -30,14 +30,14 @@
     --space-xxxl: 64px;
     
     /* Typography */
-    --font-primary: 'Helvetica Neue', 'Arial', sans-serif;
+    --font-primary: 'Open Sans', sans-serif;
     --font-size-xs: 12px;
     --font-size-sm: 14px;
-    --font-size-md: 16px;
-    --font-size-lg: 18px;
-    --font-size-xl: 24px;
-    --font-size-xxl: 32px;
-    --font-size-xxxl: 40px;
+    --font-size-md: 18px;
+    --font-size-lg: 20px;
+    --font-size-xl: 26px;
+    --font-size-xxl: 34px;
+    --font-size-xxxl: 42px;
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-bold: 600;
@@ -2088,4 +2088,14 @@ footer p {
 [data-theme="dark"] .source-error {
     color: var(--error);
     background: rgba(231, 76, 60, 0.2);
+}
+
+/* Open Sans variable font class for wiki pages */
+.open-sans-wiki {
+  font-family: "Open Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  font-variation-settings:
+    "wdth" 100;
 }
