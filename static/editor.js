@@ -2,6 +2,9 @@
 // No external deps; serializes back to Markdown on submit
 
 (function () {
+  const IMAGE_CAPTION_PLACEHOLDER_TEXT = 'Add caption...';
+  const ZERO_WIDTH_SPACE = '\u200B';
+
   function qs(sel, root = document) { return root.querySelector(sel); }
   function qsa(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
 
@@ -55,6 +58,37 @@
       .replace(/'/g, '&#39;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+
+    const escapeAttrQuotesOnly = s => String(s || '')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    function buildFigureMarkup(src, altText, captionText) {
+      const srcAttr = escapeAttrQuotesOnly(src.trim());
+      const altAttr = escapeAttrQuotesOnly(altText.trim());
+      const captionHtml = captionText;
+      const captionTag = `<figcaption contenteditable="true" data-placeholder="${IMAGE_CAPTION_PLACEHOLDER_TEXT}">${captionHtml}</figcaption>`;
+      return `<figure class="wiki-image" contenteditable="false"><img alt="${altAttr}" src="${srcAttr}">${captionTag}</figure>${ZERO_WIDTH_SPACE}`;
+    }
+
+    function parseImageTarget(body) {
+      let working = (body || '').trim();
+      if (!working) {
+        return { src: '', title: '' };
+      }
+
+      let title = '';
+      const quoteMatch = working.match(/\s+("([^"\\]|\\.)*"|'([^'\\]|\\.)*')\s*$/);
+      if (quoteMatch) {
+        const quoted = quoteMatch[1];
+        title = quoted.slice(1, -1)
+          .replace(/\\"/g, '"')
+          .replace(/\\'/g, '\'');
+        working = working.slice(0, quoteMatch.index).trim();
+      }
+
+      return { src: working, title };
+    }
 
     let sourceCounter = 0;
 
@@ -139,8 +173,17 @@
       });
       // code `code`
       text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-      // images ![alt](url)
-      text = text.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img alt="$1" src="$2">');
+      // images ![alt](url "caption")
+      text = text.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, (_, altPart, targetPart) => {
+        const altRaw = (altPart || '').trim();
+        const parsed = parseImageTarget(targetPart);
+        const srcRaw = (parsed.src || '').trim();
+        const captionRaw = (parsed.title || '').trim();
+        const altAttr = escapeAttrQuotesOnly(altRaw);
+        const srcAttr = escapeAttrQuotesOnly(srcRaw);
+        const titleAttr = captionRaw ? ` title="${escapeAttrQuotesOnly(captionRaw)}"` : '';
+        return `<img alt="${altAttr}" src="${srcAttr}"${titleAttr}>`;
+      });
       // links [text](url)
       text = text.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
       // bold **text**
@@ -193,6 +236,19 @@
         i++;
         continue;
       }
+
+      const imageOnlyMatch = line.match(/^\s*!\[([^\]]*)\]\(([^\)]+)\)\s*$/);
+      if (imageOnlyMatch) {
+        const altBlock = (imageOnlyMatch[1] || '').trim();
+        const parsedTarget = parseImageTarget(imageOnlyMatch[2] || '');
+        const srcBlock = escapeHtml((parsedTarget.src || '').trim());
+        const captionBlock = escapeHtml((parsedTarget.title || '').trim());
+        const altBlockEscaped = escapeHtml(altBlock);
+        closeLists();
+        html += buildFigureMarkup(srcBlock, altBlockEscaped, captionBlock);
+        i++;
+        continue;
+      }
       // Headings
       const h = line.match(/^(#{1,3})\s+(.*)$/);
       if (h) {
@@ -235,7 +291,35 @@
         return node.nodeValue.replace(/\u200B/g, '').replace(/\n/g, ' ');
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
       const name = node.nodeName;
+
+      if (name === 'FIGURE' && node.classList && node.classList.contains('wiki-image')) {
+        const img = node.querySelector('img');
+        if (!img) {
+          return '';
+        }
+        const altRaw = (img.getAttribute('alt') || '').replace(/\u200B/g, '');
+        const srcRaw = (img.getAttribute('src') || '').trim();
+        const captionNode = node.querySelector('figcaption');
+        let captionText = '';
+        if (captionNode) {
+          captionText = (captionNode.textContent || '').replace(/\u200B/g, '').trim();
+        }
+        const normalizeInline = value => value.replace(/\s+/g, ' ').trim();
+        const alt = normalizeInline(altRaw).replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+        const caption = normalizeInline(captionText);
+        let markdown = `![${alt}](${srcRaw}`;
+        if (caption) {
+          const escapedCaption = caption
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"');
+          markdown += ` "${escapedCaption}"`;
+        }
+        markdown += ')';
+        return `${markdown}\n\n`;
+      }
+
       const children = Array.from(node.childNodes).map(serialize).join('');
       switch (name) {
         case 'SUP': {
@@ -266,9 +350,19 @@
           return `[${children}](${href})`;
         }
         case 'IMG': {
-          const alt = node.getAttribute('alt') || '';
-          const src = node.getAttribute('src') || '';
-          return `![${alt}](${src})`;
+          const altRaw = (node.getAttribute('alt') || '').replace(/\u200B/g, '');
+          const src = (node.getAttribute('src') || '').trim();
+          const titleAttr = (node.getAttribute('title') || '').trim();
+          const altText = altRaw.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+          let markdownImage = `![${altText}](${src}`;
+          if (titleAttr) {
+            const escapedTitle = titleAttr
+              .replace(/\\/g, '\\\\')
+              .replace(/"/g, '\\"');
+            markdownImage += ` "${escapedTitle}"`;
+          }
+          markdownImage += ')';
+          return markdownImage;
         }
         case 'UL': {
           const items = qsa(':scope > li', node).map(li => '- ' + Array.from(li.childNodes).map(serialize).join(''));
@@ -784,12 +878,29 @@
         const { startContainer, startOffset } = range;
         const target = direction === 'backward' ? getPreviousNode(range) : getNextNode(range);
         if (!target || target === 'TEXT') return false;
-        if (target.nodeType !== Node.ELEMENT_NODE || target.nodeName !== 'IMG') return false;
+
+        let removable = null;
+        if (target.nodeType === Node.ELEMENT_NODE) {
+          if (target.nodeName === 'FIGURE' && target.classList.contains('wiki-image')) {
+            removable = target;
+          } else if (target.nodeName === 'IMG') {
+            removable = typeof target.closest === 'function' ? target.closest('figure.wiki-image') || target : target;
+          } else if (target.nodeName === 'FIGCAPTION' && typeof target.closest === 'function') {
+            removable = target.closest('figure.wiki-image');
+          }
+        } else if (target.nodeType === Node.TEXT_NODE) {
+          const parentElement = target.parentElement;
+          if (parentElement && typeof parentElement.closest === 'function') {
+            removable = parentElement.closest('figure.wiki-image');
+          }
+        }
+
+        if (!removable) return false;
 
         const selection = window.getSelection();
         const caretRange = range.cloneRange();
 
-        target.remove();
+        removable.remove();
 
         try {
           if (startContainer.nodeType === Node.TEXT_NODE) {
@@ -1003,16 +1114,27 @@
       if (typeof WikiEditor.restoreSelection === 'function') {
         WikiEditor.restoreSelection();
       }
-      const img = document.createElement('img');
-      img.src = src;
-      img.alt = alt || '';
-      insertNodeAtSelection(img);
+      const figure = document.createElement('figure');
+      figure.className = 'wiki-image';
+      figure.setAttribute('contenteditable', 'false');
+
+      const imageEl = document.createElement('img');
+      imageEl.src = src;
+      imageEl.alt = alt || '';
+      figure.appendChild(imageEl);
+
+      const captionEl = document.createElement('figcaption');
+      captionEl.setAttribute('contenteditable', 'true');
+      captionEl.setAttribute('data-placeholder', IMAGE_CAPTION_PLACEHOLDER_TEXT);
+      figure.appendChild(captionEl);
+
+      insertNodeAtSelection(figure);
 
       let rangeForCaret = null;
-      const parent = img.parentNode;
+      const parent = figure.parentNode;
       if (parent) {
-        const spacer = document.createTextNode('\u200B');
-        parent.insertBefore(spacer, img.nextSibling);
+        const spacer = document.createTextNode(ZERO_WIDTH_SPACE);
+        parent.insertBefore(spacer, figure.nextSibling);
         const selection = window.getSelection();
         const range = document.createRange();
         range.setStart(spacer, 0);
