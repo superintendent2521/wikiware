@@ -648,7 +648,7 @@
                     uploadStatus.innerHTML = '<div class="alert alert-info">Uploading...</div>';
                 }
 
-                fetch('/upload-image', {
+                fetch('/api/upload-image', {
                     method: 'POST',
                     headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
                     credentials: 'same-origin',
