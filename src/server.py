@@ -6,6 +6,9 @@ This is the refactored, modular version with separated concerns.
 import os
 import secrets
 from fastapi import FastAPI, Request
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
@@ -131,8 +134,31 @@ app.include_router(api_uploads.router, prefix="/api")
 app.include_router(log_streamer.router)
 # Initilize log streaming.
 log_streamer.setup_log_streaming(app, add_file_sink=False)
-
-
+# 404 handler
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        return templates.TemplateResponse(
+            "error.html",
+            {
+                "request": request,
+                "title": "404 Not Found",
+                "message": "The page you’re looking for doesn’t exist or has been moved.",
+                "config": {"NAME": "WikiWare"},  # pass your app name or config
+            },
+            status_code=404,
+        )
+    # let other errors pass through normally
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "title": f"{exc.status_code} Error",
+            "message": exc.detail,
+            "config": {"NAME": "WikiWare"},
+        },
+        status_code=exc.status_code,
+    )
 @app.on_event("startup")
 async def startup_event():
     try:

@@ -1993,6 +1993,30 @@ footer p {
     }
 }
 
+/* Error Page Styles */
+.error-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: 100%;
+    min-height: calc(100vh - 200px);
+}
+
+.error-page h1 {
+    color: var(--darker-gray);
+    font-size: var(--font-size-xxl);
+    margin-bottom: var(--space-md);
+}
+
+.error-page p {
+    color: var(--dark-gray);
+    font-size: var(--font-size-md);
+    margin-bottom: var(--space-lg);
+    max-width: 600px;
+}
+
 /* Sources Styles */
 .sources-section {
     background: var(--primary-white);

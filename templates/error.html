@@ -4,6 +4,8 @@
 
 {% block content %}
 <section class="error-page">
+    <img src="{{ url_for('static', path='error.jpg') }}" alt="Error Image" class="error-image" style="width:300px;height:300px;border-radius:50%;object-fit:cover;">
+    <br>
     <h1>{{ title }}</h1>
     <p>{{ message }}</p>
     <p><a href="/" class="btn btn-primary">Return to Home</a></p>
