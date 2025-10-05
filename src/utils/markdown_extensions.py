@@ -198,6 +198,53 @@ class ImageFigureProcessor(Treeprocessor):
                 parent.insert(index, figure)
                 parent.remove(child)
 
+        # Ensure existing figures surface captions even if they were missing during conversion
+        for figure in root.iter("figure"):
+            classes = (figure.get("class") or "").split()
+            if "wiki-image" not in classes:
+                continue
+
+            image = None
+            link_wrapper = None
+            caption_el = None
+
+            for element in figure:
+                if image is None:
+                    if element.tag == "img":
+                        image = element
+                    elif (
+                        element.tag == "a"
+                        and len(element) == 1
+                        and element[0].tag == "img"
+                    ):
+                        link_wrapper = element
+                        image = element[0]
+
+                if caption_el is None and element.tag == "figcaption":
+                    caption_el = element
+
+                if image is not None and caption_el is not None:
+                    break
+
+            if image is None:
+                continue
+
+            existing_caption = ""
+            if caption_el is not None:
+                existing_caption = "".join(caption_el.itertext()).strip()
+
+            if not existing_caption:
+                fallback_caption = (image.get("title") or "").strip()
+                if fallback_caption:
+                    if caption_el is None:
+                        caption_el = Element("figcaption")
+                        figure.append(caption_el)
+                    caption_el.text = fallback_caption
+
+            image.attrib.pop("title", None)
+            if link_wrapper is not None:
+                link_wrapper.attrib.pop("title", None)
+
 
 class ImageFigureExtension(Extension):
     """Register the image figure processor for Markdown conversion."""
