@@ -1109,7 +1109,7 @@
       // Initial state
       updateToolbarState();
     },
-    insertImage({ src, alt }) {
+    insertImage({ src, alt, caption }) {
       if (!src) return;
       if (typeof WikiEditor.restoreSelection === 'function') {
         WikiEditor.restoreSelection();
@@ -1126,6 +1126,10 @@
       const captionEl = document.createElement('figcaption');
       captionEl.setAttribute('contenteditable', 'true');
       captionEl.setAttribute('data-placeholder', IMAGE_CAPTION_PLACEHOLDER_TEXT);
+      const captionText = (caption || '').trim();
+      if (captionText) {
+        captionEl.textContent = captionText;
+      }
       figure.appendChild(captionEl);
 
       insertNodeAtSelection(figure);

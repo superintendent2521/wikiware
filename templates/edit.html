@@ -99,6 +99,11 @@
                     <button type="button" class="btn btn-secondary" id="cancelLibrary">Close</button>
                 </div>
             </div>
+            <div class="form-group" id="imageCaptionGroup">
+                <label for="imageCaptionInput">Caption (optional)</label>
+                <input type="text" id="imageCaptionInput" class="form-control" placeholder="This text appears under the image once inserted.">
+                <small class="form-hint">Leave blank if you do not want a caption.</small>
+            </div>
         </div>
     </div>
     {% if request.query_params.get('restored') %}
@@ -447,6 +452,7 @@
         const refreshImageLibraryBtn = document.getElementById('refreshImageLibraryBtn');
         const imageLibraryList = document.getElementById('imageLibraryList');
         const imageLibraryStatus = document.getElementById('imageLibraryStatus');
+        const imageCaptionInput = document.getElementById('imageCaptionInput');
 
         let imageLibraryItems = [];
         let imageLibraryLoaded = false;
@@ -487,6 +493,7 @@
             if (imageUploadForm) imageUploadForm.reset();
             if (uploadStatus) uploadStatus.innerHTML = '';
             resetLibraryState();
+            if (imageCaptionInput) imageCaptionInput.value = '';
         }
 
         function showModal(section = 'upload') {
@@ -503,21 +510,27 @@
 
         function insertImageIntoEditor(src, filename) {
             if (!src) return;
+            const caption = imageCaptionInput ? imageCaptionInput.value.trim() : '';
             if (window.WikiEditor) {
                 if (typeof window.WikiEditor.restoreSelection === 'function') {
                     window.WikiEditor.restoreSelection();
                 }
                 if (typeof window.WikiEditor.insertImage === 'function') {
-                    window.WikiEditor.insertImage({ src, alt: filename || '' });
+                    window.WikiEditor.insertImage({ src, alt: filename || '', caption });
+                    if (imageCaptionInput) imageCaptionInput.value = '';
                     return;
                 }
             }
             if (contentTextarea) {
-                const imageMarkdown = '![' + (filename || '') + '](' + src + ')';
+                const escapedCaption = caption
+                    .replace(/\\/g, '\\\\')
+                    .replace(/"/g, '\\"');
+                const imageMarkdown = '![' + (filename || '') + '](' + src + (caption ? ' \"' + escapedCaption + '\"' : '') + ')';
                 const startPos = contentTextarea.selectionStart || 0;
                 const endPos = contentTextarea.selectionEnd || 0;
                 const content = contentTextarea.value || '';
                 contentTextarea.value = content.substring(0, startPos) + imageMarkdown + content.substring(endPos);
+                if (imageCaptionInput) imageCaptionInput.value = '';
             }
         }
 
