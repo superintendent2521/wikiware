@@ -6,7 +6,7 @@ from .database import get_pages_collection, get_history_collection, get_users_co
 # Caching variables for stats
 last_character_count = 0
 last_character_count_time = None  # Start as None to force first calculation
-character_count_cache_duration = timedelta(minutes=10)  # Cache for 10 Minutes
+character_count_cache_duration = timedelta(minutes=30)  # Cache for 30 Minutes
 
 
 async def get_total_edits():
