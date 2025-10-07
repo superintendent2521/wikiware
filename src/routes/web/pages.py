@@ -182,7 +182,7 @@ async def _can_user_edit_page(user: dict, page_data: Optional[dict]) -> bool:
     return False
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def home(
     request: Request,
     response: Response,
@@ -252,7 +252,7 @@ async def home(
     return template
 
 
-@router.get("/page/{title}", response_class=HTMLResponse)
+@router.api_route("/page/{title}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def get_page(
     request: Request,
     response: Response,
