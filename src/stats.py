@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import os
 from loguru import logger
 from .database import get_pages_collection, get_history_collection, get_users_collection
+import time
 
 # Caching variables for stats
 last_character_count = 0
@@ -85,6 +86,7 @@ async def get_total_characters():
         )
 
     try:
+        start = time.perf_counter()
         pages_collection = get_pages_collection()
         if pages_collection is not None:
             # Aggregate to sum the length of all content
@@ -104,7 +106,8 @@ async def get_total_characters():
             # Update cache — this sets last_character_count_time to a valid datetime
             last_character_count = total_characters
             last_character_count_time = datetime.now()
-
+            end = time.perf_counter()
+            logger.info(f"Total character count updated in {end - start:.4f} seconds")
             return total_characters
         return 0
     except Exception as e:
