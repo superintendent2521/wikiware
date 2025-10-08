@@ -315,22 +315,20 @@ class PageService:
                 return []
 
             try:
-                cursor = (
-                    pages_collection.find(
-                        {
-                            "$and": [
-                                {"branch": branch},
-                                {"$text": {"$search": query}},
-                            ]
-                        },
-                        {"score": {"$meta": "textScore"}},
-                    )
-                    .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
-                )
+                cursor = pages_collection.find(
+                    {
+                        "$and": [
+                            {"branch": branch},
+                            {"$text": {"$search": query}},
+                        ]
+                    },
+                    {"score": {"$meta": "textScore"}},
+                ).sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
                 pages = await cursor.to_list(limit)
             except OperationFailure as op_err:
                 logger.warning(
-                    "Text search unavailable, falling back to regex search: {}", str(op_err)
+                    "Text search unavailable, falling back to regex search: {}",
+                    str(op_err),
                 )
                 pages = await pages_collection.find(
                     {

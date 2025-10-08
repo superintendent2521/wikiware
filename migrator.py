@@ -10,7 +10,6 @@ WikiWare MongoDB Backup & Restore (menu-driven, URI-with-DB only)
 
 import os
 import json
-import sys
 import shutil
 import datetime as dt
 import subprocess
@@ -21,16 +20,17 @@ from urllib.parse import urlparse, urlunparse, ParseResult
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKUP_DIR = SCRIPT_DIR / "backups"
-CONF_PATH  = SCRIPT_DIR / ".wikiware_backup_config.json"
+CONF_PATH = SCRIPT_DIR / ".wikiware_backup_config.json"
 
 DEFAULTS = {
     "uri": os.getenv("MONGODB_URL", "mongodb://localhost:27017"),
-    "db":  os.getenv("MONGODB_DB", "wikiware"),
-    "keep": 10,            # keep last N backups (rotation); set 0 to disable
-    "drop_on_restore": True
+    "db": os.getenv("MONGODB_DB", "wikiware"),
+    "keep": 10,  # keep last N backups (rotation); set 0 to disable
+    "drop_on_restore": True,
 }
 
 # --------------------------- Helpers ---------------------------
+
 
 def clear():
     try:
@@ -38,20 +38,25 @@ def clear():
     except Exception:
         pass
 
+
 def pause(msg="Press Enter to continue..."):
     try:
         input(msg)
     except KeyboardInterrupt:
         pass
 
+
 def require_tool(name: str):
     if shutil.which(name) is None:
         print(f"\nERROR: '{name}' not found on PATH.")
-        print("Install MongoDB Database Tools and ensure 'mongodump'/'mongorestore' are available.")
+        print(
+            "Install MongoDB Database Tools and ensure 'mongodump'/'mongorestore' are available."
+        )
         print("Download: https://www.mongodb.com/try/download/database-tools\n")
         pause()
         return False
     return True
+
 
 def load_conf() -> dict:
     if CONF_PATH.exists():
@@ -62,8 +67,11 @@ def load_conf() -> dict:
                 data.setdefault(k, v)
             return data
         except (json.JSONDecodeError, OSError) as e:
-            print(f"Warning: failed to load settings from {CONF_PATH}, using defaults. Error: {e}")
+            print(
+                f"Warning: failed to load settings from {CONF_PATH}, using defaults. Error: {e}"
+            )
     return DEFAULTS.copy()
+
 
 def save_conf(conf: dict):
     try:
@@ -72,16 +80,20 @@ def save_conf(conf: dict):
     except OSError as e:
         print(f"Warning: failed to save settings: {e}")
 
+
 def timestamp() -> str:
     return dt.datetime.now().strftime("%Y-%m-%d_%H%M")
+
 
 def list_archives(db: str) -> List[Path]:
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     return sorted(BACKUP_DIR.glob(f"{db}-*.archive.gz"))
 
+
 def latest_archive(db: str) -> Optional[Path]:
     files = list_archives(db)
     return files[-1] if files else None
+
 
 def rotate_backups(db: str, keep: int):
     if keep is None or keep <= 0:
@@ -97,6 +109,7 @@ def rotate_backups(db: str, keep: int):
             except Exception as e:
                 print(f"  failed to delete {p.name}: {e}")
 
+
 def run(cmd: list) -> bool:
     try:
         print(f"\nRunning:\n  {shlex.join(cmd)}")
@@ -108,7 +121,10 @@ def run(cmd: list) -> bool:
         print("\nCommand not found (is it on PATH?)")
     return False
 
-def prompt_int(prompt_text: str, min_val: Optional[int] = None, max_val: Optional[int] = None) -> int:
+
+def prompt_int(
+    prompt_text: str, min_val: Optional[int] = None, max_val: Optional[int] = None
+) -> int:
     while True:
         val = input(prompt_text).strip()
         if not val.isdigit():
@@ -123,6 +139,7 @@ def prompt_int(prompt_text: str, min_val: Optional[int] = None, max_val: Optiona
             continue
         return num
 
+
 def prompt_yes_no(prompt_text: str, default: bool = False) -> bool:
     suffix = "[Y/n]" if default else "[y/N]"
     while True:
@@ -134,6 +151,7 @@ def prompt_yes_no(prompt_text: str, default: bool = False) -> bool:
         if ans in ("n", "no"):
             return False
         print("Please answer y or n.")
+
 
 def uri_with_db(uri: str, db: str) -> str:
     """
@@ -157,7 +175,9 @@ def uri_with_db(uri: str, db: str) -> str:
     )
     return urlunparse(forced)
 
+
 # --------------------------- Actions ---------------------------
+
 
 def action_backup(conf: dict):
     clear()
@@ -181,6 +201,7 @@ def action_backup(conf: dict):
         rotate_backups(conf["db"], conf.get("keep", 0))
     pause()
 
+
 def action_restore_latest(conf: dict):
     clear()
     print("== Restore (latest) ==")
@@ -194,7 +215,10 @@ def action_restore_latest(conf: dict):
 
     print(f"Latest backup: {arc.name}")
     drop = conf.get("drop_on_restore", True)
-    if not prompt_yes_no(f"Proceed restoring into '{conf['db']}' from '{arc.name}'? (--drop={drop})", default=False):
+    if not prompt_yes_no(
+        f"Proceed restoring into '{conf['db']}' from '{arc.name}'? (--drop={drop})",
+        default=False,
+    ):
         return
 
     uri_db = uri_with_db(conf["uri"], conf["db"])
@@ -211,6 +235,7 @@ def action_restore_latest(conf: dict):
     if ok:
         print(f"\n✅ Restore complete into database '{conf['db']}' from {arc.name}")
     pause()
+
 
 def action_restore_choose(conf: dict):
     clear()
@@ -230,7 +255,10 @@ def action_restore_choose(conf: dict):
     arc = files[idx - 1]
 
     drop = conf.get("drop_on_restore", True)
-    if not prompt_yes_no(f"Proceed restoring into '{conf['db']}' from '{arc.name}'? (--drop={drop})", default=False):
+    if not prompt_yes_no(
+        f"Proceed restoring into '{conf['db']}' from '{arc.name}'? (--drop={drop})",
+        default=False,
+    ):
         return
 
     uri_db = uri_with_db(conf["uri"], conf["db"])
@@ -248,6 +276,7 @@ def action_restore_choose(conf: dict):
         print(f"\n✅ Restore complete into database '{conf['db']}' from {arc.name}")
     pause()
 
+
 def action_list(conf: dict):
     clear()
     print("== List backups ==")
@@ -259,6 +288,7 @@ def action_list(conf: dict):
         for p in files:
             print(f"  {p.name}")
     pause()
+
 
 def action_settings(conf: dict):
     while True:
@@ -281,11 +311,15 @@ def action_settings(conf: dict):
                 conf["db"] = new
                 save_conf(conf)
         elif choice == "3":
-            n = prompt_int("Keep how many recent backups (0 = no rotation): ", 0, 1000000)
+            n = prompt_int(
+                "Keep how many recent backups (0 = no rotation): ", 0, 1000000
+            )
             conf["keep"] = n
             save_conf(conf)
         elif choice == "4":
-            conf["drop_on_restore"] = prompt_yes_no("Drop collections before restore?", default=True)
+            conf["drop_on_restore"] = prompt_yes_no(
+                "Drop collections before restore?", default=True
+            )
             save_conf(conf)
         elif choice == "5":
             return
@@ -293,7 +327,9 @@ def action_settings(conf: dict):
             print("Please choose 1-5.")
             pause("")
 
+
 # --------------------------- Main Loop ---------------------------
+
 
 def main():
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -330,6 +366,7 @@ def main():
         else:
             print("Please choose 1-5.")
             pause("")
+
 
 if __name__ == "__main__":
     try:

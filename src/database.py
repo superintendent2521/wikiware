@@ -23,7 +23,7 @@ class Database:
     async def connect(self, max_retries: int | None = 10):
         """Establish connection to MongoDB and test connectivity with retry logic."""
         if max_retries is None:
-            max_retries = float('inf')  # Infinite retries for background monitor
+            max_retries = float("inf")  # Infinite retries for background monitor
             delay = 10  # 10 seconds for ongoing retries
         else:
             delay = 5  # 5 seconds for startup
@@ -32,7 +32,9 @@ class Database:
 
         while retry_count < max_retries:
             try:
-                logger.info(f"Attempting to connect to MongoDB at {MONGODB_URL}... (attempt {retry_count + 1})")
+                logger.info(
+                    f"Attempting to connect to MongoDB at {MONGODB_URL}... (attempt {retry_count + 1})"
+                )
                 self.client = AsyncIOMotorClient(
                     MONGODB_URL, serverSelectionTimeoutMS=10000
                 )
@@ -44,7 +46,7 @@ class Database:
                 return  # Exit the loop on successful connection
             except ServerSelectionTimeoutError:
                 retry_count += 1
-                if max_retries != float('inf'):
+                if max_retries != float("inf"):
                     logger.warning(
                         f"MongoDB server not available. Attempt {retry_count}/{max_retries}."
                         f"Retrying in {delay} seconds... Server Offline?"
@@ -57,13 +59,13 @@ class Database:
             except Exception as e:  # IGNORE W0718
                 logger.error(f"Database connection error: {e}")
                 self.is_connected = False
-                if max_retries != float('inf'):
+                if max_retries != float("inf"):
                     return  # Don't retry on other errors for startup
                 else:
                     await asyncio.sleep(delay)  # Retry on errors for background
 
         # If we've exhausted all retries (startup only)
-        if max_retries != float('inf'):
+        if max_retries != float("inf"):
             logger.error(
                 "Failed to connect to MongoDB after multiple attempts. Running in offline mode."
             )

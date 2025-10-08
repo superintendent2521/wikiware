@@ -19,14 +19,18 @@ from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.branch_service import BranchService
 from ...services.page_service import PageService
-from ...services.settings_service import FeatureFlags, SettingsService
+from ...services.settings_service import FeatureFlags
 from ...database import get_users_collection
 from ...stats import get_stats
 from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
 from ...utils.template_env import get_templates
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
-from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExtension, SourceExtension
+from ...utils.markdown_extensions import (
+    TableExtensionWrapper,
+    ImageFigureExtension,
+    SourceExtension,
+)
 from ...utils.error_utils import render_error_page
 
 router = APIRouter()
@@ -63,8 +67,6 @@ def _parse_allowed_users(raw: str) -> List[str]:
     if not raw:
         return []
     return [username.strip() for username in raw.split(",") if username.strip()]
-
-
 
 
 def _build_page_redirect_url(request: Request, title: str, branch: str) -> str:
@@ -135,7 +137,7 @@ async def _render_markdown_with_toc(content: str) -> tuple[str, List[dict], list
     sanitized_html = sanitize_html(html_content)
 
     # Extract sources
-    sources = getattr(md, 'sources', [])
+    sources = getattr(md, "sources", [])
 
     # Extract and transform TOC tokens
     toc_items = _transform_toc_tokens(getattr(md, "toc_tokens", []))
@@ -232,7 +234,9 @@ async def home(
         }
 
     # Process internal links and render as Markdown
-    page["html_content"], toc_items, sources = await _render_markdown_with_toc(page["content"])
+    page["html_content"], toc_items, sources = await _render_markdown_with_toc(
+        page["content"]
+    )
     page["sources"] = sources
 
     template = templates.TemplateResponse(

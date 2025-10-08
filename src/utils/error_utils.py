@@ -2,6 +2,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 from ..utils.template_env import get_templates
 
+
 def render_error_page(
     request: Request,
     user: dict | None = None,

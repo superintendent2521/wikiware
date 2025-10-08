@@ -813,8 +813,8 @@ async def restore_version(
             current_page = await pages_collection.find_one(
                 {"title": title, "branch": branch}
             )
-            total_versions_before_restore = (
-                total_history_versions + (1 if current_page else 0)
+            total_versions_before_restore = total_history_versions + (
+                1 if current_page else 0
             )
             if (
                 total_versions_before_restore > 0
@@ -841,9 +841,7 @@ async def restore_version(
             else:
                 version_label = f"Version {max(1, int(version_index))}"
             if original_summary:
-                restore_summary = (
-                    f"Reverted to {version_label} (original summary: {original_summary})"
-                )
+                restore_summary = f"Reverted to {version_label} (original summary: {original_summary})"
             else:
                 restore_summary = f"Reverted to {version_label}"
             if len(restore_summary) > 250:
@@ -881,5 +879,3 @@ async def restore_version(
             request, title, branch, error="restore_error"
         )
         return RedirectResponse(url=redirect_url, status_code=303)
-
-

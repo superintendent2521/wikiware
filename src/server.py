@@ -7,8 +7,6 @@ import os
 import secrets
 from fastapi import FastAPI, Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
@@ -134,6 +132,8 @@ app.include_router(api_uploads.router, prefix="/api")
 app.include_router(log_streamer.router)
 # Initilize log streaming.
 log_streamer.setup_log_streaming(app, add_file_sink=False)
+
+
 # 404 handler
 @app.exception_handler(StarletteHTTPException)
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
@@ -159,6 +159,8 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
         },
         status_code=exc.status_code,
     )
+
+
 @app.on_event("startup")
 async def startup_event():
     try:

@@ -166,14 +166,14 @@ class ExportService:
         pages_collection = get_pages_collection()
         history_collection = get_history_collection()
         branches_collection = get_branches_collection()
-        image_collection = get_image_hashes_collection() # its just sha256s
+        image_collection = get_image_hashes_collection()  # its just sha256s
         missing_collections = [
             name
             for name, coll in (
                 ("pages", pages_collection),
                 ("history", history_collection),
                 ("branches", branches_collection),
-                ("images", image_collection)
+                ("images", image_collection),
             )
             if coll is None
         ]
@@ -194,7 +194,7 @@ class ExportService:
                 "name": "history.json",
                 "compression": "deflate",
             },
-                        {
+            {
                 "stream": cls._stream_collection_json(image_collection, "picture_shas"),
                 "name": "image.json",
                 "compression": "deflate",

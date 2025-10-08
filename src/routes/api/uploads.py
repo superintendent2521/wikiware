@@ -17,7 +17,6 @@ from loguru import logger
 from ...config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
 from ...database import get_image_hashes_collection
 from ...middleware.auth_middleware import AuthMiddleware
-from ...services.settings_service import SettingsService
 from ...utils.validation import sanitize_filename
 
 

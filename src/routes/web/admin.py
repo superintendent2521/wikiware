@@ -97,9 +97,7 @@ async def update_banner(request: Request, csrf_protect: CsrfProtect = Depends())
 
 
 @router.post("/admin/features")
-async def update_feature_flags(
-    request: Request, csrf_protect: CsrfProtect = Depends()
-):
+async def update_feature_flags(request: Request, csrf_protect: CsrfProtect = Depends()):
     """Update global feature toggle settings from the admin panel."""
     form = await request.form()
     await csrf_protect.validate_csrf(request)
@@ -109,8 +107,7 @@ async def update_feature_flags(
 
     flags = {
         "page_editing_enabled": form.get("page_editing_enabled") == "on",
-        "account_creation_enabled": form.get("account_creation_enabled")
-        == "on",
+        "account_creation_enabled": form.get("account_creation_enabled") == "on",
         "image_upload_enabled": form.get("image_upload_enabled") == "on",
     }
 

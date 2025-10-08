@@ -31,19 +31,19 @@ def _parse_source_params(params_str):
     while index < length:
         char = params_str[index]
 
-        if char == '\\':
+        if char == "\\":
             index += 1
             if index < length:
                 buf.append(params_str[index])
                 index += 1
             else:
-                buf.append('\\')
+                buf.append("\\")
             continue
 
-        if char == '|':
-            remainder = params_str[index + 1:]
+        if char == "|":
+            remainder = params_str[index + 1 :]
             if _SOURCE_PARAM_KEY_PATTERN.match(remainder):
-                segments.append(''.join(buf))
+                segments.append("".join(buf))
                 buf = []
                 index += 1
                 continue
@@ -51,16 +51,16 @@ def _parse_source_params(params_str):
         buf.append(char)
         index += 1
 
-    segments.append(''.join(buf))
+    segments.append("".join(buf))
 
     params = {}
     for segment in segments:
         if not segment:
             continue
-        if '=' not in segment:
+        if "=" not in segment:
             continue
 
-        key, value = segment.split('=', 1)
+        key, value = segment.split("=", 1)
         key = key.strip().lower()
         if not key:
             continue
@@ -321,20 +321,20 @@ class SourceCollectorProcessor(InlineProcessor):
 
     def __init__(self, pattern, md):
         super().__init__(pattern, md)
-        if not hasattr(md, 'sources'):
+        if not hasattr(md, "sources"):
             md.sources = []
-        if not hasattr(md, '_source_counter'):
+        if not hasattr(md, "_source_counter"):
             md._source_counter = 0
-        if not hasattr(md, '_source_map'):
+        if not hasattr(md, "_source_map"):
             md._source_map = {}  # url -> id for deduping
 
     def handleMatch(self, m, data):
         params_str = m.group(1).strip()
         params = _parse_source_params(params_str)
 
-        url = params.get('url', '')
-        title = params.get('title', url or 'Untitled Source')
-        author = params.get('author', '')
+        url = params.get("url", "")
+        title = params.get("title", url or "Untitled Source")
+        author = params.get("author", "")
 
         if not url:
             # Invalid, replace with error element so markup isn't escaped
@@ -350,12 +350,9 @@ class SourceCollectorProcessor(InlineProcessor):
             self.md._source_counter += 1
             source_id = self.md._source_counter
             self.md._source_map[url] = source_id
-            self.md.sources.append({
-                'id': source_id,
-                'url': url,
-                'title': title,
-                'author': author
-            })
+            self.md.sources.append(
+                {"id": source_id, "url": url, "title": title, "author": author}
+            )
 
         # Replace with citation link element so the HTML renders server-side
         citation_sup = Element("sup")
@@ -389,8 +386,8 @@ class SourceFinalizeTreeprocessor(Treeprocessor):
     """Finalize source citations after all inline processing has completed."""
 
     def run(self, root):
-        sources = getattr(self.md, 'sources', [])
-        sources_by_id = {str(source['id']): source for source in sources}
+        sources = getattr(self.md, "sources", [])
+        sources_by_id = {str(source["id"]): source for source in sources}
 
         for element in root.iter():
             if element.tag != "sup":
@@ -425,18 +422,18 @@ class SourceExtension(Extension):
 
     def extendMarkdown(self, md):
         # Source collector pattern: {{source|key=val|...}}
-        source_pattern = r'\{\{source\|([^}]+)\}\}'
+        source_pattern = r"\{\{source\|([^}]+)\}\}"
         md.inlinePatterns.register(
-            SourceCollectorProcessor(source_pattern, md), 'source_collector', 160
+            SourceCollectorProcessor(source_pattern, md), "source_collector", 160
         )
 
         # Citation pattern: [1], [2], etc.
-        citation_pattern = r'\[(\d+)\]'
+        citation_pattern = r"\[(\d+)\]"
         md.inlinePatterns.register(
-            SourceCitationProcessor(citation_pattern, md), 'source_citation', 155
+            SourceCitationProcessor(citation_pattern, md), "source_citation", 155
         )
 
         # Finalize citations after the inline phase so manual references resolve correctly
         md.treeprocessors.register(
-            SourceFinalizeTreeprocessor(md), 'source_finalize', 5
+            SourceFinalizeTreeprocessor(md), "source_finalize", 5
         )
