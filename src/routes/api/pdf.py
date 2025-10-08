@@ -1,17 +1,18 @@
 """API endpoints for PDF generation from Markdown files."""
 
+import io
+import re
+from datetime import datetime, timezone
+from typing import Dict, List, Set, Tuple
+from urllib.parse import quote
+
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from loguru import logger
-import io
-from typing import Dict, List, Set, Tuple
-from urllib.parse import quote
 from markdown_pdf import MarkdownPdf, Section
 from ...utils.link_processor import process_internal_links
 
-import re
-from datetime import datetime, timezone
 
 _UNIX_TOKEN_RE = re.compile(r"\{\{\s*global\.unix(?::(\d+))?\s*\}}")
 _GLOBAL_TOKEN_RE = re.compile(r"\{\{\s*global\.[^}}]+\}\}")
