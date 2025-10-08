@@ -130,11 +130,12 @@ async def create_indexes():
         if pages is not None:
             # Drop the old unique index on title alone if it exists
             try:
-                await pages.drop_index("title_1")
-                logger.info("Dropped old unique index on title")
+                existing_indexes = await pages.index_information()
+                if "title_1" in existing_indexes:
+                    await pages.drop_index("title_1")
+                    logger.info("Dropped old unique index on title")
             except Exception as e:
                 logger.warning(f"Failed to drop old index on title: {str(e)}")
-                pass  # Index might not exist, that's fine
 
             # Create compound unique index on title and branch
             await pages.create_index([("title", 1), ("branch", 1)], unique=True)

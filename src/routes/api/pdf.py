@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from loguru import logger
 from markdown_pdf import MarkdownPdf, Section
 from ...utils.link_processor import process_internal_links
@@ -152,9 +152,10 @@ def _rewrite_internal_links(
 
 
 async def _collect_linked_pages(
-    root_title: str, root_branch: str
+    root_title: str, root_branch: str, *, max_pages: int = MAX_LINKED_PAGES
 ) -> List[Dict[str, str]]:
-    """Collect the root page and up to MAX_LINKED_PAGES-1 linked pages."""
+    """Collect the root page and up to `max_pages`-1 linked pages."""
+    limit = max(1, min(MAX_LINKED_PAGES, max_pages))
     queue: List[Tuple[str, str]] = []
     initial = (root_title or "").strip() or root_title
     branch = (root_branch or "main").strip() or "main"
@@ -164,7 +165,7 @@ async def _collect_linked_pages(
     visited: Set[Tuple[str, str]] = set()
     collected: List[Dict[str, str]] = []
 
-    while queue and len(collected) < MAX_LINKED_PAGES:
+    while queue and len(collected) < limit:
         title, current_branch = queue.pop(0)
         key = _normalize_key(title, current_branch)
         queued.discard(key)
@@ -193,7 +194,7 @@ async def _collect_linked_pages(
         )
         logger.info("Collected page %s (branch: %s) for PDF export", title, page_branch)
 
-        if len(collected) >= MAX_LINKED_PAGES:
+        if len(collected) >= limit:
             break
 
         for linked_title, linked_branch in _extract_wiki_links(
@@ -202,7 +203,7 @@ async def _collect_linked_pages(
             child_key = _normalize_key(linked_title, linked_branch)
             if child_key in visited or child_key in queued:
                 continue
-            if len(collected) + len(queue) >= MAX_LINKED_PAGES:
+            if len(collected) + len(queue) >= limit:
                 continue
             queue.append((linked_title, linked_branch))
             queued.add(child_key)
@@ -259,6 +260,16 @@ router = APIRouter()
 class PDFRequest(BaseModel):
     title: str
     branch: str = "main"
+    depth: int = 1
+
+    @validator("depth", pre=True)
+    def _validate_depth(cls, value):  # noqa: N805
+        """Ensure the requested depth is within allowed bounds."""
+        try:
+            depth_int = int(value)
+        except (TypeError, ValueError):
+            depth_int = 1
+        return max(1, min(MAX_LINKED_PAGES, depth_int))
 
 
 @router.post("/pdf/page")
@@ -268,7 +279,9 @@ async def generate_page_pdf(request: Request, pdf_req: PDFRequest):
     # user = await AuthMiddleware.require_auth(request)
     # username = user["username"]
     # logger.info(f"Generating PDF for page '{pdf_req.title}' (branch: {pdf_req.branch}) by user {username}")
-    pages = await _collect_linked_pages(pdf_req.title, pdf_req.branch)
+    pages = await _collect_linked_pages(
+        pdf_req.title, pdf_req.branch, max_pages=pdf_req.depth
+    )
     if not pages:
         raise HTTPException(status_code=404, detail="Page not found")
 

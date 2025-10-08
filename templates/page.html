@@ -61,11 +61,30 @@
             </div>
             {% endif %}
             {% if user %}
-            <a href="/history/{{ page.title }}?branch={{ branch_value }}" class="btn btn-secondary"><i class="fas fa-history"></i> View History</a>
+            <div class="history-selector" data-history-title="{{ page.title|e }}" data-history-branch="{{ branch_value|e }}" data-history-url="/history/{{ page.title }}?branch={{ branch_value }}">
+                <button type="button" class="btn btn-secondary history-button" aria-haspopup="true" aria-expanded="false">
+                    <span class="history-button__label"><i class="fas fa-history"></i> History</span>
+                    <span class="history-button__chevron"><i class="fas fa-chevron-down"></i></span>
+                </button>
+                <div class="history-menu" role="menu" aria-hidden="true">
+                    <div class="history-menu__inner">
+                        <div class="history-menu__loading">Loading history…</div>
+                        <div class="history-menu__error" hidden>Unable to load history.</div>
+                        <div class="history-menu__empty" hidden>No history entries.</div>
+                        <div class="history-menu__list"></div>
+                    </div>
+                    <div class="history-menu__footer">
+                        <a class="history-menu__view-all" href="/history/{{ page.title }}?branch={{ branch_value }}"><i class="fas fa-list"></i> View full history</a>
+                    </div>
+                </div>
+            </div>
             {% if can_edit_page %}
             <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
             {% endif %}
             {% endif %}
+            <button type="button" class="btn btn-secondary download-pdf-button" id="download-pdf-button" data-page-title="{{ page.title|e }}" data-page-branch="{{ branch_value|e }}">
+                <i class="fas fa-file-pdf"></i> Download PDF
+            </button>
             {% if user and user.is_admin %}
             <form action="{{ delete_action }}" method="post" style="display: inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -150,6 +169,111 @@
 {% block scripts %}
 {{ super() }}
 <style>
+.history-selector {
+    position: relative;
+    display: inline-block;
+}
+.history-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.history-button__chevron {
+    display: inline-flex;
+    align-items: center;
+    transition: transform var(--transition-fast);
+}
+.history-button[aria-expanded="true"] .history-button__chevron {
+    transform: rotate(180deg);
+}
+.history-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 260px;
+    background: var(--primary-white);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--box-shadow-md);
+    padding: 8px 0;
+    display: none;
+    z-index: 1050;
+}
+.history-menu.is-visible {
+    display: block;
+}
+.history-menu__inner {
+    max-height: 320px;
+    overflow-y: auto;
+}
+.history-menu__loading,
+.history-menu__error,
+.history-menu__empty {
+    padding: 12px 16px;
+    font-size: 0.95rem;
+    color: var(--dark-gray);
+}
+.history-menu__error {
+    color: var(--error);
+}
+.history-menu__list {
+    display: flex;
+    flex-direction: column;
+}
+.history-menu__item {
+    display: block;
+    padding: 10px 16px;
+    color: var(--darker-gray);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.history-menu__item:hover,
+.history-menu__item:focus {
+    background: var(--secondary-white);
+    color: var(--accent-blue-dark);
+}
+.history-menu__item.is-current {
+    font-weight: var(--font-weight-bold);
+}
+.history-menu__label {
+    display: block;
+}
+.history-menu__tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    border-radius: var(--border-radius-sm);
+    background: var(--secondary-white);
+    color: var(--accent-teal-dark);
+    font-size: 0.75rem;
+    font-weight: var(--font-weight-medium);
+}
+.history-menu__meta {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--dark-gray);
+    margin-top: 4px;
+}
+.history-menu__footer {
+    border-top: 1px solid var(--surface-border);
+    padding: 8px 16px;
+}
+.history-menu__view-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+.history-menu__view-all:hover,
+.history-menu__view-all:focus {
+    text-decoration: underline;
+}
+.download-pdf-button.is-busy {
+    pointer-events: none;
+}
 body.page-modal-open {
     overflow: hidden;
 }
@@ -223,100 +347,352 @@ document.addEventListener('DOMContentLoaded', function () {
     const modalDesc = document.getElementById('page-image-modal-desc');
     const modalClose = document.getElementById('page-image-modal-close');
 
-    if (!pageContent || !modal || !modalImg || !modalDesc || !modalClose) {
-        return;
+    if (pageContent && modal && modalImg && modalDesc && modalClose) {
+        const sanitize = (value) => (value || "").trim();
+
+        const extractCaption = (img) => {
+            if (!img) return "";
+
+            const directCaption =
+                sanitize(img.dataset.caption) ||
+                sanitize(img.getAttribute("data-description"));
+            if (directCaption) return directCaption;
+
+            const figure = img.closest('figure.wiki-image');
+            if (figure) {
+                const figureCaption =
+                    sanitize(figure.getAttribute('data-description'));
+                if (figureCaption) return figureCaption;
+
+                const captionEl = figure.querySelector('figcaption');
+                if (captionEl) {
+                    const captionText = sanitize(captionEl.textContent);
+                    if (captionText) return captionText;
+                }
+            }
+
+            return sanitize(img.title);
+        };
+
+        const openModal = (src, description, altText) => {
+            modalImg.src = src;
+            const desc = sanitize(description) || sanitize(altText);
+            if (desc) {
+                modalDesc.textContent = desc;
+                modalDesc.classList.remove('is-hidden');
+            } else {
+                modalDesc.textContent = '';
+                modalDesc.classList.add('is-hidden');
+            }
+            modalImg.alt = altText || desc || 'Image preview';
+            modal.classList.add('is-visible');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('page-modal-open');
+            try {
+                modalClose.focus({ preventScroll: true });
+            } catch (err) {
+                modalClose.focus();
+            }
+        };
+
+        const closeModal = () => {
+            modalImg.src = '';
+            modal.classList.remove('is-visible');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('page-modal-open');
+        };
+
+        pageContent.addEventListener('click', function (event) {
+            const target = event.target;
+            if (!target) return;
+            const image = target.closest('img');
+            if (!image || !pageContent.contains(image)) return;
+
+            if (image.dataset.noPreview === 'true') {
+                return;
+            }
+
+            const anchor = image.closest('a');
+            if (anchor) {
+                event.preventDefault();
+            }
+
+            const fullSrc = image.dataset.fullsize || image.src;
+            const description = extractCaption(image);
+            const altText = image.alt || '';
+            openModal(fullSrc, description, altText);
+        });
+
+        modalClose.addEventListener('click', function () {
+            closeModal();
+        });
+
+        modal.addEventListener('click', function (event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && modal.classList.contains('is-visible')) {
+                closeModal();
+            }
+        });
     }
 
-    const sanitize = (value) => (value || "").trim();
+    const historySelector = document.querySelector('.history-selector');
+    if (historySelector) {
+        const historyButton = historySelector.querySelector('.history-button');
+        const historyMenu = historySelector.querySelector('.history-menu');
+        const historyList = historySelector.querySelector('.history-menu__list');
+        const historyLoading = historySelector.querySelector('.history-menu__loading');
+        const historyEmpty = historySelector.querySelector('.history-menu__empty');
+        const historyError = historySelector.querySelector('.history-menu__error');
+        const historyFooterLink = historySelector.querySelector('.history-menu__view-all');
+        const historyTitle = historySelector.getAttribute('data-history-title') || '';
+        const historyBranch = historySelector.getAttribute('data-history-branch') || 'main';
+        const historyPageUrl = historySelector.getAttribute('data-history-url') || '#';
+        const encodedTitle = encodeURIComponent(historyTitle);
+        let historyMenuOpen = false;
+        let historyLoaded = false;
+        let historyFetching = false;
 
-    const extractCaption = (img) => {
-        if (!img) return "";
+        if (historyFooterLink) {
+            historyFooterLink.href = historyPageUrl;
+        }
 
-        const directCaption =
-            sanitize(img.dataset.caption) ||
-            sanitize(img.getAttribute("data-description"));
-        if (directCaption) return directCaption;
-
-        const figure = img.closest('figure.wiki-image');
-        if (figure) {
-            const figureCaption =
-                sanitize(figure.getAttribute('data-description'));
-            if (figureCaption) return figureCaption;
-
-            const captionEl = figure.querySelector('figcaption');
-            if (captionEl) {
-                const captionText = sanitize(captionEl.textContent);
-                if (captionText) return captionText;
+        const closeHistoryMenu = () => {
+            if (!historyMenuOpen) {
+                return;
             }
-        }
+            historyMenuOpen = false;
+            historyMenu.classList.remove('is-visible');
+            historyMenu.setAttribute('aria-hidden', 'true');
+            historyButton.setAttribute('aria-expanded', 'false');
+        };
 
-        return sanitize(img.title);
-    };
+        const openHistoryMenu = () => {
+            if (historyMenuOpen) {
+                return;
+            }
+            historyMenuOpen = true;
+            historyMenu.classList.add('is-visible');
+            historyMenu.setAttribute('aria-hidden', 'false');
+            historyButton.setAttribute('aria-expanded', 'true');
+        };
 
-    const openModal = (src, description, altText) => {
-        modalImg.src = src;
-        const desc = sanitize(description) || sanitize(altText);
-        if (desc) {
-            modalDesc.textContent = desc;
-            modalDesc.classList.remove('is-hidden');
-        } else {
-            modalDesc.textContent = '';
-            modalDesc.classList.add('is-hidden');
-        }
-        modalImg.alt = altText || desc || 'Image preview';
-        modal.classList.add('is-visible');
-        modal.setAttribute('aria-hidden', 'false');
-        document.body.classList.add('page-modal-open');
-        try {
-            modalClose.focus({ preventScroll: true });
-        } catch (err) {
-            modalClose.focus();
-        }
-    };
+        const focusFirstItem = () => {
+            if (!historyMenuOpen) {
+                return;
+            }
+            const firstItem = historyList.querySelector('.history-menu__item');
+            if (!firstItem) {
+                return;
+            }
+            try {
+                firstItem.focus({ preventScroll: true });
+            } catch (err) {
+                firstItem.focus();
+            }
+        };
 
-    const closeModal = () => {
-        modalImg.src = '';
-        modal.classList.remove('is-visible');
-        modal.setAttribute('aria-hidden', 'true');
-        document.body.classList.remove('page-modal-open');
-    };
+        const populateHistoryMenu = (versions) => {
+            historyList.innerHTML = '';
+            historyError.hidden = true;
+            if (!Array.isArray(versions) || versions.length === 0) {
+                historyEmpty.hidden = false;
+                return;
+            }
+            historyEmpty.hidden = true;
 
-    pageContent.addEventListener('click', function (event) {
-        const target = event.target;
-        if (!target) return;
-        const image = target.closest('img');
-        if (!image || !pageContent.contains(image)) return;
+            versions.forEach((version) => {
+                const item = document.createElement('a');
+                item.className = 'history-menu__item';
+                item.href = version.view_url || historyPageUrl;
+                item.setAttribute('role', 'menuitem');
+                item.setAttribute('tabindex', '0');
 
-        if (image.dataset.noPreview === 'true') {
-            return;
-        }
+                const label = document.createElement('span');
+                label.className = 'history-menu__label';
+                label.textContent = `Version ${version.display_number}`;
 
-        const anchor = image.closest('a');
-        if (anchor) {
+                if (version.is_current) {
+                    const tag = document.createElement('span');
+                    tag.className = 'history-menu__tag';
+                    tag.textContent = 'Current';
+                    label.appendChild(tag);
+                    item.classList.add('is-current');
+                }
+
+                const meta = document.createElement('span');
+                meta.className = 'history-menu__meta';
+                meta.textContent = `${version.author} — ${version.updated_at}`;
+
+                item.appendChild(label);
+                item.appendChild(meta);
+                historyList.appendChild(item);
+            });
+
+            focusFirstItem();
+        };
+
+        const fetchHistory = async () => {
+            if (historyLoaded || historyFetching) {
+                focusFirstItem();
+                return;
+            }
+            if (!encodedTitle) {
+                historyError.hidden = false;
+                historyError.textContent = 'Unable to load history.';
+                historyEmpty.hidden = true;
+                return;
+            }
+
+            historyFetching = true;
+            historyLoading.hidden = false;
+            historyError.hidden = true;
+            historyEmpty.hidden = true;
+            historyList.innerHTML = '';
+
+            try {
+                const params = new URLSearchParams({
+                    branch: historyBranch,
+                    limit: '15',
+                });
+                const response = await fetch(`/api/history/${encodedTitle}?${params.toString()}`, {
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                });
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+                const payload = await response.json();
+                populateHistoryMenu(payload.versions || []);
+                historyLoaded = true;
+            } catch (error) {
+                console.error('Failed to load page history', error);
+                historyList.innerHTML = '';
+                historyError.hidden = false;
+                historyError.textContent = 'Unable to load history.';
+            } finally {
+                historyLoading.hidden = true;
+                historyFetching = false;
+            }
+        };
+
+        historyButton.addEventListener('click', (event) => {
             event.preventDefault();
-        }
+            event.stopPropagation();
+            if (historyMenuOpen) {
+                closeHistoryMenu();
+                return;
+            }
+            openHistoryMenu();
+            fetchHistory();
+        });
 
-        const fullSrc = image.dataset.fullsize || image.src;
-        const description = extractCaption(image);
-        const altText = image.alt || '';
-        openModal(fullSrc, description, altText);
-    });
+        historyButton.addEventListener('keydown', (event) => {
+            if ((event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') && !historyMenuOpen) {
+                event.preventDefault();
+                openHistoryMenu();
+                fetchHistory();
+            }
+        });
 
-    modalClose.addEventListener('click', function () {
-        closeModal();
-    });
+        historyMenu.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
 
-    modal.addEventListener('click', function (event) {
-        if (event.target === modal) {
-            closeModal();
-        }
-    });
+        document.addEventListener('click', (event) => {
+            if (historyMenuOpen && !historySelector.contains(event.target)) {
+                closeHistoryMenu();
+            }
+        });
 
-    document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && modal.classList.contains('is-visible')) {
-            closeModal();
-        }
-    });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && historyMenuOpen) {
+                closeHistoryMenu();
+                try {
+                    historyButton.focus({ preventScroll: true });
+                } catch (err) {
+                    historyButton.focus();
+                }
+            }
+        });
+    }
+
+    const pdfButton = document.getElementById('download-pdf-button');
+    if (pdfButton) {
+        const pageTitle = pdfButton.getAttribute('data-page-title') || '';
+        const pageBranch = pdfButton.getAttribute('data-page-branch') || 'main';
+
+        pdfButton.addEventListener('click', async () => {
+            const promptValue = window.prompt(
+                'How many pages deep would you like to include in the PDF? (1-5)',
+                '1'
+            );
+            if (promptValue === null) {
+                return;
+            }
+            const depth = Number.parseInt(promptValue, 10);
+            if (!Number.isFinite(depth) || depth < 1 || depth > 5) {
+                window.alert('Please enter a number between 1 and 5.');
+                return;
+            }
+
+            const originalHtml = pdfButton.innerHTML;
+            pdfButton.disabled = true;
+            pdfButton.classList.add('is-busy');
+            pdfButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing PDF…';
+
+            try {
+                const response = await fetch('/api/pdf/page', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/pdf',
+                    },
+                    body: JSON.stringify({
+                        title: pageTitle,
+                        branch: pageBranch,
+                        depth,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+
+                const blob = await response.blob();
+                const downloadUrl = URL.createObjectURL(blob);
+
+                let filename = 'page.pdf';
+                const disposition = response.headers.get('Content-Disposition') || '';
+                const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                } else if (pageTitle) {
+                    filename = `${pageTitle.replace(/\s+/g, '_')}.pdf`;
+                }
+
+                const tempLink = document.createElement('a');
+                tempLink.href = downloadUrl;
+                tempLink.download = filename;
+                document.body.appendChild(tempLink);
+                tempLink.click();
+                tempLink.remove();
+                URL.revokeObjectURL(downloadUrl);
+            } catch (error) {
+                console.error('Failed to generate PDF', error);
+                window.alert('Unable to generate the PDF right now. Please try again later.');
+            } finally {
+                pdfButton.disabled = false;
+                pdfButton.classList.remove('is-busy');
+                pdfButton.innerHTML = originalHtml;
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
