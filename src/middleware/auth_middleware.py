@@ -3,19 +3,38 @@ Authentication middleware for WikiWare.
 Handles session validation and user context.
 """
 
-from typing import Optional, Dict, Any
-from fastapi import Request, HTTPException
+from typing import Any, Dict, Optional
+
+from fastapi import HTTPException, Request
 from loguru import logger
-from ..services.user_service import UserService
+
 from ..config import SESSION_COOKIE_NAME
 from ..database import db_instance
+from ..services.user_service import UserService
+
+SESSION_COOKIE_CANDIDATES = (
+    SESSION_COOKIE_NAME,
+    "__Host-user_session",
+    "user_session",
+)
+
+UserPayload = Dict[str, Any]
+
+
+def _get_session_cookie(request: Request) -> Optional[str]:
+    """Return the first matching session cookie value or None."""
+    for cookie_name in SESSION_COOKIE_CANDIDATES:
+        value = request.cookies.get(cookie_name)
+        if value:
+            return value
+    return None
 
 
 class AuthMiddleware:
     """Middleware for handling authentication."""
 
     @staticmethod
-    async def get_current_user(request: Request) -> Optional[Dict[str, Any]]:
+    async def get_current_user(request: Request) -> Optional[UserPayload]:
         """
         Get current user from session cookie.
 
@@ -26,20 +45,10 @@ class AuthMiddleware:
             User data if authenticated, None otherwise
         """
         try:
-            # Get session cookie
-            session_id = (
-                request.cookies.get(SESSION_COOKIE_NAME)
-                or request.cookies.get("__Host-user_session")
-                or request.cookies.get("user_session")
-            )
-            if not session_id:
+            session_id = _get_session_cookie(request)
+            if not session_id or not db_instance.is_connected:
                 return None
 
-            # In offline mode, we can't validate against database
-            if not db_instance.is_connected:
-                return None
-
-            # Get user from session
             user = await UserService.get_user_by_session(session_id)
             if not user or not user.get("is_active", True):
                 return None
@@ -48,13 +57,12 @@ class AuthMiddleware:
                 "username": user["username"],
                 "is_admin": user.get("is_admin", False),
             }
-
-        except Exception as e:
-            logger.warning(f"Error validating session: {str(e)}")
+        except Exception as exc:  # IGNORE W0718
+            logger.warning("Error validating session: {}", exc)
             return None
 
     @staticmethod
-    async def require_auth(request: Request) -> Dict[str, Any]:
+    async def require_auth(request: Request) -> UserPayload:
         """
         Require authentication for a request.
 

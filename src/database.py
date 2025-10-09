@@ -1,26 +1,60 @@
-import os
+"""Database connection and management for MongoDB."""
+
 import asyncio
+import os
+from collections.abc import Sequence
+from typing import Any
+
 from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.errors import ServerSelectionTimeoutError
 from loguru import logger
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import ServerSelectionTimeoutError
 
 load_dotenv()
 
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "wikiware")
 
-"""Database connection and management for MongoDB."""
+IndexKey = str | Sequence[tuple[str, int | str]]
+IndexSpec = tuple[IndexKey, dict[str, Any]]
+
+INDEX_CONFIGS: dict[str, list[IndexSpec]] = {
+    "users": [
+        ("username", {"unique": True}),
+        ("created_at", {}),
+    ],
+    "sessions": [
+        ("session_id", {"unique": True}),
+        ("user_id", {}),
+        ("expires_at", {"expireAfterSeconds": 0}),
+    ],
+    "image_hashes": [
+        ("filename", {"unique": True}),
+        ("sha256", {}),
+    ],
+}
 
 
 class Database:
     """Manages MongoDB connection and provides access to collections."""
 
-    def __init__(self):
+    def __init__(self, mongo_url: str = MONGODB_URL, db_name: str = MONGODB_DB_NAME):
+        self._mongo_url = mongo_url
+        self._db_name = db_name
+        self.client: AsyncIOMotorClient | None = None
+        self.db: AsyncIOMotorDatabase | None = None
+        self.is_connected = False
+
+    def _reset_state(self) -> None:
+        """Clear cached client/db handles and connection flags."""
+        if self.client is not None:
+            self.client.close()
         self.client = None
         self.db = None
         self.is_connected = False
 
-    async def connect(self, max_retries: int | None = 10):
+    async def connect(self, max_retries: int | None = 10) -> None:
         """Establish connection to MongoDB and test connectivity with retry logic."""
         if max_retries is None:
             max_retries = float("inf")  # Infinite retries for background monitor
@@ -33,45 +67,49 @@ class Database:
         while retry_count < max_retries:
             try:
                 logger.info(
-                    f"Attempting to connect to MongoDB at {MONGODB_URL}... (attempt {retry_count + 1})"
+                    "Attempting to connect to MongoDB at {}... (attempt {})",
+                    self._mongo_url,
+                    retry_count + 1,
                 )
                 self.client = AsyncIOMotorClient(
-                    MONGODB_URL, serverSelectionTimeoutMS=10000
+                    self._mongo_url, serverSelectionTimeoutMS=10000
                 )
                 # Test the connection
                 await self.client.admin.command("ping")
-                self.db = self.client.wikiware
+                self.db = self.client[self._db_name]
                 self.is_connected = True
-                logger.info("Connected to MongoDB successfully")
+                logger.info("Connected to MongoDB database '{}'", self._db_name)
                 return  # Exit the loop on successful connection
             except ServerSelectionTimeoutError:
                 retry_count += 1
+                self._reset_state()
                 if max_retries != float("inf"):
                     logger.warning(
-                        f"MongoDB server not available. Attempt {retry_count}/{max_retries}."
-                        f"Retrying in {delay} seconds... Server Offline?"
+                        "MongoDB server not available. Attempt {}/{}. Retrying in {} seconds...",
+                        retry_count,
+                        max_retries,
+                        delay,
                     )
                 else:
                     logger.warning(
-                        f"MongoDB connection lost. Retrying in {delay} seconds..."
+                        "MongoDB connection lost. Retrying in {} seconds...", delay
                     )
                 await asyncio.sleep(delay)
-            except Exception as e:  # IGNORE W0718
-                logger.error(f"Database connection error: {e}")
-                self.is_connected = False
+            except Exception as exc:  # IGNORE W0718
+                logger.error("Database connection error: {}", exc)
+                self._reset_state()
                 if max_retries != float("inf"):
                     return  # Don't retry on other errors for startup
-                else:
-                    await asyncio.sleep(delay)  # Retry on errors for background
+                await asyncio.sleep(delay)  # Retry on errors for background
 
         # If we've exhausted all retries (startup only)
         if max_retries != float("inf"):
             logger.error(
                 "Failed to connect to MongoDB after multiple attempts. Running in offline mode."
             )
-            self.is_connected = False
+            self._reset_state()
 
-    async def monitor_connection(self):
+    async def monitor_connection(self) -> None:
         """Background task to monitor and retry connection if lost."""
         logger.info("Starting MongoDB connection monitor (retries every 10s)")
         while True:
@@ -79,12 +117,11 @@ class Database:
                 await self.connect(max_retries=None)  # Infinite retry
             await asyncio.sleep(10)  # Check every 10 seconds even if connected
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Close the MongoDB connection."""
-        if self.client:
-            self.client.close()
+        self._reset_state()
 
-    def get_collection(self, name):
+    def get_collection(self, name: str) -> AsyncIOMotorCollection | None:
         """Get a collection by name if database is connected."""
         if self.is_connected and self.db is not None:
             return self.db[name]
@@ -122,57 +159,62 @@ def get_image_hashes_collection():
 
 
 # Helper functions
-async def create_indexes():
+async def _drop_legacy_page_index(pages: AsyncIOMotorCollection) -> None:
+    """Remove deprecated single-field title index if present."""
+    try:
+        existing_indexes = await pages.index_information()
+        if "title_1" in existing_indexes:
+            await pages.drop_index("title_1")
+            logger.info("Dropped legacy unique index on pages.title")
+    except Exception as exc:  # IGNORE W0718
+        logger.warning("Failed to drop legacy title index: {}", exc)
+
+
+async def _ensure_pages_indexes(pages: AsyncIOMotorCollection) -> None:
+    """Ensure compound and text indexes exist for the pages collection."""
+    await _drop_legacy_page_index(pages)
+    await pages.create_index([("title", 1), ("branch", 1)], unique=True)
+    await pages.create_index("updated_at")
+    await pages.create_index(
+        [("title", "text"), ("content", "text")], name="page_text_search"
+    )
+    logger.info("Pages collection indexes created")
+
+
+async def _create_collection_indexes(
+    collection_name: str, collection: AsyncIOMotorCollection
+) -> None:
+    """Create indexes declared in INDEX_CONFIGS for a given collection."""
+    for keys, options in INDEX_CONFIGS.get(collection_name, []):
+        await collection.create_index(keys, **options)
+    logger.info("{} collection indexes created", collection_name.capitalize())
+
+
+async def create_indexes() -> None:
     """Create required indexes on MongoDB collections."""
-    if db_instance.is_connected:
-        # Create indexes for pages collection
-        pages = get_pages_collection()
-        if pages is not None:
-            # Drop the old unique index on title alone if it exists
-            try:
-                existing_indexes = await pages.index_information()
-                if "title_1" in existing_indexes:
-                    await pages.drop_index("title_1")
-                    logger.info("Dropped old unique index on title")
-            except Exception as e:
-                logger.warning(f"Failed to drop old index on title: {str(e)}")
+    if not db_instance.is_connected:
+        logger.warning("Skipping index creation because database is disconnected")
+        return
 
-            # Create compound unique index on title and branch
-            await pages.create_index([("title", 1), ("branch", 1)], unique=True)
-            await pages.create_index("updated_at")
-            await pages.create_index(
-                [("title", "text"), ("content", "text")], name="page_text_search"
+    pages = get_pages_collection()
+    if pages is not None:
+        await _ensure_pages_indexes(pages)
+
+    for collection_name in ("users", "sessions", "image_hashes"):
+        collection = db_instance.get_collection(collection_name)
+        if collection is None:
+            logger.warning(
+                "Collection '{}' unavailable while creating indexes", collection_name
             )
-            logger.info("Pages collection indexes created")
-
-        # Create indexes for users collection
-        users = get_users_collection()
-        if users is not None:
-            await users.create_index("username", unique=True)
-            await users.create_index("created_at")
-            logger.info("Users collection indexes created")
-
-        # Create indexes for sessions collection
-        sessions = db_instance.get_collection("sessions")
-        if sessions is not None:
-            await sessions.create_index("session_id", unique=True)
-            await sessions.create_index("user_id")
-            await sessions.create_index("expires_at", expireAfterSeconds=0)
-            logger.info("Sessions collection indexes created")
-
-        # Create indexes for image_hashes collection
-        image_hashes = get_image_hashes_collection()
-        if image_hashes is not None:
-            await image_hashes.create_index("filename", unique=True)
-            await image_hashes.create_index("sha256")
-            logger.info("Image hashes collection indexes created")
+            continue
+        await _create_collection_indexes(collection_name, collection)
 
 
-async def init_database():
+async def init_database() -> None:
     """Initialize database connection and create indexes."""
     try:
         await db_instance.connect()  # Finite retries for startup
         if db_instance.is_connected:
             await create_indexes()
-    except Exception as e:
-        logger.error(f"Error initializing database: {str(e)}")
+    except Exception as exc:  # IGNORE W0718
+        logger.error("Error initializing database: {}", exc)
