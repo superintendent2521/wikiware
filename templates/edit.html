@@ -154,14 +154,14 @@
             {% if user and user.is_admin %}
             <div class="permission-control">
                 <label for="editPermission">Who can edit:</label>
-                <select id="editPermission" name="edit_permission" class="permission-dropdown">
+                <select id="editPermission" name="edit_permission" class="permission-dropdown" form="editForm">
                     <option value="everybody" {% if edit_permission == 'everybody' %}selected{% endif %}>Everybody (with an account)</option>
                     <option value="10_edits" {% if edit_permission == '10_edits' %}selected{% endif %}>People with 10 edits</option>
                     <option value="50_edits" {% if edit_permission == '50_edits' %}selected{% endif %}>People with 50 edits</option>
                     <option value="select_users" {% if edit_permission == 'select_users' %}selected{% endif %}>Select users only</option>
                 </select>
                 <div id="userInput" class="user-input-group" {% if edit_permission != 'select_users' %}style="display: none;"{% endif %}>
-                    <textarea id="allowedUsersInput" name="allowed_users" rows="2" cols="30" placeholder="Enter usernames separated by commas (e.g., user1, user2, user3)" class="user-input">{{ allowed_users|join(', ') if allowed_users else '' }}</textarea>
+                    <textarea id="allowedUsersInput" name="allowed_users" rows="2" cols="30" placeholder="Enter usernames separated by commas (e.g., user1, user2, user3)" class="user-input" form="editForm">{{ allowed_users|join(', ') if allowed_users else '' }}</textarea>
                     <small class="form-hint">Usernames are case-sensitive and must match exactly.</small>
                 </div>
             </div>

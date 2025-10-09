@@ -24,7 +24,7 @@ Retrieves a specific page by title and branch.
 - Page document as a dictionary if found
 - `None` if page doesn't exist or database connection fails
 
-### `create_page(title: str, content: str, author: str = "Anonymous", branch: str = "main") -> bool`
+### `create_page(title: str, content: str, author: str = "Anonymous", branch: str = "main", edit_permission: str = "everybody", allowed_users: Optional[List[str]] = None) -> bool`
 
 Creates a new page with the specified content.
 
@@ -33,12 +33,14 @@ Creates a new page with the specified content.
 - `content`: The content of the page
 - `author`: The name of the author (default: "Anonymous")
 - `branch`: The branch to create the page in (default: "main")
+- `edit_permission`: Edit protection level for the page (default: "everybody")
+- `allowed_users`: Optional list of usernames allowed to edit when `select_users` protection is enabled
 
 **Returns:**
 - `True` if page was created successfully
 - `False` if creation failed (e.g., database connection issues)
 
-### `update_page(title: str, content: str, author: str = "Anonymous", branch: str = "main") -> bool`
+### `update_page(title: str, content: str, author: str = "Anonymous", branch: str = "main", edit_permission: str = "everybody", allowed_users: Optional[List[str]] = None) -> bool`
 
 Updates an existing page or creates it if it doesn't exist.
 
@@ -47,6 +49,8 @@ Updates an existing page or creates it if it doesn't exist.
 - `content`: The new content for the page
 - `author`: The name of the author making the update (default: "Anonymous")
 - `branch`: The branch containing the page (default: "main")
+- `edit_permission`: Edit protection level for the page (default: "everybody")
+- `allowed_users`: Optional list of usernames allowed to edit when `select_users` protection is enabled
 
 **Returns:**
 - `True` if page was updated or created successfully

@@ -63,6 +63,8 @@ class PageService:
         author: str = "Anonymous",
         branch: str = "main",
         edit_summary: Optional[str] = None,
+        edit_permission: str = "everybody",
+        allowed_users: Optional[List[str]] = None,
     ) -> bool:
         """
         Create a new page.
@@ -73,6 +75,8 @@ class PageService:
             author: Author name
             branch: Branch name
             edit_summary: Optional summary describing the change
+            edit_permission: Edit protection level for the page
+            allowed_users: Optional list of usernames allowed to edit when select_users protection is used
 
         Returns:
             True if successful, False otherwise
@@ -90,6 +94,7 @@ class PageService:
                 return False
 
             summary = PageService._normalize_summary(edit_summary)
+            normalized_allowed_users = allowed_users or []
 
             # For talk branches, add signature to content
             if branch == "talk":
@@ -106,6 +111,8 @@ class PageService:
                 "edit_summary": summary,
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc),
+                "edit_permission": edit_permission,
+                "allowed_users": normalized_allowed_users,
             }
 
             await pages_collection.insert_one(page_data)
@@ -214,7 +221,13 @@ class PageService:
                     async with await db_instance.client.start_session() as s:
                         async with s.start_transaction():
                             created_main = await PageService.create_page(
-                                title, content, author, "main", edit_summary=summary
+                                title,
+                                content,
+                                author,
+                                "main",
+                                edit_summary=summary,
+                                edit_permission=edit_permission,
+                                allowed_users=allowed_users or [],
                             )
                             created_talk = await PageService.create_page(
                                 title,
@@ -222,6 +235,8 @@ class PageService:
                                 author,
                                 "talk",
                                 edit_summary="wikibot: Auto-created talk page",
+                                edit_permission=edit_permission,
+                                allowed_users=allowed_users or [],
                             )
                     if created_main and created_talk:
                         if author != "Anonymous" and users_collection is not None:
@@ -235,7 +250,13 @@ class PageService:
                 else:
                     # Page exists on other branches, just create this specific branch
                     created = await PageService.create_page(
-                        title, content, author, branch, edit_summary=summary
+                        title,
+                        content,
+                        author,
+                        branch,
+                        edit_summary=summary,
+                        edit_permission=edit_permission,
+                        allowed_users=allowed_users or [],
                     )
                     if (
                         created

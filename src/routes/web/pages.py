@@ -598,6 +598,24 @@ async def save_page(
         author = user["username"]
 
         page_data = await PageService.get_page(title, branch)
+        previous_permission = (
+            _sanitize_edit_permission(page_data.get("edit_permission"))
+            if page_data
+            else EDIT_PERMISSION_EVERYBODY
+        )
+        previous_allowed_users: List[str] = []
+        if page_data:
+            existing_allowed_users_data = page_data.get("allowed_users", [])
+            if isinstance(existing_allowed_users_data, list):
+                previous_allowed_users = [
+                    str(username).strip()
+                    for username in existing_allowed_users_data
+                    if str(username).strip()
+                ]
+            elif isinstance(existing_allowed_users_data, str):
+                previous_allowed_users = _parse_allowed_users(
+                    existing_allowed_users_data
+                )
 
         if not await _can_user_edit_page(user, page_data):
             return render_error_page(
@@ -620,7 +638,11 @@ async def save_page(
                 )
                 existing_allowed_users = page_data.get("allowed_users", [])
                 if isinstance(existing_allowed_users, list):
-                    allowed_users_list = list(existing_allowed_users)
+                    allowed_users_list = [
+                        str(username).strip()
+                        for username in existing_allowed_users
+                        if str(username).strip()
+                    ]
                 elif isinstance(existing_allowed_users, str):
                     allowed_users_list = _parse_allowed_users(existing_allowed_users)
                 else:
@@ -641,6 +663,24 @@ async def save_page(
         )
 
         if success:
+            if is_admin:
+                normalized_previous = sorted(
+                    {username for username in previous_allowed_users}
+                )
+                normalized_current = sorted({username for username in allowed_users_list})
+                permission_changed = edit_permission != previous_permission
+                allowed_users_changed = normalized_previous != normalized_current
+                became_protected = edit_permission != EDIT_PERMISSION_EVERYBODY
+                if became_protected and (permission_changed or allowed_users_changed):
+                    logger.info(
+                        "Page protection updated for '%s' on branch '%s' by admin %s: mode=%s allowed_users=%s",
+                        title,
+                        branch,
+                        author,
+                        edit_permission,
+                        normalized_current,
+                    )
+
             redirect_url = _build_page_redirect_url(request, title, branch)
             return RedirectResponse(url=redirect_url, status_code=303)
         else:
