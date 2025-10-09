@@ -60,31 +60,25 @@
                 </div>
             </div>
             {% endif %}
-            {% if user %}
             <div class="history-selector" data-history-title="{{ page.title|e }}" data-history-branch="{{ branch_value|e }}" data-history-url="/history/{{ page.title }}?branch={{ branch_value }}">
                 <button type="button" class="btn btn-secondary history-button" aria-haspopup="true" aria-expanded="false">
-                    <span class="history-button__label"><i class="fas fa-history"></i> History</span>
+                    <span class="history-button__label"><i class="fas fa-history"></i> History &amp; Export</span>
                     <span class="history-button__chevron"><i class="fas fa-chevron-down"></i></span>
                 </button>
                 <div class="history-menu" role="menu" aria-hidden="true">
-                    <div class="history-menu__inner">
-                        <div class="history-menu__loading">Loading history…</div>
-                        <div class="history-menu__error" hidden>Unable to load history.</div>
-                        <div class="history-menu__empty" hidden>No history entries.</div>
-                        <div class="history-menu__list"></div>
-                    </div>
-                    <div class="history-menu__footer">
-                        <a class="history-menu__view-all" href="/history/{{ page.title }}?branch={{ branch_value }}"><i class="fas fa-list"></i> View full history</a>
-                    </div>
+                    <a class="history-menu__item history-menu__item--link" href="/history/{{ page.title }}?branch={{ branch_value }}" role="menuitem">
+                        <span class="history-menu__label"><i class="fas fa-list"></i> View history</span>
+                        <span class="history-menu__meta">Open the full version history</span>
+                    </a>
+                    <button type="button" class="history-menu__item history-menu__item--action" data-history-action="download-pdf" role="menuitem">
+                        <span class="history-menu__label"><i class="fas fa-file-pdf"></i> Download PDF</span>
+                        <span class="history-menu__meta">Generate a PDF export</span>
+                    </button>
                 </div>
             </div>
             {% if can_edit_page %}
             <a href="/edit/{{ page.title }}?branch={{ branch_value }}" class="btn btn-primary"><i class="fas fa-edit"></i> Edit Page</a>
             {% endif %}
-            {% endif %}
-            <button type="button" class="btn btn-secondary download-pdf-button" id="download-pdf-button" data-page-title="{{ page.title|e }}" data-page-branch="{{ branch_value|e }}">
-                <i class="fas fa-file-pdf"></i> Download PDF
-            </button>
             {% if user and user.is_admin %}
             <form action="{{ delete_action }}" method="post" style="display: inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -227,6 +221,11 @@
     text-decoration: none;
     font-size: 0.95rem;
     transition: background-color var(--transition-fast), color var(--transition-fast);
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
 }
 .history-menu__item:hover,
 .history-menu__item:focus {
@@ -235,6 +234,15 @@
 }
 .history-menu__item.is-current {
     font-weight: var(--font-weight-bold);
+}
+.history-menu__item[disabled] {
+    background: transparent;
+    color: var(--dark-gray);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+.history-menu__item.is-busy {
+    pointer-events: none;
 }
 .history-menu__label {
     display: block;
@@ -444,48 +452,29 @@ document.addEventListener('DOMContentLoaded', function () {
     if (historySelector) {
         const historyButton = historySelector.querySelector('.history-button');
         const historyMenu = historySelector.querySelector('.history-menu');
-        const historyList = historySelector.querySelector('.history-menu__list');
-        const historyLoading = historySelector.querySelector('.history-menu__loading');
-        const historyEmpty = historySelector.querySelector('.history-menu__empty');
-        const historyError = historySelector.querySelector('.history-menu__error');
-        const historyFooterLink = historySelector.querySelector('.history-menu__view-all');
-        const historyTitle = historySelector.getAttribute('data-history-title') || '';
-        const historyBranch = historySelector.getAttribute('data-history-branch') || 'main';
-        const historyPageUrl = historySelector.getAttribute('data-history-url') || '#';
-        const encodedTitle = encodeURIComponent(historyTitle);
+        const historyLink = historySelector.querySelector('.history-menu__item--link');
+        const downloadAction = historySelector.querySelector('[data-history-action="download-pdf"]');
+        const pageTitle = historySelector.getAttribute('data-history-title') || '';
+        const pageBranch = historySelector.getAttribute('data-history-branch') || 'main';
         let historyMenuOpen = false;
-        let historyLoaded = false;
-        let historyFetching = false;
-
-        if (historyFooterLink) {
-            historyFooterLink.href = historyPageUrl;
-        }
 
         const closeHistoryMenu = () => {
-            if (!historyMenuOpen) {
+            if (!historyMenuOpen || !historyMenu) {
                 return;
             }
             historyMenuOpen = false;
             historyMenu.classList.remove('is-visible');
             historyMenu.setAttribute('aria-hidden', 'true');
-            historyButton.setAttribute('aria-expanded', 'false');
-        };
-
-        const openHistoryMenu = () => {
-            if (historyMenuOpen) {
-                return;
+            if (historyButton) {
+                historyButton.setAttribute('aria-expanded', 'false');
             }
-            historyMenuOpen = true;
-            historyMenu.classList.add('is-visible');
-            historyMenu.setAttribute('aria-hidden', 'false');
-            historyButton.setAttribute('aria-expanded', 'true');
         };
 
         const focusFirstItem = () => {
-            if (!historyMenuOpen) {
+            if (!historyMenu) {
                 return;
             }
-            const firstItem = historyList.querySelector('.history-menu__item');
+            const firstItem = historyMenu.querySelector('.history-menu__item');
             if (!firstItem) {
                 return;
             }
@@ -496,116 +485,129 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         };
 
-        const populateHistoryMenu = (versions) => {
-            historyList.innerHTML = '';
-            historyError.hidden = true;
-            if (!Array.isArray(versions) || versions.length === 0) {
-                historyEmpty.hidden = false;
+        const openHistoryMenu = (options = {}) => {
+            if (historyMenuOpen || !historyMenu) {
                 return;
             }
-            historyEmpty.hidden = true;
+            historyMenuOpen = true;
+            historyMenu.classList.add('is-visible');
+            historyMenu.setAttribute('aria-hidden', 'false');
+            if (historyButton) {
+                historyButton.setAttribute('aria-expanded', 'true');
+            }
+            if (options.focusFirst) {
+                focusFirstItem();
+            }
+        };
 
-            versions.forEach((version) => {
-                const item = document.createElement('a');
-                item.className = 'history-menu__item';
-                item.href = version.view_url || historyPageUrl;
-                item.setAttribute('role', 'menuitem');
-                item.setAttribute('tabindex', '0');
-
-                const label = document.createElement('span');
-                label.className = 'history-menu__label';
-                label.textContent = `Version ${version.display_number}`;
-
-                if (version.is_current) {
-                    const tag = document.createElement('span');
-                    tag.className = 'history-menu__tag';
-                    tag.textContent = 'Current';
-                    label.appendChild(tag);
-                    item.classList.add('is-current');
+        if (historyButton) {
+            historyButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (historyMenuOpen) {
+                    closeHistoryMenu();
+                    return;
                 }
-
-                const meta = document.createElement('span');
-                meta.className = 'history-menu__meta';
-                meta.textContent = `${version.author} — ${version.updated_at}`;
-
-                item.appendChild(label);
-                item.appendChild(meta);
-                historyList.appendChild(item);
+                openHistoryMenu();
             });
 
-            focusFirstItem();
-        };
-
-        const fetchHistory = async () => {
-            if (historyLoaded || historyFetching) {
-                focusFirstItem();
-                return;
-            }
-            if (!encodedTitle) {
-                historyError.hidden = false;
-                historyError.textContent = 'Unable to load history.';
-                historyEmpty.hidden = true;
-                return;
-            }
-
-            historyFetching = true;
-            historyLoading.hidden = false;
-            historyError.hidden = true;
-            historyEmpty.hidden = true;
-            historyList.innerHTML = '';
-
-            try {
-                const params = new URLSearchParams({
-                    branch: historyBranch,
-                    limit: '15',
-                });
-                const response = await fetch(`/api/history/${encodedTitle}?${params.toString()}`, {
-                    headers: {
-                        Accept: 'application/json',
-                    },
-                });
-                if (!response.ok) {
-                    throw new Error(`Request failed with status ${response.status}`);
+            historyButton.addEventListener('keydown', (event) => {
+                if ((event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') && !historyMenuOpen) {
+                    event.preventDefault();
+                    openHistoryMenu({ focusFirst: true });
+                } else if (event.key === 'Escape' && historyMenuOpen) {
+                    event.preventDefault();
+                    closeHistoryMenu();
                 }
-                const payload = await response.json();
-                populateHistoryMenu(payload.versions || []);
-                historyLoaded = true;
-            } catch (error) {
-                console.error('Failed to load page history', error);
-                historyList.innerHTML = '';
-                historyError.hidden = false;
-                historyError.textContent = 'Unable to load history.';
-            } finally {
-                historyLoading.hidden = true;
-                historyFetching = false;
-            }
-        };
+            });
+        }
 
-        historyButton.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (historyMenuOpen) {
+        if (historyMenu) {
+            historyMenu.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+        }
+
+        if (historyLink) {
+            historyLink.addEventListener('click', () => {
                 closeHistoryMenu();
-                return;
-            }
-            openHistoryMenu();
-            fetchHistory();
-        });
+            });
+        }
 
-        historyButton.addEventListener('keydown', (event) => {
-            if ((event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') && !historyMenuOpen) {
+        if (downloadAction) {
+            downloadAction.addEventListener('click', async (event) => {
                 event.preventDefault();
-                openHistoryMenu();
-                fetchHistory();
-            }
-        });
+                event.stopPropagation();
+                closeHistoryMenu();
 
-        historyMenu.addEventListener('click', (event) => {
-            event.stopPropagation();
-        });
+                const promptValue = window.prompt(
+                    'How many pages deep would you like to include in the PDF? (1-5)',
+                    '1'
+                );
+                if (promptValue === null) {
+                    return;
+                }
+                const depth = Number.parseInt(promptValue, 10);
+                if (!Number.isFinite(depth) || depth < 1 || depth > 5) {
+                    window.alert('Please enter a number between 1 and 5.');
+                    return;
+                }
+
+                const originalHtml = downloadAction.innerHTML;
+                downloadAction.disabled = true;
+                downloadAction.classList.add('is-busy');
+                downloadAction.innerHTML = '<span class="history-menu__label"><i class="fas fa-spinner fa-spin"></i> Preparing PDF…</span><span class="history-menu__meta">This may take a moment.</span>';
+
+                try {
+                    const response = await fetch('/api/pdf/page', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Accept: 'application/pdf',
+                        },
+                        body: JSON.stringify({
+                            title: pageTitle,
+                            branch: pageBranch,
+                            depth,
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Request failed with status ${response.status}`);
+                    }
+
+                    const blob = await response.blob();
+                    const downloadUrl = URL.createObjectURL(blob);
+
+                    let filename = 'page.pdf';
+                    const disposition = response.headers.get('Content-Disposition') || '';
+                    const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = filenameMatch[1];
+                    } else if (pageTitle) {
+                        filename = `${pageTitle.replace(/\s+/g, '_')}.pdf`;
+                    }
+
+                    const tempLink = document.createElement('a');
+                    tempLink.href = downloadUrl;
+                    tempLink.download = filename;
+                    document.body.appendChild(tempLink);
+                    tempLink.click();
+                    tempLink.remove();
+                    URL.revokeObjectURL(downloadUrl);
+                } catch (error) {
+                    console.error('Failed to generate PDF', error);
+                    window.alert('Unable to generate the PDF right now. Please try again later.');
+                } finally {
+                    downloadAction.disabled = false;
+                    downloadAction.classList.remove('is-busy');
+                    downloadAction.innerHTML = originalHtml;
+                }
+            });
+        }
 
         document.addEventListener('click', (event) => {
-            if (historyMenuOpen && !historySelector.contains(event.target)) {
+            if (historyMenuOpen && historySelector && !historySelector.contains(event.target)) {
                 closeHistoryMenu();
             }
         });
@@ -613,86 +615,17 @@ document.addEventListener('DOMContentLoaded', function () {
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && historyMenuOpen) {
                 closeHistoryMenu();
-                try {
-                    historyButton.focus({ preventScroll: true });
-                } catch (err) {
-                    historyButton.focus();
+                if (historyButton) {
+                    try {
+                        historyButton.focus({ preventScroll: true });
+                    } catch (err) {
+                        historyButton.focus();
+                    }
                 }
             }
         });
     }
 
-    const pdfButton = document.getElementById('download-pdf-button');
-    if (pdfButton) {
-        const pageTitle = pdfButton.getAttribute('data-page-title') || '';
-        const pageBranch = pdfButton.getAttribute('data-page-branch') || 'main';
-
-        pdfButton.addEventListener('click', async () => {
-            const promptValue = window.prompt(
-                'How many pages deep would you like to include in the PDF? (1-5)',
-                '1'
-            );
-            if (promptValue === null) {
-                return;
-            }
-            const depth = Number.parseInt(promptValue, 10);
-            if (!Number.isFinite(depth) || depth < 1 || depth > 5) {
-                window.alert('Please enter a number between 1 and 5.');
-                return;
-            }
-
-            const originalHtml = pdfButton.innerHTML;
-            pdfButton.disabled = true;
-            pdfButton.classList.add('is-busy');
-            pdfButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing PDF…';
-
-            try {
-                const response = await fetch('/api/pdf/page', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Accept: 'application/pdf',
-                    },
-                    body: JSON.stringify({
-                        title: pageTitle,
-                        branch: pageBranch,
-                        depth,
-                    }),
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Request failed with status ${response.status}`);
-                }
-
-                const blob = await response.blob();
-                const downloadUrl = URL.createObjectURL(blob);
-
-                let filename = 'page.pdf';
-                const disposition = response.headers.get('Content-Disposition') || '';
-                const filenameMatch = disposition.match(/filename="([^"]+)"/i);
-                if (filenameMatch && filenameMatch[1]) {
-                    filename = filenameMatch[1];
-                } else if (pageTitle) {
-                    filename = `${pageTitle.replace(/\s+/g, '_')}.pdf`;
-                }
-
-                const tempLink = document.createElement('a');
-                tempLink.href = downloadUrl;
-                tempLink.download = filename;
-                document.body.appendChild(tempLink);
-                tempLink.click();
-                tempLink.remove();
-                URL.revokeObjectURL(downloadUrl);
-            } catch (error) {
-                console.error('Failed to generate PDF', error);
-                window.alert('Unable to generate the PDF right now. Please try again later.');
-            } finally {
-                pdfButton.disabled = false;
-                pdfButton.classList.remove('is-busy');
-                pdfButton.innerHTML = originalHtml;
-            }
-        });
-    }
 });
 </script>
 {% endblock %}
