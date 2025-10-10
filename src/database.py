@@ -42,8 +42,8 @@ class Database:
     def __init__(self, mongo_url: str = MONGODB_URL, db_name: str = MONGODB_DB_NAME):
         self._mongo_url = mongo_url
         self._db_name = db_name
-        self.client: AsyncIOMotorClient | None = None
-        self.db: AsyncIOMotorDatabase | None = None
+        self.client: AsyncIOMotorClient | None = None # pyright: ignore[reportInvalidTypeForm]
+        self.db: AsyncIOMotorDatabase | None = None # pyright: ignore[reportInvalidTypeForm]
         self.is_connected = False
 
     def _reset_state(self) -> None:
@@ -121,7 +121,7 @@ class Database:
         """Close the MongoDB connection."""
         self._reset_state()
 
-    def get_collection(self, name: str) -> AsyncIOMotorCollection | None:
+    def get_collection(self, name: str) -> AsyncIOMotorCollection | None: # pyright: ignore[reportInvalidTypeForm]
         """Get a collection by name if database is connected."""
         if self.is_connected and self.db is not None:
             return self.db[name]
@@ -159,7 +159,7 @@ def get_image_hashes_collection():
 
 
 # Helper functions
-async def _drop_legacy_page_index(pages: AsyncIOMotorCollection) -> None:
+async def _drop_legacy_page_index(pages: AsyncIOMotorCollection) -> None: # pyright: ignore[reportInvalidTypeForm]
     """Remove deprecated single-field title index if present."""
     try:
         existing_indexes = await pages.index_information()
@@ -170,7 +170,7 @@ async def _drop_legacy_page_index(pages: AsyncIOMotorCollection) -> None:
         logger.warning("Failed to drop legacy title index: {}", exc)
 
 
-async def _ensure_pages_indexes(pages: AsyncIOMotorCollection) -> None:
+async def _ensure_pages_indexes(pages: AsyncIOMotorCollection) -> None: # pyright: ignore[reportInvalidTypeForm]
     """Ensure compound and text indexes exist for the pages collection."""
     await _drop_legacy_page_index(pages)
     await pages.create_index([("title", 1), ("branch", 1)], unique=True)
@@ -182,7 +182,7 @@ async def _ensure_pages_indexes(pages: AsyncIOMotorCollection) -> None:
 
 
 async def _create_collection_indexes(
-    collection_name: str, collection: AsyncIOMotorCollection
+    collection_name: str, collection: AsyncIOMotorCollection # pyright: ignore[reportInvalidTypeForm]
 ) -> None:
     """Create indexes declared in INDEX_CONFIGS for a given collection."""
     for keys, options in INDEX_CONFIGS.get(collection_name, []):
