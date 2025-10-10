@@ -26,6 +26,15 @@ UPLOAD_DIR = "static/uploads"
 MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 
+# Object storage (S3-compatible) settings
+S3_ENDPOINT = os.getenv("S3_ENDPOINT")
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
+S3_BUCKET = os.getenv("S3_BUCKET", "wikiware")
+S3_REGION = os.getenv("S3_REGION")
+S3_FORCE_PATH_STYLE = os.getenv("S3_FORCE_PATH_STYLE", "true").lower() == "true"
+S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL")
+
 # Logging settings
 LOG_DIR = "logs"
 LOG_RETENTION = "7 days"

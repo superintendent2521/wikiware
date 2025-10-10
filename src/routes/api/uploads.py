@@ -3,10 +3,9 @@ Upload routes for WikiWare.
 Handles file upload operations.
 """
 
-import shutil
-from pathlib import Path
-import uuid
+import asyncio
 import hashlib
+import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -14,9 +13,14 @@ from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
 from loguru import logger
 
-from ...config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, UPLOAD_DIR
+from ...config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE
 from ...database import get_image_hashes_collection
 from ...middleware.auth_middleware import AuthMiddleware
+from ...services.storage_service import (
+    StorageError,
+    build_public_url,
+    upload_image_bytes,
+)
 from ...utils.validation import sanitize_filename
 
 
@@ -57,10 +61,6 @@ async def upload_image(
                     "error": "Image uploading is currently disabled by an administrator."
                 },
             )
-
-        # Create uploads directory if it doesn't exist
-        upload_path = Path(UPLOAD_DIR)
-        upload_path.mkdir(parents=True, exist_ok=True)
 
         # Validate file type by content type and magic bytes
         if file.content_type not in ALLOWED_IMAGE_TYPES:
@@ -141,10 +141,13 @@ async def upload_image(
             existing = await collection.find_one({"sha256": sha256_hash})
             if existing:
                 logger.info(f"Duplicate image upload detected: {existing['filename']}")
+                duplicate_url = existing.get("url") or build_public_url(
+                    existing["filename"]
+                )
                 return JSONResponse(
                     status_code=200,
                     content={
-                        "url": f"/static/uploads/{existing['filename']}",
+                        "url": duplicate_url,
                         "filename": existing["filename"],
                     },
                 )
@@ -190,30 +193,37 @@ async def upload_image(
             return JSONResponse(status_code=400, content={"error": "Invalid filename."})
 
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
-        file_path = upload_path / unique_filename
 
-        # Save file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Store file in object storage
+        try:
+            stored_image = await asyncio.to_thread(
+                upload_image_bytes, file_content, unique_filename, file.content_type
+            )
+        except StorageError as exc:
+            logger.error("Image upload failed for '%s': %s", unique_filename, exc)
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Failed to store the image. Please try again later."},
+            )
 
         # Store hash in database
         if collection is not None:
-            stat = file_path.stat()
             await collection.update_one(
                 {"filename": unique_filename},
                 {
                     "$set": {
                         "filename": unique_filename,
                         "sha256": sha256_hash,
-                        "size": len(file_content),
-                        "modified": int(stat.st_mtime),
+                        "size": stored_image.size,
+                        "modified": stored_image.modified,
+                        "url": stored_image.url,
                     }
                 },
                 upsert=True,
             )
 
         # Return success response with image URL
-        image_url = f"/static/uploads/{unique_filename}"
+        image_url = stored_image.url
         logger.info(f"Image uploaded: {unique_filename}")
         return JSONResponse(
             status_code=200, content={"url": image_url, "filename": unique_filename}

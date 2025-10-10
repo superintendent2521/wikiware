@@ -4,30 +4,25 @@ Calculates SHA256 sums for images and stores them in the database.
 """
 
 import hashlib
-from pathlib import Path
 from typing import Dict, List
 
 from loguru import logger
 
 from ..database import get_image_hashes_collection
+from ..services.storage_service import StorageError, download_image_bytes
 from .images import _list_images
-from ..config import UPLOAD_DIR
 
 
-def calculate_sha256(file_path: Path) -> str:
-    """Calculate SHA256 hash of a file."""
-    hash_sha256 = hashlib.sha256()
+def calculate_sha256(filename: str) -> str:
+    """Calculate SHA256 hash for an uploaded image."""
     try:
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_sha256.update(chunk)
-        return hash_sha256.hexdigest()
-    except FileNotFoundError:
-        logger.warning(f"File not found: {file_path}")
+        data = download_image_bytes(filename)
+    except StorageError as exc:
+        logger.warning(f"Failed to retrieve image {filename} for hashing: {exc}")
         return ""
-    except Exception as e:
-        logger.error(f"Error calculating hash for {file_path}: {e}")
-        return ""
+    hash_sha256 = hashlib.sha256()
+    hash_sha256.update(data)
+    return hash_sha256.hexdigest()
 
 
 def get_all_image_hashes() -> List[Dict]:
@@ -49,12 +44,7 @@ async def update_image_hashes():
     images = _list_images()
     for image in images:
         filename = image["filename"]
-        file_path = Path(UPLOAD_DIR) / filename
-        if not file_path.exists():
-            logger.warning(f"Image file does not exist: {file_path}")
-            continue
-
-        sha256 = calculate_sha256(file_path)
+        sha256 = calculate_sha256(filename)
         if not sha256:
             continue
 
