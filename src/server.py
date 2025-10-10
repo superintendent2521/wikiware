@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from loguru import logger
 from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
+from .routes import media
 from .routes.web import (
     pages,
     search,
@@ -123,6 +124,7 @@ app.include_router(admin.router)
 app.include_router(images.router)
 app.include_router(user.router)
 app.include_router(exports.router)
+app.include_router(media.router)
 # API routes
 app.include_router(api_stats.router, prefix="/api")
 app.include_router(api_images.router, prefix="/api")

@@ -4,6 +4,7 @@ This package contains all the route modules for the application.
 """
 
 # Import route modules for easier access
+from . import media
 from .api import (
     logs,
     stats as api_stats,
@@ -40,4 +41,5 @@ __all__ = [
     "api_stats",
     "api_images",
     "api_exports",
+    "media",
 ]

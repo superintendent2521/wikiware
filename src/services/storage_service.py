@@ -22,7 +22,6 @@ from ..config import (
     S3_ENDPOINT,
     S3_FORCE_PATH_STYLE,
     S3_PUBLIC_URL,
-    S3_REGION,
     S3_SECRET_KEY,
     UPLOAD_DIR,
 )
@@ -47,7 +46,7 @@ _S3_CLIENT = None
 
 
 def _s3_enabled() -> bool:
-    return bool(S3_ENDPOINT and S3_ACCESS_KEY and S3_SECRET_KEY and S3_BUCKET)
+    return bool(S3_ENDPOINT and S3_ACCESS_KEY and S3_SECRET_KEY)
 
 
 def _normalise_endpoint(endpoint: str) -> str:
@@ -71,7 +70,6 @@ def _get_s3_client():
         endpoint_url=_normalise_endpoint(S3_ENDPOINT),
         aws_access_key_id=S3_ACCESS_KEY,
         aws_secret_access_key=S3_SECRET_KEY,
-        region_name=S3_REGION or None,
         config=Config(**config_kwargs),
     )
     return _S3_CLIENT
@@ -93,14 +91,7 @@ def build_public_url(filename: str) -> str:
         key = _object_key(filename)
         if S3_PUBLIC_URL:
             return f"{S3_PUBLIC_URL.rstrip('/')}/{key}"
-        endpoint = _normalise_endpoint(S3_ENDPOINT)
-        if S3_FORCE_PATH_STYLE:
-            return f"{endpoint}/{S3_BUCKET}/{key}"
-        scheme, _, host = endpoint.partition("://")
-        if not host:
-            host = scheme
-            scheme = "https"
-        return f"{scheme}://{S3_BUCKET}.{host}/{key}"
+        return f"/media/uploads/{filename}"
     return f"/static/uploads/{filename}"
 
 
@@ -121,7 +112,7 @@ def upload_image_bytes(
                 Bucket=S3_BUCKET,
                 Key=_object_key(filename),
                 Body=data,
-                **({"ContentType": extra_args["ContentType"]} if extra_args else {}),
+                **extra_args,
             )
         except (BotoCoreError, ClientError) as exc:
             logger.exception("Failed to upload image '%s' to S3: %s", filename, exc)

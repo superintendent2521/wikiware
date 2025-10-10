@@ -141,9 +141,13 @@ async def upload_image(
             existing = await collection.find_one({"sha256": sha256_hash})
             if existing:
                 logger.info(f"Duplicate image upload detected: {existing['filename']}")
-                duplicate_url = existing.get("url") or build_public_url(
-                    existing["filename"]
-                )
+                duplicate_url = existing.get("url")
+                if not duplicate_url:
+                    duplicate_url = build_public_url(existing["filename"])
+                    await collection.update_one(
+                        {"filename": existing["filename"]},
+                        {"$set": {"url": duplicate_url}},
+                    )
                 return JSONResponse(
                     status_code=200,
                     content={

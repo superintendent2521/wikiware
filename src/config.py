@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-
 # Server configuration
 PORT = int(os.getenv("PORT", "8000"))
 DEV = os.getenv("DEV", "false").lower() == "true"
@@ -27,13 +26,12 @@ MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 
 # Object storage (S3-compatible) settings
-S3_ENDPOINT = os.getenv("S3_ENDPOINT")
-S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
-S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
-S3_BUCKET = os.getenv("S3_BUCKET", "wikiware")
-S3_REGION = os.getenv("S3_REGION")
-S3_FORCE_PATH_STYLE = os.getenv("S3_FORCE_PATH_STYLE", "true").lower() == "true"
-S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL")
+S3_ENDPOINT = ""  # e.g. "https://s3.xenyth.example"
+S3_ACCESS_KEY = ""
+S3_SECRET_KEY = ""
+S3_BUCKET = "wikiware"
+S3_FORCE_PATH_STYLE = True
+S3_PUBLIC_URL = ""  # Optional public CDN/base URL override
 
 # Logging settings
 LOG_DIR = "logs"

@@ -57,6 +57,7 @@ async def update_image_hashes():
                     "sha256": sha256,
                     "size": image["size"],
                     "modified": image["modified"],
+                    "url": image.get("url"),
                 }
             },
             upsert=True,
