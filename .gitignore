@@ -9,3 +9,4 @@ example-page.pdf
 # for local dev shennanigans involving piping output from cloudflared
 cloudflared.log
 backups/*
+src/env_config.py

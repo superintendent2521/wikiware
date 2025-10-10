@@ -5,6 +5,7 @@ Centralizes all configuration settings and environment variables.
 
 import os
 from dotenv import load_dotenv
+from src.env_config import SECRET_KEY, ACCESS_KEY # Importing sensitive data
 
 # Load environment variables
 load_dotenv()
@@ -26,9 +27,9 @@ MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 
 # Object storage (S3-compatible) settings
-S3_ENDPOINT = ""  # e.g. "https://s3.xenyth.example"
-S3_ACCESS_KEY = ""
-S3_SECRET_KEY = ""
+S3_ENDPOINT = "s3.iad.xny.onl"  # e.g. "https://s3.xenyth.example"
+S3_ACCESS_KEY = ACCESS_KEY  # Imported from env_config.py
+S3_SECRET_KEY = SECRET_KEY  # Imported from env_config.py
 S3_BUCKET = "wikiware"
 S3_FORCE_PATH_STYLE = True
 S3_PUBLIC_URL = ""  # Optional public CDN/base URL override
