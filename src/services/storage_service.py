@@ -49,6 +49,11 @@ def _s3_enabled() -> bool:
     return bool(S3_ENDPOINT and S3_ACCESS_KEY and S3_SECRET_KEY)
 
 
+def is_s3_configured() -> bool:
+    """Expose S3 configuration check for callers."""
+    return _s3_enabled()
+
+
 def _normalise_endpoint(endpoint: str) -> str:
     if endpoint.startswith("http://") or endpoint.startswith("https://"):
         return endpoint.rstrip("/")
