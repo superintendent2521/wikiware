@@ -16,3 +16,4 @@ slowapi
 bleach
 aiozipstream
 markdown-pdf
+boto3
