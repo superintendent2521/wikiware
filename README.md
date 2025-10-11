@@ -19,3 +19,5 @@ Install your requirements
 `pip install -r requirements.txt`
 
 It requires `bleach` for HTML sanitization. While this library is not actively maintained, it remains a necessary dependency for security until a suitable modern alternative is implemented.
+
+IT REQUIRES S3 FOR IMAGES!
