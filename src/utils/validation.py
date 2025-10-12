@@ -72,31 +72,6 @@ def sanitize_redirect_path(target: Optional[str], default: str = "/") -> str:
     return f"{path}{query}"
 
 
-def sanitize_referer_url(
-    current_url: str, referer: Optional[str], default: str = "/"
-) -> str:
-    """Sanitize a referer header so redirects remain on the same origin."""
-    if not referer:
-        return default
-
-    referer = referer.strip()
-    if not referer:
-        return default
-
-    referer_parsed = urlparse(referer)
-    if referer_parsed.scheme or referer_parsed.netloc:
-        current_parsed = urlparse(current_url)
-        if (referer_parsed.scheme, referer_parsed.netloc) != (
-            current_parsed.scheme,
-            current_parsed.netloc,
-        ):
-            return default
-        candidate = referer_parsed.path or "/"
-        if referer_parsed.query:
-            candidate = f"{candidate}?{referer_parsed.query}"
-        return sanitize_redirect_path(candidate, default=default)
-
-    return sanitize_redirect_path(referer, default=default)
 
 
 def sanitize_filename(filename: str) -> str:

@@ -585,7 +585,12 @@ async def save_page(
             logger.error(
                 f"Database not connected - saving page: {title} on branch: {branch}"
             )
-            return {"error": "Database not available"}
+            return render_error_page(
+                request,
+                title="Database Error",
+                message="The database is currently unavailable. Please try again later.",
+                status_code=503,
+            )
 
         # Validate title
         if not is_valid_title(title):
@@ -793,7 +798,12 @@ async def delete_page(
 
         if not db_instance.is_connected:
             logger.error(f"Database not connected - cannot delete page: {title}")
-            return {"error": "Database not available"}
+            return render_error_page(
+                request,
+                title="Database Error",
+                message="The database is currently unavailable. Please try again later.",
+                status_code=503,
+            )
 
         # Use PageService to delete the page (all branches)
         success = await PageService.delete_page(title)
@@ -845,7 +855,12 @@ async def delete_branch(
             logger.error(
                 f"Database not connected - cannot delete branch {branch} from page {title}"
             )
-            return {"error": "Database not available"}
+            return render_error_page(
+                request,
+                title="Database Error",
+                message="The database is currently unavailable. Please try again later.",
+                status_code=503,
+            )
 
         # Use PageService to delete the branch from the page
         success = await PageService.delete_branch(title, branch)

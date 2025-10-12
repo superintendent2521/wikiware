@@ -16,12 +16,6 @@ from ...utils.logs import LogUtils
 router = APIRouter()
 
 
-def _coerce_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"true", "1", "yes", "on"}
-    return bool(value)
 
 
 @router.get("/api/logs", response_model=Dict[str, Any])
@@ -68,7 +62,13 @@ async def get_logs(
             if "action_type" in payload:
                 incoming_action = payload.get("action_type")
             if "bypass" in payload:
-                bypass_flag = _coerce_bool(payload["bypass"])
+                value = payload["bypass"]
+                if isinstance(value, bool):
+                    bypass_flag = value
+                elif isinstance(value, str):
+                    bypass_flag = value.strip().lower() in {"true", "1", "yes", "on"}
+                else:
+                    bypass_flag = bool(value)
 
         if bypass_flag:
             await AuthMiddleware.require_auth(request)

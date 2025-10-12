@@ -5,7 +5,7 @@ Centralizes all configuration settings and environment variables.
 
 import os
 from dotenv import load_dotenv
-from src.env_config import SECRET_KEY, ACCESS_KEY # Importing sensitive data
+from .env_config import SECRET_KEY, ACCESS_KEY # Importing sensitive data
 
 # Load environment variables
 load_dotenv()

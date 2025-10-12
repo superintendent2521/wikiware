@@ -69,22 +69,3 @@ class UserRegistration(BaseModel):
         if len(v) < 6:
             raise ValueError("Password must be at least 6 characters long")
         return v
-
-
-class UserLogin(BaseModel):
-    """Model for user login."""
-
-    username: str
-    password: str
-
-    @validator("username")
-    def validate_username(cls, v):
-        if not v or not v.strip():
-            raise ValueError("Username cannot be empty")
-        return v.strip()
-
-    @validator("password")
-    def validate_password(cls, v):
-        if not v or not v.strip():
-            raise ValueError("Password cannot be empty")
-        return v
