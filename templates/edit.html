@@ -253,7 +253,7 @@
 
 
     <div class="edit-form-container">
-        <form id="editForm" action="{{ edit_action }}" method="post">
+        <form id="editForm" action="{{ edit_action }}" method="post" data-draft-title="{{ title }}" data-draft-branch="{{ branch_value }}" data-draft-user="{{ user.username if user else 'anonymous' }}">
             <input type="hidden" name="edit_summary" id="editSummaryHidden">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="branch" value="{{ branch_value }}">
@@ -261,6 +261,22 @@
                 <label>Author:</label>
                 <input type="text" value="{{ user.username }}" readonly>
                 <input type="hidden" name="author" value="{{ user.username }}">
+            </div>
+
+            <div id="draftRestoreBanner" class="alert alert-info" hidden>
+                <strong>Draft available:</strong> A local draft from <span id="draftRestoreTimestamp"></span> is available for this page.
+                <div class="draft-banner-actions">
+                    <button type="button" class="btn btn-primary btn-small" id="draftRestoreBtn"><i class="fas fa-undo"></i> Restore Draft</button>
+                    <button type="button" class="btn btn-secondary btn-small" id="draftDiscardBtn"><i class="fas fa-trash"></i> Discard</button>
+                </div>
+            </div>
+
+            <div class="form-group draft-status-row" id="draftStatusRow">
+                <span id="draftStatusText">Drafts save automatically to this browser.</span>
+                <div class="draft-status-actions">
+                    <button type="button" class="btn btn-secondary btn-small" id="draftSaveBtn"><i class="fas fa-save"></i> Save Draft Now</button>
+                    <button type="button" class="btn btn-secondary btn-small" id="draftClearBtn" hidden><i class="fas fa-trash"></i> Discard Draft</button>
+                </div>
             </div>
 
             <div class="form-group">
@@ -361,6 +377,7 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', path='editor.js') }}"></script>
+<script src="{{ url_for('static', path='drafts.js') }}"></script>
 <script nonce="{{ request.state.csp_nonce }}">
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize client-side visual editor (M1 + M2)

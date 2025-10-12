@@ -38,6 +38,22 @@
     return null;
   }
 
+  function dispatchDomEvent(target, eventName = 'input', eventInit) {
+    if (!target) return;
+    const init = eventInit && typeof eventInit === 'object' ? eventInit : { bubbles: true };
+    try {
+      target.dispatchEvent(new Event(eventName, init));
+    } catch (_) {
+      if (typeof document.createEvent === 'function') {
+        const evt = document.createEvent('Event');
+        const bubbles = 'bubbles' in init ? !!init.bubbles : false;
+        const cancelable = 'cancelable' in init ? !!init.cancelable : false;
+        evt.initEvent(eventName, bubbles, cancelable);
+        target.dispatchEvent(evt);
+      }
+    }
+  }
+
   let lastSelectionRange = null;
   let lastSelectionEditor = null;
 
@@ -511,13 +527,7 @@
 
       function dispatchEditorInput() {
         if (!editor) return;
-        try {
-          editor.dispatchEvent(new Event('input', { bubbles: true }));
-        } catch (_) {
-          const evt = document.createEvent('Event');
-          evt.initEvent('input', true, false);
-          editor.dispatchEvent(evt);
-        }
+        dispatchDomEvent(editor, 'input', { bubbles: true });
       }
 
       function syncTextareaFromEditor() {
@@ -570,13 +580,7 @@
           if (typeof textarea.setSelectionRange === 'function') {
             textarea.setSelectionRange(pos, pos);
           }
-          try {
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-          } catch (_) {
-            const evt = document.createEvent('Event');
-            evt.initEvent('input', true, false);
-            textarea.dispatchEvent(evt);
-          }
+          dispatchDomEvent(textarea, 'input', { bubbles: true });
           return true;
         }
         if (!editor) return false;
@@ -663,13 +667,7 @@
           if (typeof textarea.setSelectionRange === 'function') {
             textarea.setSelectionRange(pos, pos);
           }
-          try {
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-          } catch (_) {
-            const fallbackEvt = document.createEvent('Event');
-            fallbackEvt.initEvent('input', true, false);
-            textarea.dispatchEvent(fallbackEvt);
-          }
+          dispatchDomEvent(textarea, 'input', { bubbles: true });
           if (!isRawMode) {
             requestAnimationFrame(() => refreshVisualAfterSnippet({ url: markdownUrl, markdown: textarea ? textarea.value : undefined }));
           }
@@ -925,13 +923,7 @@
           selection.addRange(caretRange);
         }
 
-        try {
-          editor.dispatchEvent(new Event('input', { bubbles: true }));
-        } catch (_) {
-          const evt = document.createEvent('Event');
-          evt.initEvent('input', true, false);
-          editor.dispatchEvent(evt);
-        }
+        dispatchDomEvent(editor, 'input', { bubbles: true });
         updateToolbarState();
         return true;
       }
@@ -1105,6 +1097,31 @@
       WikiEditor.insertSourceCitation = insertSourceCitation;
       WikiEditor.syncTextareaFromEditor = syncTextareaFromEditor;
       WikiEditor.isRawMode = () => isRawMode;
+      WikiEditor.getMarkdown = function () {
+        if (!textarea) return '';
+        if (isRawMode) {
+          return textarea.value || '';
+        }
+        syncTextareaFromEditor();
+        return textarea.value || '';
+      };
+      WikiEditor.loadMarkdown = function (markdown) {
+        if (!textarea) return;
+        const nextValue = typeof markdown === 'string' ? markdown : '';
+        textarea.value = nextValue;
+        if (!isRawMode && editor) {
+          try {
+            editor.innerHTML = mdToHtml(nextValue);
+          } catch (_) {
+            editor.textContent = nextValue;
+          }
+          updateToolbarState();
+          captureSelection();
+          dispatchDomEvent(editor, 'input', { bubbles: true });
+          return;
+        }
+        dispatchDomEvent(textarea, 'input', { bubbles: true });
+      };
 
       // Initial state
       updateToolbarState();
@@ -1163,6 +1180,9 @@
       if (rangeForCaret) {
         lastSelectionRange = rangeForCaret.cloneRange();
       }
+    },
+    dispatchEvent(target, eventName, eventInit) {
+      dispatchDomEvent(target, eventName, eventInit);
     }
   };
 
