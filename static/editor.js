@@ -1105,6 +1105,49 @@
       WikiEditor.insertSourceCitation = insertSourceCitation;
       WikiEditor.syncTextareaFromEditor = syncTextareaFromEditor;
       WikiEditor.isRawMode = () => isRawMode;
+      WikiEditor.getMarkdown = function () {
+        if (!textarea) return '';
+        if (isRawMode) {
+          return textarea.value || '';
+        }
+        syncTextareaFromEditor();
+        return textarea.value || '';
+      };
+      WikiEditor.loadMarkdown = function (markdown) {
+        if (!textarea) return;
+        const nextValue = typeof markdown === 'string' ? markdown : '';
+        textarea.value = nextValue;
+        if (!isRawMode && editor) {
+          try {
+            editor.innerHTML = mdToHtml(nextValue);
+          } catch (_) {
+            editor.textContent = nextValue;
+          }
+          updateToolbarState();
+          captureSelection();
+          try {
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (_) {
+            if (typeof document.createEvent === 'function') {
+              const evt = document.createEvent('Event');
+              evt.initEvent('input', true, false);
+              editor.dispatchEvent(evt);
+            }
+          }
+          return;
+        }
+        if (textarea) {
+          try {
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (_) {
+            if (typeof document.createEvent === 'function') {
+              const evt = document.createEvent('Event');
+              evt.initEvent('input', true, false);
+              textarea.dispatchEvent(evt);
+            }
+          }
+        }
+      };
 
       // Initial state
       updateToolbarState();
