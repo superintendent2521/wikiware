@@ -37,6 +37,7 @@ from .routes.api import (
 from .services import log_streamer
 from .services.settings_service import SettingsService
 from .middleware.security_headers import SecurityHeadersMiddleware
+from .middleware.user_agent_middleware import UserAgentMiddleware
 from .utils.template_env import get_templates
 
 # Configure loguru
@@ -90,6 +91,8 @@ app.mount("/help", StaticFiles(directory=HELP_STATIC_DIR), name="help")
 
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
+# User agent logging middleware
+app.add_middleware(UserAgentMiddleware)
 
 
 @app.middleware("http")

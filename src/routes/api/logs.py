@@ -11,7 +11,7 @@ from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
 from ...middleware.auth_middleware import AuthMiddleware
-from ...utils.logs import LogUtils
+from ...utils.logs import get_paginated_logs
 
 router = APIRouter()
 
@@ -79,7 +79,7 @@ async def get_logs(
                 incoming_limit,
                 incoming_action,
             )
-            return await LogUtils.get_paginated_logs(
+            return await get_paginated_logs(
                 incoming_page,
                 incoming_limit,
                 bypass=True,
@@ -92,7 +92,7 @@ async def get_logs(
             incoming_limit,
             incoming_action,
         )
-        return await LogUtils.get_paginated_logs(
+        return await get_paginated_logs(
             incoming_page,
             incoming_limit,
             bypass=False,

@@ -11,7 +11,7 @@ from ...database import db_instance, get_users_collection
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.settings_service import SettingsService
 from ...stats import get_stats
-from ...utils.logs import LogUtils
+from ...utils.logs import get_paginated_logs
 from ...utils.template_env import get_templates
 
 router = APIRouter()
@@ -46,7 +46,7 @@ async def admin_panel(
     # Get statistics
     stats = await get_stats()
     # Get recent logs (last 5)
-    recent_logs = await LogUtils.get_paginated_logs(1, 5)
+    recent_logs = await get_paginated_logs(1, 5)
     banner = await SettingsService.get_banner()
     feature_flags = await SettingsService.get_feature_flags()
     # CSRF token for templates (logout form in base.html)

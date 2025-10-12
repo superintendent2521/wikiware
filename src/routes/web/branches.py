@@ -19,7 +19,6 @@ from ...utils.validation import (
     is_safe_branch_parameter,
     is_valid_branch_name,
     is_valid_title,
-    sanitize_referer_url,
 )
 
 router = APIRouter()
@@ -150,9 +149,8 @@ async def set_branch(
 
         safe_branch = branch if is_safe_branch_parameter(branch) else "main"
         referer_header = request.headers.get("referer")
-        safe_referer = sanitize_referer_url(
-            str(request.url), referer_header, default="/"
-        )
+        # Simple validation - only allow relative URLs
+        safe_referer = referer_header if referer_header and not urlparse(referer_header).scheme else "/"
 
         parsed = urlparse(safe_referer)
         if parsed.scheme or parsed.netloc:
@@ -170,7 +168,8 @@ async def set_branch(
         return RedirectResponse(url=redirect_target, status_code=303)
     except Exception as e:
         logger.error(f"Error setting branch to {branch}: {str(e)}")
-        safe_referer = sanitize_referer_url(
-            str(request.url), request.headers.get("referer"), default="/"
-        )
+        # Simple validation - only allow relative URLs
+        safe_referer = request.headers.get("referer", "/")
+        if urlparse(safe_referer).scheme or urlparse(safe_referer).netloc:
+            safe_referer = "/"
         return RedirectResponse(url=safe_referer, status_code=303)
