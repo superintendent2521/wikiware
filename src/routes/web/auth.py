@@ -11,6 +11,7 @@ from loguru import logger
 from ...config import DEV, SESSION_COOKIE_NAME
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
+from ...middleware.rate_limiter import rate_limit
 from ...models.user import UserRegistration
 from ...services.user_service import UserService
 from ...utils.template_env import get_templates
@@ -19,6 +20,15 @@ from ...utils.validation import sanitize_redirect_path
 router = APIRouter()
 
 templates = get_templates()
+
+REGISTER_RATE_LIMIT = rate_limit(
+    "register",
+    detail="Too many account creation attempts. Please wait 1 minute and try again.",
+)
+LOGIN_RATE_LIMIT = rate_limit(
+    "login",
+    detail="Too many login attempts. Please wait 1 minute and try again.",
+)
 
 
 @router.get("/register", response_class=HTMLResponse)
@@ -43,7 +53,10 @@ async def register_form(
     return template
 
 
-@router.post("/register")
+@router.post(
+    "/register",
+    dependencies=[Depends(REGISTER_RATE_LIMIT)],
+)
 async def register_user(
     request: Request,
     response: Response,
@@ -185,7 +198,10 @@ async def login_form(
     return template
 
 
-@router.post("/login")
+@router.post(
+    "/login",
+    dependencies=[Depends(LOGIN_RATE_LIMIT)],
+)
 async def login_user(
     request: Request,
     response: Response,

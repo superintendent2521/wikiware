@@ -17,6 +17,7 @@ from loguru import logger
 
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
+from ...middleware.rate_limiter import rate_limit
 from ...services.branch_service import BranchService
 from ...services.page_service import PageService
 from ...services.settings_service import FeatureFlags
@@ -47,6 +48,12 @@ VALID_EDIT_PERMISSIONS = {
 }
 
 templates = get_templates()
+
+EDIT_PAGE_RATE_LIMIT = rate_limit(
+    "page-edit",
+    detail="Too many edit requests. Please wait 1 minute before trying again.",
+    use_user_identity=True,
+)
 
 
 def _get_feature_flags(request: Request) -> FeatureFlags:
@@ -385,7 +392,11 @@ async def get_page(
         return template
 
 
-@router.get("/edit/{title}", response_class=HTMLResponse)
+@router.get(
+    "/edit/{title}",
+    response_class=HTMLResponse,
+    dependencies=[Depends(EDIT_PAGE_RATE_LIMIT)],
+)
 async def edit_page(
     request: Request,
     response: Response,
@@ -545,7 +556,10 @@ async def edit_page(
         return template
 
 
-@router.post("/edit/{title}")
+@router.post(
+    "/edit/{title}",
+    dependencies=[Depends(EDIT_PAGE_RATE_LIMIT)],
+)
 async def save_page(
     request: Request,
     title: str,
