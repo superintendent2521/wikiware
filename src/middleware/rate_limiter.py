@@ -28,11 +28,31 @@ class RateLimiter:
         self._window_seconds = window_seconds
         self._records: Dict[str, Deque[float]] = {}
         self._lock = asyncio.Lock()
+        self._last_cleanup = monotonic()
+
+    def _cleanup_if_needed(self, now: float) -> None:
+        """
+        Remove stale keys whose latest request is outside the active window.
+
+        This runs at most once per window to keep the check path cheap.
+        """
+        if now - self._last_cleanup < self._window_seconds:
+            return
+
+        stale_keys = [
+            key
+            for key, timestamps in self._records.items()
+            if not timestamps or now - timestamps[-1] >= self._window_seconds
+        ]
+        for key in stale_keys:
+            self._records.pop(key, None)
+        self._last_cleanup = now
 
     async def check(self, key: str, *, detail: Optional[str] = None) -> None:
         """Raise HTTP 429 if the caller exceeded the allowed request budget."""
         now = monotonic()
         async with self._lock:
+            self._cleanup_if_needed(now)
             timestamps = self._records.setdefault(key, deque())
             # Drop timestamps outside the sliding window
             while timestamps and now - timestamps[0] >= self._window_seconds:
