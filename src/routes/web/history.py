@@ -16,6 +16,7 @@ from loguru import logger
 
 from ...database import db_instance, get_history_collection, get_pages_collection
 from ...middleware.auth_middleware import AuthMiddleware
+from ...middleware.rate_limiter import rate_limit
 from ...services.branch_service import BranchService
 from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
@@ -25,6 +26,11 @@ from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExten
 
 router = APIRouter()
 templates = get_templates()
+
+HISTORY_RATE_LIMIT = rate_limit(
+    "history-view",
+    detail="Too many history requests. Please wait 1 minute and try again.",
+)
 
 
 @dataclass
@@ -231,7 +237,11 @@ def _build_version_entries(versions: List[Dict[str, Any]]) -> List[Dict[str, Any
     return entries
 
 
-@router.get("/history/{title}", response_class=HTMLResponse)
+@router.get(
+    "/history/{title}",
+    response_class=HTMLResponse,
+    dependencies=[Depends(HISTORY_RATE_LIMIT)],
+)
 async def page_history(
     request: Request,
     response: Response,
@@ -345,7 +355,11 @@ async def page_history(
         )
 
 
-@router.get("/history/{title}/compare", response_class=HTMLResponse)
+@router.get(
+    "/history/{title}/compare",
+    response_class=HTMLResponse,
+    dependencies=[Depends(HISTORY_RATE_LIMIT)],
+)
 async def compare_versions(
     request: Request,
     response: Response,
@@ -526,7 +540,11 @@ async def compare_versions(
         )
 
 
-@router.get("/history/{title}/{version_index}", response_class=HTMLResponse)
+@router.get(
+    "/history/{title}/{version_index}",
+    response_class=HTMLResponse,
+    dependencies=[Depends(HISTORY_RATE_LIMIT)],
+)
 async def view_version(
     request: Request,
     response: Response,
