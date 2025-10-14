@@ -27,11 +27,11 @@ class UserAgentMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         
         # Log the request with user agent
-        logger.info(
-            f"Request: {method} {path} | "
-            f"Client: {client_ip} | "
-            f"User-Agent: {user_agent}"
-        )
+        #logger.info(
+            #f"Request: {method} {path} | "
+           # f"Client: {client_ip} | "
+            #f"User-Agent: {user_agent}"
+        #)
         
         # Process the request
         response = await call_next(request)
