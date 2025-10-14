@@ -91,10 +91,7 @@ async def _build_rate_limit_key(
 ) -> str:
     """Build a rate limit key using the username when available."""
     if use_user_identity:
-        try:
-            user = await AuthMiddleware.get_current_user(request)
-        except Exception:
-            user = None
+        user = await AuthMiddleware.get_current_user(request)
         if user and user.get("username"):
             username = str(user["username"]).casefold()
             return f"{scope}:user:{username}"
