@@ -44,7 +44,7 @@ NAME = "Starship Wiki"
 
 # Version shown on all pages
 
-VERSION = "1.8"
+VERSION = "2"
 
 # Template settings
 TEMPLATE_DIR = "templates"
