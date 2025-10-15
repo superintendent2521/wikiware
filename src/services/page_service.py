@@ -172,6 +172,7 @@ class PageService:
                         "title": title,
                         "content": existing_page["content"],
                         "author": existing_page.get("author", "Anonymous"),
+                        "edited_by": author,
                         "branch": branch,
                         "updated_at": existing_page["updated_at"],
                         "edit_summary": existing_page.get("edit_summary", ""),

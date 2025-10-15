@@ -120,15 +120,18 @@ async def get_paginated_logs(
                 )
 
             for item in history_items:
+                log_author = item.get("edited_by") or item.get("author", "Anonymous")
                 items.append(
                     {
                         "type": "edit",
                         "title": item["title"],
-                        "author": item.get("author", "Anonymous"),
+                        "author": log_author,
                         "branch": item["branch"],
                         "timestamp": item["updated_at"],
                         "action": "page_edit",
                         "details": {
+                            "edited_by": log_author,
+                            "previous_author": item.get("author"),
                             "content_length": (
                                 len(item.get("content", ""))
                                 if "content" in item

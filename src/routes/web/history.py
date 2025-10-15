@@ -847,6 +847,7 @@ async def restore_version(
                     "title": title,
                     "content": current_page["content"],
                     "author": current_page.get("author", "Anonymous"),
+                    "edited_by": user["username"],
                     "branch": branch,
                     "updated_at": current_page["updated_at"],
                     "edit_summary": current_page.get("edit_summary", ""),
