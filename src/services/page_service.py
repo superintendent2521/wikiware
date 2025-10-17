@@ -309,66 +309,66 @@ class PageService:
             logger.error(f"Error getting pages for branch {branch}: {str(e)}")
             return []
 
-@staticmethod
-async def search_pages(
-    query: str, branch: str = "main", limit: int = 100
-) -> List[Dict[str, Any]]:
-    try:
-        if not db_instance.is_connected:
-            logger.warning("Database not connected - cannot search pages with query: %s", query)
-            return []
-
-        pages_collection = get_pages_collection()
-        if pages_collection is None:
-            logger.error("Pages collection not available")
-            return []
-
-        # Shared helpers
-        collation = {"locale": "en", "strength": 1}  # case + diacritic insensitive
-        projection = {"score": {"$meta": "textScore"}, "title": 1, "updated_at": 1, "branch": 1}  # trim big fields
-
+    @staticmethod
+    async def search_pages(
+        query: str, branch: str = "main", limit: int = 100
+    ) -> List[Dict[str, Any]]:
         try:
-            cursor = (
-                pages_collection
-                .find(
-                    {"$and": [{"branch": branch}, {"$text": {"$search": query}}]},
-                    projection
-                )
-                .collation(collation)
-                .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
-            )
-            pages = await cursor.to_list(limit)
-        except OperationFailure as op_err:
-            logger.warning("Text search unavailable, falling back to regex search: %s", op_err)
-            import re
-            safe = re.escape(query)
-            cursor = (
-                pages_collection
-                .find(
-                    {
-                        "$and": [
-                            {"branch": branch},
-                            {
-                                "$or": [
-                                    {"title": {"$regex": safe, "$options": "i"}},
-                                    {"content": {"$regex": safe, "$options": "i"}},
-                                ]
-                            },
-                        ]
-                    },
-                    {"title": 1, "updated_at": 1, "branch": 1}  # no text score in regex mode
-                )
-                .collation(collation)
-                .sort([("updated_at", -1)])
-            )
-            pages = await cursor.to_list(limit)
+            if not db_instance.is_connected:
+                logger.warning("Database not connected - cannot search pages with query: %s", query)
+                return []
 
-        logger.info("Search performed: %r on branch %r - found %d results", query, branch, len(pages))
-        return pages
+            pages_collection = get_pages_collection()
+            if pages_collection is None:
+                logger.error("Pages collection not available")
+                return []
 
-    except Exception as e:
-        logger.error("Error searching pages with query %r on branch %r: %s", query, branch, e)
-        return []
+            # Shared helpers
+            collation = {"locale": "en", "strength": 1}  # case + diacritic insensitive
+            projection = {"score": {"$meta": "textScore"}, "title": 1, "updated_at": 1, "branch": 1}  # trim big fields
+
+            try:
+                cursor = (
+                    pages_collection
+                    .find(
+                        {"$and": [{"branch": branch}, {"$text": {"$search": query}}]},
+                        projection
+                    )
+                    .collation(collation)
+                    .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
+                )
+                pages = await cursor.to_list(limit)
+            except OperationFailure as op_err:
+                logger.warning("Text search unavailable, falling back to regex search: %s", op_err)
+                import re
+                safe = re.escape(query)
+                cursor = (
+                    pages_collection
+                    .find(
+                        {
+                            "$and": [
+                                {"branch": branch},
+                                {
+                                    "$or": [
+                                        {"title": {"$regex": safe, "$options": "i"}},
+                                        {"content": {"$regex": safe, "$options": "i"}},
+                                    ]
+                                },
+                            ]
+                        },
+                        {"title": 1, "updated_at": 1, "branch": 1}  # no text score in regex mode
+                    )
+                    .collation(collation)
+                    .sort([("updated_at", -1)])
+                )
+                pages = await cursor.to_list(limit)
+
+            logger.info("Search performed: %r on branch %r - found %d results", query, branch, len(pages))
+            return pages
+
+        except Exception as e:
+            logger.error("Error searching pages with query %r on branch %r: %s", query, branch, e)
+            return []
 
 
     @staticmethod
