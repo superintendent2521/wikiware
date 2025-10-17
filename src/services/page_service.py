@@ -363,7 +363,7 @@ class PageService:
                 )
                 pages = await cursor.to_list(limit)
 
-            logger.info("Search performed: %r on branch %r - found %d results", query, branch, len(pages))
+            logger.info(f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results")
             return pages
 
         except Exception as e:
