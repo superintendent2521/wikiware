@@ -309,72 +309,67 @@ class PageService:
             logger.error(f"Error getting pages for branch {branch}: {str(e)}")
             return []
 
-    @staticmethod
-    async def search_pages(
-        query: str, branch: str = "main", limit: int = 100
-    ) -> List[Dict[str, Any]]:
-        """
-        Search pages by title or content.
+@staticmethod
+async def search_pages(
+    query: str, branch: str = "main", limit: int = 100
+) -> List[Dict[str, Any]]:
+    try:
+        if not db_instance.is_connected:
+            logger.warning("Database not connected - cannot search pages with query: %s", query)
+            return []
 
-        Args:
-            query: Search query
-            branch: Branch name
-            limit: Maximum number of results
+        pages_collection = get_pages_collection()
+        if pages_collection is None:
+            logger.error("Pages collection not available")
+            return []
 
-        Returns:
-            List of matching page documents
-        """
+        # Shared helpers
+        collation = {"locale": "en", "strength": 1}  # case + diacritic insensitive
+        projection = {"score": {"$meta": "textScore"}, "title": 1, "updated_at": 1, "branch": 1}  # trim big fields
+
         try:
-            if not db_instance.is_connected:
-                logger.warning(
-                    f"Database not connected - cannot search pages with query: {query}"
+            cursor = (
+                pages_collection
+                .find(
+                    {"$and": [{"branch": branch}, {"$text": {"$search": query}}]},
+                    projection
                 )
-                return []
-
-            pages_collection = get_pages_collection()
-            if pages_collection is None:
-                logger.error("Pages collection not available")
-                return []
-
-            try:
-                cursor = pages_collection.find(
-                    {
-                        "$and": [
-                            {"branch": branch},
-                            {"$text": {"$search": query}},
-                        ]
-                    },
-                    {"score": {"$meta": "textScore"}},
-                ).sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
-                pages = await cursor.to_list(limit)
-            except OperationFailure as op_err:
-                logger.warning(
-                    "Text search unavailable, falling back to regex search: {}",
-                    str(op_err),
-                )
-                pages = await pages_collection.find(
+                .collation(collation)
+                .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
+            )
+            pages = await cursor.to_list(limit)
+        except OperationFailure as op_err:
+            logger.warning("Text search unavailable, falling back to regex search: %s", op_err)
+            import re
+            safe = re.escape(query)
+            cursor = (
+                pages_collection
+                .find(
                     {
                         "$and": [
                             {"branch": branch},
                             {
                                 "$or": [
-                                    {"title": {"$regex": query, "$options": "i"}},
-                                    {"content": {"$regex": query, "$options": "i"}},
+                                    {"title": {"$regex": safe, "$options": "i"}},
+                                    {"content": {"$regex": safe, "$options": "i"}},
                                 ]
                             },
                         ]
-                    }
-                ).to_list(limit)
+                    },
+                    {"title": 1, "updated_at": 1, "branch": 1}  # no text score in regex mode
+                )
+                .collation(collation)
+                .sort([("updated_at", -1)])
+            )
+            pages = await cursor.to_list(limit)
 
-            logger.info(
-                f"Search performed: '{query}' on branch '{branch}' - found {len(pages)} results"
-            )
-            return pages
-        except Exception as e:
-            logger.error(
-                f"Error searching pages with query '{query}' on branch '{branch}': {str(e)}"
-            )
-            return []
+        logger.info("Search performed: %r on branch %r - found %d results", query, branch, len(pages))
+        return pages
+
+    except Exception as e:
+        logger.error("Error searching pages with query %r on branch %r: %s", query, branch, e)
+        return []
+
 
     @staticmethod
     async def delete_page(title: str) -> bool:
