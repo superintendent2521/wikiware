@@ -4,7 +4,7 @@ Provides API endpoints for image operations.
 """
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 import asyncio
 
 from ...middleware.auth_middleware import AuthMiddleware
