@@ -39,9 +39,9 @@ async def delete_image(
     user = await AuthMiddleware.get_current_user(request)
     if not user or not user.get("is_admin", False):
         # Redirect to login or home if not admin
-        return HTMLResponse(
-            content="<h1>Access Denied</h1><p>You must be an admin to view this page.</p>",
+        raise HTTPException(
             status_code=403,
+            detail="Access Denied: You must be an admin to perform this action.",
         )
     
     # Security check - prevent directory traversal
