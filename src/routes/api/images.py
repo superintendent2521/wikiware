@@ -61,7 +61,7 @@ async def delete_image(
     try:
         await loop.run_in_executor(None, storage_delete_image, filename)
     except StorageError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(exc)}") from exc
+        raise HTTPException(status_code=500, detail="Failed to delete image") from exc
 
     await log_action(
         user["username"],
