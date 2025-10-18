@@ -33,6 +33,11 @@ INDEX_CONFIGS: dict[str, list[IndexSpec]] = {
         ("filename", {"unique": True}),
         ("sha256", {}),
     ],
+    "analytics_events": [
+        ([("event_type", 1), ("timestamp", -1)], {}),
+        ("timestamp", {}),
+        ("query_normalized", {}),
+    ],
 }
 
 
@@ -200,7 +205,7 @@ async def create_indexes() -> None:
     if pages is not None:
         await _ensure_pages_indexes(pages)
 
-    for collection_name in ("users", "sessions", "image_hashes"):
+    for collection_name in ("users", "sessions", "image_hashes", "analytics_events"):
         collection = db_instance.get_collection(collection_name)
         if collection is None:
             logger.warning(

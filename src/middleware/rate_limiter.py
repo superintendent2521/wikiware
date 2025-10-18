@@ -15,7 +15,7 @@ from fastapi import HTTPException, Request
 
 from .auth_middleware import AuthMiddleware
 
-DEFAULT_REQUESTS_PER_WINDOW = 5
+DEFAULT_REQUESTS_PER_WINDOW = 30
 WINDOW_SECONDS = 60
 DEFAULT_DETAIL = "Too many requests. Please try again later."
 
