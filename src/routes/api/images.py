@@ -10,7 +10,7 @@ import asyncio
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.storage_service import (
     delete_image as storage_delete_image,
-    list_images as storage_list_images,
+    image_exists as storage_image_exists,
     StorageError,
 )
 from ...utils.images import _list_images
@@ -51,11 +51,11 @@ async def delete_image(
     loop = asyncio.get_running_loop()
 
     try:
-        images = await loop.run_in_executor(None, storage_list_images)
+        exists = await loop.run_in_executor(None, storage_image_exists, filename)
     except StorageError as exc:
         raise HTTPException(status_code=500, detail="Failed to access image storage") from exc
 
-    if not any(item.get("filename") == filename for item in images):
+    if not exists:
         raise HTTPException(status_code=404, detail="Image not found")
 
     try:

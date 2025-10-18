@@ -243,3 +243,30 @@ def delete_image(filename: str) -> None:
     except OSError as exc:  # pragma: no cover
         logger.exception("Failed to delete local image '%s': %s", filename, exc)
         raise StorageError("Local delete failed.") from exc
+
+
+def image_exists(filename: str) -> bool:
+    """Efficiently check whether an image exists in storage."""
+    if _s3_enabled():
+        client = _get_s3_client()
+        try:
+            client.head_object(Bucket=S3_BUCKET, Key=_object_key(filename))
+            return True
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code", "")
+            if error_code in ("404", "NoSuchKey", "NotFound"):
+                return False
+            logger.exception(
+                "Failed to check existence for image '%s' in S3: %s", filename, exc
+            )
+            raise StorageError("Image existence check failed.") from exc
+        except BotoCoreError as exc:
+            logger.exception(
+                "BotoCore error while checking image '%s' existence: %s",
+                filename,
+                exc,
+            )
+            raise StorageError("Image existence check failed.") from exc
+
+    file_path = Path(UPLOAD_DIR) / filename
+    return file_path.exists()
