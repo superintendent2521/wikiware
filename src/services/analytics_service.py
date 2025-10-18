@@ -223,11 +223,11 @@ class AnalyticsService:
         ]
 
         try:
-            page_results = await collection.aggregate(page_pipeline).to_list(None)
-            search_results = await collection.aggregate(search_pipeline).to_list(None)
-            top_search_results = await collection.aggregate(
-                top_search_pipeline
-            ).to_list(None)
+            page_results, search_results, top_search_results = await asyncio.gather(
+                collection.aggregate(page_pipeline).to_list(None),
+                collection.aggregate(search_pipeline).to_list(None),
+                collection.aggregate(top_search_pipeline).to_list(None),
+            )
         except Exception as exc:  # IGNORE W0718
             logger.warning("Failed to aggregate analytics metrics: %s", exc)
             return metrics
