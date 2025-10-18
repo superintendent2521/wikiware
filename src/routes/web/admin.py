@@ -9,6 +9,7 @@ from fastapi_csrf_protect import CsrfProtect
 
 from ...database import db_instance, get_users_collection
 from ...middleware.auth_middleware import AuthMiddleware
+from ...services.analytics_service import AnalyticsService
 from ...services.settings_service import SettingsService
 from ...stats import get_stats
 from ...utils.logs import get_paginated_logs
@@ -45,6 +46,7 @@ async def admin_panel(
         users = await users_cursor.to_list(length=None)
     # Get statistics
     stats = await get_stats()
+    analytics = await AnalyticsService.get_admin_dashboard_metrics()
     # Get recent logs (last 5)
     recent_logs = await get_paginated_logs(1, 5)
     banner = await SettingsService.get_banner()
@@ -66,6 +68,7 @@ async def admin_panel(
             "banner": banner,
             "banner_levels": ["info", "success", "warning", "danger"],
             "feature_flags": feature_flags,
+            "analytics": analytics,
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)

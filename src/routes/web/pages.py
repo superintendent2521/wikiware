@@ -18,6 +18,7 @@ from loguru import logger
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...middleware.rate_limiter import rate_limit
+from ...services.analytics_service import AnalyticsService
 from ...services.branch_service import BranchService
 from ...services.page_service import PageService
 from ...services.settings_service import FeatureFlags
@@ -246,6 +247,8 @@ async def home(
     )
     page["sources"] = sources
 
+    await AnalyticsService.record_page_view(request, "Home", branch, user)
+
     template = templates.TemplateResponse(
         "page.html",
         {
@@ -333,6 +336,7 @@ async def get_page(
         )
         page["sources"] = sources
         logger.info(f"Page viewed: {title} on branch: {branch}")
+        await AnalyticsService.record_page_view(request, title, branch, user)
         template = templates.TemplateResponse(
             "page.html",
             {

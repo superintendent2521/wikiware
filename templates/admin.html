@@ -95,6 +95,71 @@
             </div>
         </div>
 
+        <div class="admin-card admin-card-wide analytics-card">
+            <h3><i class="fas fa-chart-line"></i> Traffic &amp; Search Analytics</h3>
+            <div class="analytics-metrics">
+                <div class="analytics-metric">
+                    <span class="analytics-metric__label">Page Views</span>
+                    <span class="analytics-metric__value">{{ analytics.today.page_views }}</span>
+                    <span class="analytics-metric__sub">Last 7 days · {{ analytics.last_7_days.page_views }}</span>
+                </div>
+                <div class="analytics-metric">
+                    <span class="analytics-metric__label">Unique Visitors</span>
+                    <span class="analytics-metric__value">{{ analytics.today.unique_visitors }}</span>
+                    <span class="analytics-metric__sub">Last 7 days · {{ analytics.last_7_days.unique_visitors }}</span>
+                </div>
+                <div class="analytics-metric">
+                    <span class="analytics-metric__label">Searches</span>
+                    <span class="analytics-metric__value">{{ analytics.today.searches }}</span>
+                    <span class="analytics-metric__sub">Last 7 days · {{ analytics.last_7_days.searches }}</span>
+                </div>
+            </div>
+            <div class="analytics-body">
+                <div class="analytics-daily">
+                    <h4>Last 7 Days</h4>
+                    {% if analytics.daily %}
+                    <table class="analytics-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Views</th>
+                                <th>Unique</th>
+                                <th>Searches</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for day in analytics.daily %}
+                            <tr>
+                                <td>{{ day.label }}</td>
+                                <td>{{ day.page_views }}</td>
+                                <td>{{ day.unique_visitors }}</td>
+                                <td>{{ day.searches }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="analytics-empty">No activity captured in the last week.</p>
+                    {% endif %}
+                </div>
+                <div class="analytics-top-searches">
+                    <h4>Top Searches (30 days)</h4>
+                    {% if analytics.top_searches %}
+                    <ul class="analytics-searches">
+                        {% for item in analytics.top_searches %}
+                        <li>
+                            <span class="analytics-query">{{ item.query }}</span>
+                            <span class="analytics-count">{{ item.count }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="analytics-empty">No searches recorded yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
         <div class="admin-card admin-card-span-2">
             <h3><i class="fas fa-moderation"></i> Logs</h3>
             <div class="logs-container">
@@ -213,6 +278,118 @@
 
 .admin-card-wide {
     grid-column: 1 / -1;
+}
+
+.analytics-card h4 {
+    margin: 0 0 var(--space-sm);
+    font-size: var(--font-size-md, 1.1rem);
+    color: var(--dark-gray);
+}
+
+.analytics-card .analytics-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+}
+
+.analytics-metric {
+    background: var(--secondary-white);
+    border: 1px solid var(--light-gray);
+    border-radius: var(--border-radius-md);
+    padding: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.analytics-metric__label {
+    font-size: var(--font-size-xs, 0.75rem);
+    color: var(--medium-gray);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.analytics-metric__value {
+    font-size: 2rem;
+    font-weight: var(--font-weight-bold, 700);
+    color: var(--darker-gray);
+    line-height: 1.2;
+}
+
+.analytics-metric__sub {
+    font-size: var(--font-size-sm);
+    color: var(--medium-gray);
+}
+
+.analytics-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-lg, var(--space-md));
+    margin-top: var(--space-lg, var(--space-md));
+}
+
+.analytics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.analytics-table th,
+.analytics-table td {
+    border-bottom: 1px solid var(--light-gray);
+    padding: 8px 10px;
+    text-align: left;
+    color: var(--darker-gray);
+}
+
+.analytics-table th {
+    background: var(--secondary-white);
+    color: var(--dark-gray);
+    font-weight: var(--font-weight-medium);
+}
+
+.analytics-table tr:last-child td {
+    border-bottom: none;
+}
+
+.analytics-searches {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.analytics-searches li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border: 1px solid var(--light-gray);
+    border-radius: var(--border-radius-md);
+    background: var(--secondary-white);
+    color: var(--darker-gray);
+    font-size: var(--font-size-sm);
+}
+
+.analytics-query {
+    flex: 1;
+    font-weight: var(--font-weight-medium);
+    margin-right: var(--space-sm);
+}
+
+.analytics-count {
+    font-variant-numeric: tabular-nums;
+    color: var(--medium-gray);
+}
+
+.analytics-empty {
+    margin: 0;
+    padding: var(--space-sm) 0;
+    color: var(--medium-gray);
+    font-size: var(--font-size-sm);
 }
 
 .feature-form {

@@ -10,6 +10,7 @@ from loguru import logger
 
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
+from ...services.analytics_service import AnalyticsService
 from ...services.branch_service import BranchService
 from ...services.page_service import PageService
 from ...utils.template_env import get_templates
@@ -58,6 +59,7 @@ async def search(
         pages = []
         if q:
             pages = await PageService.search_pages(q, branch)
+            await AnalyticsService.record_search(request, q, branch, len(pages), user)
         elif show_all:
             pages = await PageService.get_pages_by_branch(branch)
             logger.info(
