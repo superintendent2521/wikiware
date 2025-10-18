@@ -121,12 +121,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Delete image functionality
     const deleteButtons = document.querySelectorAll('.delete-image-btn');
-    console.log('Found delete buttons:', deleteButtons.length);
     
     deleteButtons.forEach(btn => {
-        console.log('Adding click handler to button with filename:', btn.getAttribute('data-filename'));
         btn.addEventListener('click', function (e) {
-            console.log('Delete button clicked');
             e.preventDefault();
             const filename = btn.getAttribute('data-filename');
             const url = btn.getAttribute('data-url');
