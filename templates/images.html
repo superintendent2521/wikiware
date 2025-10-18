@@ -130,13 +130,8 @@ document.addEventListener('DOMContentLoaded', function () {
             e.preventDefault();
             const filename = btn.getAttribute('data-filename');
             const url = btn.getAttribute('data-url');
-            if (!filename) {
-                console.error('No filename found on delete button');
-                return;
-            }
 
             if (confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
-                console.log('Sending delete request for:', filename);
                 fetch(`/api/images/${encodeURIComponent(filename)}`, {
                     method: 'DELETE',
                     credentials: 'include',
@@ -145,7 +140,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     },
                 })
                 .then(response => {
-                    console.log('Delete response status:', response.status);
                     if (response.ok) {
                         // Remove the image card from the UI
                         const card = btn.closest('.image-card');
