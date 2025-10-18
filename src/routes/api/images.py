@@ -3,12 +3,18 @@ Image API routes for WikiWare.
 Provides API endpoints for image operations.
 """
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
 import asyncio
 
 from ...middleware.auth_middleware import AuthMiddleware
+from ...services.storage_service import (
+    delete_image as storage_delete_image,
+    list_images as storage_list_images,
+    StorageError,
+)
 from ...utils.images import _list_images
+from ...utils.logs import log_action
 
 router = APIRouter()
 
@@ -20,3 +26,51 @@ async def list_images_api(request: Request):
     loop = asyncio.get_running_loop()
     items = await loop.run_in_executor(None, _list_images)
     return JSONResponse(content={"items": items})
+
+
+@router.delete("/images/{filename}")
+async def delete_image(
+    filename: str,
+    request: Request,
+):
+    """Delete an image by filename; requires admin privileges."""
+    # Require admin authentication
+
+    user = await AuthMiddleware.get_current_user(request)
+    if not user or not user.get("is_admin", False):
+        # Redirect to login or home if not admin
+        return HTMLResponse(
+            content="<h1>Access Denied</h1><p>You must be an admin to view this page.</p>",
+            status_code=403,
+        )
+    
+    # Security check - prevent directory traversal
+    if "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    loop = asyncio.get_running_loop()
+
+    try:
+        images = await loop.run_in_executor(None, storage_list_images)
+    except StorageError as exc:
+        raise HTTPException(status_code=500, detail="Failed to access image storage") from exc
+
+    if not any(item.get("filename") == filename for item in images):
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    try:
+        await loop.run_in_executor(None, storage_delete_image, filename)
+    except StorageError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(exc)}") from exc
+
+    await log_action(
+        user["username"],
+        "delete_image",
+        f"Deleted image: {filename}",
+        "images",
+    )
+
+    return JSONResponse(
+        status_code=200,
+        content={"message": f"Image '{filename}' deleted successfully"},
+    )

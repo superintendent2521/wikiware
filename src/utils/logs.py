@@ -3,6 +3,7 @@ Log utility functions for WikiWare.
 Provides core functionality for retrieving and formatting system logs.
 """
 
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from loguru import logger
 from ..database import get_history_collection, get_branches_collection, db_instance
@@ -190,3 +191,49 @@ async def get_paginated_logs(
     except Exception as e:
         logger.error(f"Error fetching logs: {str(e)}")
         raise e
+
+
+async def log_action(
+    username: str,
+    action: str,
+    message: str,
+    category: str = "general",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """
+    Persist an admin/system action log entry for auditing.
+
+    Returns True when the entry is stored, False otherwise.
+    """
+    payload = {
+        "username": username,
+        "action": action,
+        "message": message,
+        "category": category,
+        "metadata": metadata or {},
+        "timestamp": datetime.now(timezone.utc),
+    }
+
+    logger.info(
+        "Audit log recorded | user={} action={} category={} message={}",
+        username,
+        action,
+        category,
+        message,
+    )
+
+    if not db_instance.is_connected:
+        logger.warning("Database not connected - skipping audit log persistence")
+        return False
+
+    collection = db_instance.get_collection("system_logs")
+    if collection is None:
+        logger.warning("system_logs collection unavailable - skipping audit log")
+        return False
+
+    try:
+        await collection.insert_one(payload)
+        return True
+    except Exception as exc:  # IGNORE W0718
+        logger.error("Failed to persist audit log '{}': {}", action, exc)
+        return False

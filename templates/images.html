@@ -26,6 +26,11 @@
                 <div class="image-name" title="{{ img.filename }}">{{ img.filename }}</div>
                 <div class="image-actions">
                     <a href="{{ img.url }}" target="_blank" class="btn btn-small"><i class="fas fa-external-link-alt"></i> Open</a>
+                    {% if user and user.is_admin %}
+                    <button type="button" class="btn btn-small btn-danger delete-image-btn" data-filename="{{ img.filename }}" data-url="{{ img.url }}">
+                        <i class="fas fa-trash-alt"></i> Delete
+                    </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -81,7 +86,7 @@
     gap: 8px;
 }
 </style>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 document.addEventListener('DOMContentLoaded', function () {
     const input = document.getElementById('image-search');
     const grid = document.getElementById('image-grid');
@@ -111,6 +116,61 @@ document.addEventListener('DOMContentLoaded', function () {
             }).catch(() => {
                 alert('Failed to copy URL');
             });
+        });
+    });
+
+    // Delete image functionality
+    const deleteButtons = document.querySelectorAll('.delete-image-btn');
+    console.log('Found delete buttons:', deleteButtons.length);
+    
+    deleteButtons.forEach(btn => {
+        console.log('Adding click handler to button with filename:', btn.getAttribute('data-filename'));
+        btn.addEventListener('click', function (e) {
+            console.log('Delete button clicked');
+            e.preventDefault();
+            const filename = btn.getAttribute('data-filename');
+            const url = btn.getAttribute('data-url');
+            if (!filename) {
+                console.error('No filename found on delete button');
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
+                console.log('Sending delete request for:', filename);
+                fetch(`/api/images/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: {
+                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    },
+                })
+                .then(response => {
+                    console.log('Delete response status:', response.status);
+                    if (response.ok) {
+                        // Remove the image card from the UI
+                        const card = btn.closest('.image-card');
+                        if (card) {
+                            card.style.transition = 'opacity 0.3s, transform 0.3s';
+                            card.style.opacity = '0';
+                            card.style.transform = 'scale(0.8)';
+                            setTimeout(() => card.remove(), 300);
+                        }
+                        alert(`Image "${filename}" has been deleted successfully.`);
+                    } else if (response.status === 403) {
+                        alert('You do not have permission to delete this image.');
+                    } else if (response.status === 404) {
+                        alert('Image not found. It may have already been deleted.');
+                    } else {
+                        return response.json().then(err => {
+                            throw new Error(err.detail || `Failed to delete image: ${response.status}`);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting image:', error);
+                    alert(`Failed to delete image: ${error.message}`);
+                });
+            }
         });
     });
 });
