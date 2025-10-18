@@ -74,7 +74,7 @@ async def admin_panel(
     csrf_protect.set_csrf_cookie(signed_token, template)
     return template
 
-
+#TODO: move to api
 @router.post("/admin/banner")
 async def update_banner(request: Request, csrf_protect: CsrfProtect = Depends()):
     """Update the global banner message from the admin panel."""
