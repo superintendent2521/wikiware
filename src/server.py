@@ -89,7 +89,6 @@ logger.info(f"Wiki Name is {NAME}  ")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-app.mount("/help", StaticFiles(directory=HELP_STATIC_DIR), name="help")
 
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
