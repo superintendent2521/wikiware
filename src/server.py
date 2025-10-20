@@ -14,6 +14,7 @@ from loguru import logger
 from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
 from .routes import media
+#Why do we do it like this? Because otherwise we import a route that has both web and api routes, casuing circular imports
 from .routes.web import (
     pages,
     search,
@@ -33,6 +34,7 @@ from .routes.api import (
     pdf as api_pdf,
     uploads as api_uploads,
     history as api_history,
+    admin as api_admin,
 )
 from .services import log_streamer
 from .services.settings_service import SettingsService
@@ -135,6 +137,7 @@ app.include_router(api_exports.router, prefix="/api")
 app.include_router(api_pdf.router, prefix="/api")
 app.include_router(api_uploads.router, prefix="/api")
 app.include_router(api_history.router, prefix="/api")
+app.include_router(api_admin.router, prefix="/api")
 # From Utils, because its a service, not a route
 app.include_router(log_streamer.router)
 # Initilize log streaming.
