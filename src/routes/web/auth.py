@@ -215,14 +215,28 @@ async def login_user(
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
         safe_next = sanitize_redirect_path(next)
-        # Extract client IP and User-Agent for logging
+        # Extract client IP and User-Agent for logging. Be defensive: some
+        # environments (proxies, VPNs, privacy tools) or ASGI servers may not
+        # populate request.client or the x-forwarded-for header. Ensure we
+        # always have string values and log when the IP is missing.
         xff = request.headers.get("x-forwarded-for")
-        client_ip = (
-            xff.split(",")[0].strip()
-            if xff
-            else (request.client.host if request.client else "unknown")
-        )
-        user_agent = request.headers.get("user-agent", "unknown")
+        user_agent = request.headers.get("user-agent") or "unknown"
+
+        client_ip = "unknown"
+        try:
+            if xff:
+                # x-forwarded-for can contain a list of IPs, take the first
+                client_ip = xff.split(",")[0].strip() or "unknown"
+            elif getattr(request, "client", None) and getattr(request.client, "host", None):
+                client_ip = request.client.host
+        except Exception:
+            # In case accessing attributes raises for some ASGI servers, keep "unknown"
+            client_ip = "unknown"
+
+        if client_ip == "unknown":
+            logger.debug(
+                f"Login request missing client IP for username={username}; headers_xff={xff} user_agent={user_agent}"
+            )
         if not db_instance.is_connected:
             logger.error(
                 f"Database not connected - cannot login user: {username} | {client_ip} | {user_agent} | db_offline | {request.url.path}"
@@ -292,6 +306,19 @@ async def login_user(
         )
         return response
     except Exception as e:
+        # Ensure client_ip and user_agent exist in this scope for logging
+        try:
+            user_agent = user_agent  # noqa: F841
+        except NameError:
+            user_agent = request.headers.get("user-agent", "unknown")
+        try:
+            client_ip = client_ip  # noqa: F841
+        except NameError:
+            xff = request.headers.get("x-forwarded-for")
+            client_ip = (
+                xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+            )
+
         logger.error(f"Error logging in user {username}: {str(e)}")
         # Log error using unified logger (also writes to file via loguru config)
         logger.error(
