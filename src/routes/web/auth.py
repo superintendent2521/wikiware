@@ -17,6 +17,31 @@ from ...services.user_service import UserService
 from ...utils.template_env import get_templates
 from ...utils.validation import sanitize_redirect_path
 
+def get_client_ip(request: Request) -> str:
+    """
+    Safely retrieve the client IP address from a FastAPI request.
+    Handles various scenarios like proxies, VPNs, and privacy tools.
+    
+    Args:
+        request: The FastAPI request object
+        
+    Returns:
+        str: The client IP address or "unknown" if it cannot be determined
+    """
+    xff = request.headers.get("x-forwarded-for")
+    
+    try:
+        if xff:
+            # x-forwarded-for can contain a list of IPs, take the first
+            return xff.split(",")[0].strip() or "unknown"
+        elif getattr(request, "client", None) and getattr(request.client, "host", None):
+            return request.client.host
+    except Exception:
+        # In case accessing attributes raises for some ASGI servers, keep "unknown"
+        pass
+    
+    return "unknown"
+
 router = APIRouter()
 
 templates = get_templates()
@@ -222,16 +247,7 @@ async def login_user(
         xff = request.headers.get("x-forwarded-for")
         user_agent = request.headers.get("user-agent") or "unknown"
 
-        client_ip = "unknown"
-        try:
-            if xff:
-                # x-forwarded-for can contain a list of IPs, take the first
-                client_ip = xff.split(",")[0].strip() or "unknown"
-            elif getattr(request, "client", None) and getattr(request.client, "host", None):
-                client_ip = request.client.host
-        except Exception:
-            # In case accessing attributes raises for some ASGI servers, keep "unknown"
-            client_ip = "unknown"
+        client_ip = get_client_ip(request)
 
         if client_ip == "unknown":
             logger.debug(
@@ -314,10 +330,7 @@ async def login_user(
         try:
             client_ip = client_ip  # noqa: F841
         except NameError:
-            xff = request.headers.get("x-forwarded-for")
-            client_ip = (
-                xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
-            )
+            client_ip = get_client_ip(request)
 
         logger.error(f"Error logging in user {username}: {str(e)}")
         # Log error using unified logger (also writes to file via loguru config)
