@@ -8,7 +8,6 @@
         <h2><i class="fas fa-images"></i> Image Library</h2>
         <p>Browse and search images uploaded to the wiki CDN.</p>
     </div>
-    <p>Copy the link of the Image you want to show, then wrap it inside of a </p>
     <form action="/images" method="get" class="search-form" style="margin: 10px 0 20px; display: flex; gap: 8px;">
         <input type="text" id="image-search" name="q" placeholder="Search images by filename..." value="{{ query or '' }}" style="flex: 1;" />
         <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Search</button>
