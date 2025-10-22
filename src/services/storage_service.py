@@ -203,6 +203,7 @@ def list_images() -> List[Dict[str, Any]]:
 
 def download_image_bytes(filename: str) -> bytes:
     """Retrieve the raw bytes for an uploaded image."""
+    s3_missing = False
     if _s3_enabled():
         client = _get_s3_client()
         try:
@@ -211,12 +212,34 @@ def download_image_bytes(filename: str) -> bytes:
             if body is None:
                 raise StorageError("Empty response body from object storage.")
             data = body.read()
-        except (BotoCoreError, ClientError, StorageError) as exc:
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code", "")
+            if error_code in ("404", "NoSuchKey", "NotFound"):
+                s3_missing = True
+                logger.warning(
+                    "Image '%s' missing in S3 (code=%s); checking local storage.",
+                    filename,
+                    error_code or "unknown",
+                )
+            else:
+                logger.exception("Failed to download image '%s' from S3: %s", filename, exc)
+                raise StorageError("Download from object storage failed.") from exc
+        except BotoCoreError as exc:
             logger.exception("Failed to download image '%s' from S3: %s", filename, exc)
             raise StorageError("Download from object storage failed.") from exc
-        return data
+        except StorageError as exc:
+            logger.exception("Failed to download image '%s' from S3: %s", filename, exc)
+            raise
+        else:
+            return data
 
     file_path = Path(UPLOAD_DIR) / filename
+    if not file_path.exists():
+        if s3_missing:
+            logger.warning("Image '%s' not found in S3 or local storage.", filename)
+        else:
+            logger.warning("Image '%s' not found in local storage.", filename)
+        raise StorageError("Image not found.")
     try:
         with open(file_path, "rb") as file_obj:
             return file_obj.read()
