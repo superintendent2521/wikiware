@@ -4,7 +4,7 @@ Handles page viewing, editing, and saving operations.
 """
 
 import re
-from typing import List, Optional
+from typing import Dict, List, Optional
 from urllib.parse import quote
 
 import markdown
@@ -25,6 +25,12 @@ from ...services.settings_service import FeatureFlags
 from ...database import get_users_collection
 from ...stats import get_stats
 from ...utils.link_processor import process_internal_links
+from ...utils.navigation_history import (
+    HISTORY_COOKIE_MAX_AGE,
+    HISTORY_COOKIE_NAME,
+    prepare_navigation_context,
+    serialize_history,
+)
 from ...utils.sanitizer import sanitize_html
 from ...utils.template_env import get_templates
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
@@ -205,6 +211,10 @@ async def home(
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     csrf_protect.set_csrf_cookie(signed_token, response)
 
+    history_entries, previous_page_context = prepare_navigation_context(
+        request, "Home", branch, True
+    )
+
     if not db_instance.is_connected:
         template = templates.TemplateResponse(
             "page.html",
@@ -219,12 +229,20 @@ async def home(
                 },
                 "offline": True,
                 "branch": branch,
+                "navigation_previous": previous_page_context,
                 "toc_items": [],
                 "user": user,
                 "csrf_token": csrf_token,
             },
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
+        template.set_cookie(
+            HISTORY_COOKIE_NAME,
+            serialize_history(history_entries),
+            max_age=HISTORY_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+        )
         return template
 
     # Get the hardcoded 'Home' page
@@ -256,6 +274,7 @@ async def home(
             "page": page,
             "offline": not db_instance.is_connected,
             "branch": branch,
+            "navigation_previous": previous_page_context,
             "toc_items": toc_items,
             "sources": page.get("sources", []),
             "user": user,
@@ -263,6 +282,13 @@ async def home(
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
+    template.set_cookie(
+        HISTORY_COOKIE_NAME,
+        serialize_history(history_entries),
+        max_age=HISTORY_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+    )
     return template
 
 
@@ -275,11 +301,17 @@ async def get_page(
     csrf_protect: CsrfProtect = Depends(),
 ):
     """View a specific page."""
+    history_entries: List[Dict[str, object]] = []
+    previous_page_context: Optional[Dict[str, str]] = None
     try:
         # Get current user
         user = await AuthMiddleware.get_current_user(request)
         csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
         # Ensure CSRF cookie is set on the actual response object we return
+
+        history_entries, previous_page_context = prepare_navigation_context(
+            request, title, branch, False
+        )
 
         if not db_instance.is_connected:
             logger.warning(
@@ -294,9 +326,17 @@ async def get_page(
                     "offline": True,
                     "user": user,
                     "csrf_token": csrf_token,
+                    "navigation_previous": previous_page_context,
                 },
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
+            template.set_cookie(
+                HISTORY_COOKIE_NAME,
+                serialize_history(history_entries),
+                max_age=HISTORY_COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="lax",
+            )
             return template
 
         # Check for user page redirect: /page/User?branch=username -> /user/username
@@ -325,9 +365,17 @@ async def get_page(
                     "branches": branches,
                     "user": user,
                     "csrf_token": csrf_token,
+                    "navigation_previous": previous_page_context,
                 },
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
+            template.set_cookie(
+                HISTORY_COOKIE_NAME,
+                serialize_history(history_entries),
+                max_age=HISTORY_COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="lax",
+            )
             return template
 
         # Process internal links and render as Markdown
@@ -349,9 +397,17 @@ async def get_page(
                 "sources": page.get("sources", []),
                 "user": user,
                 "csrf_token": csrf_token,
+                "navigation_previous": previous_page_context,
             },
         )
         csrf_protect.set_csrf_cookie(signed_token, template)
+        template.set_cookie(
+            HISTORY_COOKIE_NAME,
+            serialize_history(history_entries),
+            max_age=HISTORY_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+        )
         return template
     except Exception as e:
         logger.error(f"Error viewing page {title} on branch {branch}: {str(e)}")
@@ -393,6 +449,14 @@ async def get_page(
         )
         if signed_token_e:
             csrf_protect.set_csrf_cookie(signed_token_e, template)
+        if history_entries:
+            template.set_cookie(
+                HISTORY_COOKIE_NAME,
+                serialize_history(history_entries),
+                max_age=HISTORY_COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="lax",
+            )
         return template
 
 

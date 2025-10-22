@@ -30,6 +30,12 @@
     </div>
     {% endif %}
 
+    {% if navigation_previous %}
+    <div class="navigation-previous">
+        <span>You came from <a href="{{ navigation_previous.url }}">{{ navigation_previous.title }}</a>.</span>
+    </div>
+    {% endif %}
+
     <div class="page-header">
         <div class="page-title-section">
             <h2>{{ page.title }}</h2>
@@ -163,6 +169,19 @@
 {% block scripts %}
 {{ super() }}
 <style>
+.navigation-previous {
+    display: inline-block;
+    margin-bottom: 16px;
+    padding: 8px 12px;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--surface-subtle);
+    font-size: 0.95rem;
+}
+.navigation-previous a {
+    color: var(--primary-link);
+    text-decoration: underline;
+}
 .history-selector {
     position: relative;
     display: inline-block;
