@@ -449,13 +449,14 @@ async def get_page(
         )
         if signed_token_e:
             csrf_protect.set_csrf_cookie(signed_token_e, template)
-        template.set_cookie(
-            HISTORY_COOKIE_NAME,
-            serialize_history(history_entries),
-            max_age=HISTORY_COOKIE_MAX_AGE,
-            httponly=True,
-            samesite="lax",
-        )
+        if history_entries:
+            template.set_cookie(
+                HISTORY_COOKIE_NAME,
+                serialize_history(history_entries),
+                max_age=HISTORY_COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="lax",
+            )
         return template
 
 
