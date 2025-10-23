@@ -13,6 +13,7 @@ email-validator
 argon2-cffi
 fastapi-limiter
 slowapi
+httpx
 bleach
 aiozipstream
 markdown-pdf
