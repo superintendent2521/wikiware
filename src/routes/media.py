@@ -20,7 +20,7 @@ async def serve_uploaded_image(filename: str):
     if "/" in filename or ".." in filename or filename.strip() == "":
         raise HTTPException(status_code=400, detail="Invalid filename")
     try:
-        data = await asyncio.to_thread(download_image_bytes, filename)
+        data = await download_image_bytes(filename)
     except StorageError as exc:
         logger.warning("Failed to retrieve image '%s': %s", filename, exc)
         raise HTTPException(status_code=404, detail="Image not found") from exc

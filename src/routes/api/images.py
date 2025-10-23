@@ -23,8 +23,7 @@ router = APIRouter()
 async def list_images_api(request: Request):
     """Return JSON list of images; requires authentication."""
     await AuthMiddleware.require_auth(request)
-    loop = asyncio.get_running_loop()
-    items = await loop.run_in_executor(None, _list_images)
+    items = await _list_images()
     return JSONResponse(content={"items": items})
 
 
@@ -48,10 +47,8 @@ async def delete_image(
     if "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    loop = asyncio.get_running_loop()
-
     try:
-        exists = await loop.run_in_executor(None, storage_image_exists, filename)
+        exists = await storage_image_exists(filename)
     except StorageError as exc:
         raise HTTPException(status_code=500, detail="Failed to access image storage") from exc
 
@@ -59,7 +56,7 @@ async def delete_image(
         raise HTTPException(status_code=404, detail="Image not found")
 
     try:
-        await loop.run_in_executor(None, storage_delete_image, filename)
+        await storage_delete_image(filename)
     except StorageError as exc:
         raise HTTPException(status_code=500, detail="Failed to delete image") from exc
 

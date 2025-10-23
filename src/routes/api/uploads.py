@@ -200,9 +200,7 @@ async def upload_image(
 
         # Store file in object storage
         try:
-            stored_image = await asyncio.to_thread(
-                upload_image_bytes, file_content, unique_filename, file.content_type
-            )
+            stored_image = await upload_image_bytes(file_content, unique_filename, file.content_type)
         except StorageError as exc:
             logger.error("Image upload failed for '%s': %s", unique_filename, exc)
             return JSONResponse(
