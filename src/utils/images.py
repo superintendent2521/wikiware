@@ -5,10 +5,10 @@ from loguru import logger
 from ..services.storage_service import StorageError, list_images as storage_list_images
 
 
-def _list_images() -> List[Dict]:
+async def _list_images() -> List[Dict]:
     """Return a list of image file metadata from the storage backend."""
     try:
-        return storage_list_images()
+        return await storage_list_images()
     except StorageError as exc:
         logger.error("Failed to list images from storage: %s", exc)
         return []
