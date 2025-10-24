@@ -51,6 +51,8 @@ class PageService:
                 return None
 
             page = await pages_collection.find_one({"title": title, "branch": branch})
+            if page and "_id" in page:
+                page["_id"] = str(page["_id"])
             return page
         except Exception as e:
             logger.error(f"Error getting page {title} on branch {branch}: {str(e)}")
