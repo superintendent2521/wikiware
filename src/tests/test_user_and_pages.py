@@ -217,3 +217,33 @@ def test_page_view(test_client, user_credentials):
     # Check if page contains the expected content
     content = page_response.text.lower()
     assert 'view page content' in content, "Page content not found in view"
+
+
+
+# def test_login_rate_limit(test_client, user_credentials):
+#     """Test login rate limiting"""
+#     # Attempt multiple failed logins
+#     time.sleep(60)  # Wait to avoid hitting rate limits from previous tests
+#     for _ in range(4):  # Exceed limit
+#         test_client.cookies.clear()
+#         csrf_token = fetch_csrf_token(test_client, "/login")
+#         response = test_client.post(f'{BASE_URL}/login', data={
+#             'username': user_credentials['username'],
+#             'password': 'wrong_password',
+#             'csrf_token': csrf_token,
+#             'next': '/',
+#         })
+#         assert "Too many login attempts" in response.text
+#     
+#     # Wait for rate limit to reset (simulated)
+#     time.sleep(60)
+#     
+#     # Try again with correct password
+#     csrf_token = fetch_csrf_token(test_client, "/login")
+#     response = test_client.post(f'{BASE_URL}/login', data={
+#         'username': user_credentials['username'],
+#         'password': user_credentials['password'],
+#         'csrf_token': csrf_token,
+#         'next': '/',
+#     }, allow_redirects=False)
+#     assert response.status_code in [200, 301, 302, 303], f"Expected successful login after rate limit reset, got {response.status_code}"
