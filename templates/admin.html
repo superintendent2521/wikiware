@@ -39,6 +39,24 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="banner-form__field">
+                        <label for="banner_duration" class="banner-form__label">Expiration</label>
+                        <select id="banner_duration" name="banner_duration" {% if offline %}disabled{% endif %}>
+                            <option value="" {% if not banner.duration_hours %}selected{% endif %}>No expiration</option>
+                            <option value="24" {% if banner.duration_hours == 24 %}selected{% endif %}>24 hours</option>
+                            <option value="48" {% if banner.duration_hours == 48 %}selected{% endif %}>48 hours</option>
+                            <option value="72" {% if banner.duration_hours == 72 %}selected{% endif %}>72 hours</option>
+                        </select>
+                        {% if banner.expires_at %}
+                        <p class="banner-form__hint">
+                            {% if banner.should_display %}
+                            Set to expire {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}
+                            {% else %}
+                            Expired {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
                     <div class="banner-form__field banner-form__toggle">
                         <label class="checkbox-label">
                             <input type="checkbox" name="banner_active" {% if banner.is_active %}checked{% endif %} {% if offline %}disabled{% endif %}>
@@ -51,7 +69,14 @@
                         <i class="fas fa-save"></i> Save Banner
                     </button>
                     {% if banner.should_display %}
-                    <span class="banner-preview-label">Currently visible ({{ banner.level|capitalize }})</span>
+                    <span class="banner-preview-label">
+                        Currently visible ({{ banner.level|capitalize }})
+                        {% if banner.expires_at %}
+                        - expires {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}
+                        {% endif %}
+                    </span>
+                    {% elif banner.expires_at %}
+                    <span class="banner-preview-label">Expired {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}</span>
                     {% endif %}
                 </div>
             </form>
@@ -641,6 +666,12 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-md);
+}
+
+.banner-form__hint {
+    margin-top: var(--space-xs);
+    font-size: var(--font-size-sm);
+    color: var(--dark-gray);
 }
 
 .banner-preview-label {

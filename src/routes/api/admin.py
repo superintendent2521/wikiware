@@ -23,10 +23,20 @@ async def update_banner(request: Request, csrf_protect: CsrfProtect = Depends())
     message = form.get("banner_message", "").strip()
     level = form.get("banner_level", "info")
     is_active = form.get("banner_active") == "on"
+    duration_value = form.get("banner_duration", "").strip()
+
+    expires_in_hours = None
+    if duration_value in {"24", "48", "72"}:
+        try:
+            expires_in_hours = int(duration_value)
+        except ValueError:
+            expires_in_hours = None
+
     success = await SettingsService.update_banner(
         message=message,
         level=level,
         is_active=is_active,
+        expires_in_hours=expires_in_hours,
     )
     status = "banner_saved" if success else "banner_error"
     redirect_url = request.url_for("admin_panel")
