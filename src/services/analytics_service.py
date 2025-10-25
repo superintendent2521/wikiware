@@ -123,6 +123,60 @@ class AnalyticsService:
             logger.warning(f"Failed to record search query {query!r}: {exc}")
 
     @staticmethod
+    async def record_favorite_added(
+        request: Request,
+        page_title: str,
+        branch: str,
+        user: dict | None,
+    ) -> None:
+        """Persist a favorite-added analytics event."""
+        collection = AnalyticsService._get_collection()
+        if collection is None:
+            return
+        try:
+            visitor_id = AnalyticsService._derive_visitor_id(request, user)
+            event = {
+                "event_type": "favorite_added",
+                "timestamp": _utcnow(),
+                "page_title": page_title,
+                "branch": branch,
+                "visitor_id": visitor_id,
+                "username": user.get("username") if user else None,
+            }
+            await collection.insert_one(event)
+        except Exception as exc:  # IGNORE W0718
+            logger.warning(
+                f"Failed to record favorite for {page_title!r} on {branch}: {exc}"
+            )
+
+    @staticmethod
+    async def record_favorite_removed(
+        request: Request,
+        page_title: str,
+        branch: str,
+        user: dict | None,
+    ) -> None:
+        """Persist a favorite-removed analytics event."""
+        collection = AnalyticsService._get_collection()
+        if collection is None:
+            return
+        try:
+            visitor_id = AnalyticsService._derive_visitor_id(request, user)
+            event = {
+                "event_type": "favorite_removed",
+                "timestamp": _utcnow(),
+                "page_title": page_title,
+                "branch": branch,
+                "visitor_id": visitor_id,
+                "username": user.get("username") if user else None,
+            }
+            await collection.insert_one(event)
+        except Exception as exc:  # IGNORE W0718
+            logger.warning(
+                f"Failed to record favorite removal for {page_title!r} on {branch}: {exc}"
+            )
+
+    @staticmethod
     async def get_admin_dashboard_metrics() -> Dict[str, Any]:
         """
         Return aggregated analytics for the admin dashboard.

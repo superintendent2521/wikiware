@@ -9,6 +9,7 @@ from loguru import logger
 
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
+from ...services.analytics_service import AnalyticsService
 from ...services.page_service import PageService
 from ...services.user_service import UserService
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
@@ -81,6 +82,13 @@ async def add_favorite(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update favorites")
 
+    await AnalyticsService.record_favorite_added(
+        request,
+        normalized_title,
+        normalized_branch,
+        user,
+    )
+
     logger.info(
         f"User '{user['username']}' favorited page '{normalized_title}' "
         f"on branch '{normalized_branch}'"
@@ -111,6 +119,12 @@ async def remove_favorite(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update favorites")
 
+    await AnalyticsService.record_favorite_removed(
+        request,
+        normalized_title,
+        normalized_branch,
+        user,
+    )
     logger.info(
         f"User '{user['username']}' removed favorite '{normalized_title}' "
         f"on branch '{normalized_branch}'"
