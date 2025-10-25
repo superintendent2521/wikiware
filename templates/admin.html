@@ -104,11 +104,6 @@
                     <span class="analytics-metric__sub">Last 7 days · {{ analytics.last_7_days.page_views }}</span>
                 </div>
                 <div class="analytics-metric">
-                    <span class="analytics-metric__label">Unique Visitors</span>
-                    <span class="analytics-metric__value">{{ analytics.today.unique_visitors }}</span>
-                    <span class="analytics-metric__sub">Last 7 days · {{ analytics.last_7_days.unique_visitors }}</span>
-                </div>
-                <div class="analytics-metric">
                     <span class="analytics-metric__label">Searches</span>
                     <span class="analytics-metric__value">{{ analytics.today.searches }}</span>
                     <span class="analytics-metric__sub">Last 7 days · {{ analytics.last_7_days.searches }}</span>
@@ -123,7 +118,6 @@
                             <tr>
                                 <th>Date</th>
                                 <th>Views</th>
-                                <th>Unique</th>
                                 <th>Searches</th>
                             </tr>
                         </thead>
@@ -132,7 +126,6 @@
                             <tr>
                                 <td>{{ day.label }}</td>
                                 <td>{{ day.page_views }}</td>
-                                <td>{{ day.unique_visitors }}</td>
                                 <td>{{ day.searches }}</td>
                             </tr>
                             {% endfor %}

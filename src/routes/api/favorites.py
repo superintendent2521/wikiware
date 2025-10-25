@@ -82,12 +82,7 @@ async def add_favorite(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update favorites")
 
-    await AnalyticsService.record_favorite_added(
-        request,
-        normalized_title,
-        normalized_branch,
-        user,
-    )
+    await AnalyticsService.record_favorite_added(normalized_title, normalized_branch)
 
     logger.info(
         f"User '{user['username']}' favorited page '{normalized_title}' "
@@ -119,12 +114,7 @@ async def remove_favorite(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update favorites")
 
-    await AnalyticsService.record_favorite_removed(
-        request,
-        normalized_title,
-        normalized_branch,
-        user,
-    )
+    await AnalyticsService.record_favorite_removed(normalized_title, normalized_branch)
     logger.info(
         f"User '{user['username']}' removed favorite '{normalized_title}' "
         f"on branch '{normalized_branch}'"
