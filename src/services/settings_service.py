@@ -33,9 +33,7 @@ class Banner:
     @property
     def should_display(self) -> bool:
         """Return True if the banner has content, is active, and not expired."""
-        if not self.is_active or not self.message.strip():
-            return False
-        return not self.is_expired
+        return self.is_active and bool(self.message.strip()) and not self.is_expired
 
 
 _DEFAULT_BANNER = Banner(
@@ -83,21 +81,20 @@ class SettingsService:
         if not value:
             return None
 
+        parsed_dt: Optional[datetime] = None
         if isinstance(value, datetime):
-            if value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc)
-            return value.astimezone(timezone.utc)
-
-        if isinstance(value, str):
+            parsed_dt = value
+        elif isinstance(value, str):
             try:
-                parsed = datetime.fromisoformat(value)
+                parsed_dt = datetime.fromisoformat(value)
             except ValueError:
                 logger.warning(f"Could not parse banner expiration '{value}'")
                 return None
-
-            if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
+        
+        if parsed_dt:
+            if parsed_dt.tzinfo is None:
+                return parsed_dt.replace(tzinfo=timezone.utc)
+            return parsed_dt.astimezone(timezone.utc)
 
         logger.warning(f"Unsupported expires_at type '{type(value)!r}'")
         return None

@@ -4,7 +4,6 @@ Admin api routes.
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
-
 from fastapi_csrf_protect import CsrfProtect
 
 from ...middleware.auth_middleware import AuthMiddleware
@@ -27,10 +26,7 @@ async def update_banner(request: Request, csrf_protect: CsrfProtect = Depends())
 
     expires_in_hours = None
     if duration_value in {"24", "48", "72"}:
-        try:
-            expires_in_hours = int(duration_value)
-        except ValueError:
-            expires_in_hours = None
+        expires_in_hours = int(duration_value)
 
     success = await SettingsService.update_banner(
         message=message,

@@ -49,10 +49,10 @@
                         </select>
                         {% if banner.expires_at %}
                         <p class="banner-form__hint">
-                            {% if banner.should_display %}
-                            Set to expire {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}
-                            {% else %}
+                            {% if banner.is_expired %}
                             Expired {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}
+                            {% else %}
+                            Set to expire {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}
                             {% endif %}
                         </p>
                         {% endif %}
@@ -75,7 +75,7 @@
                         - expires {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}
                         {% endif %}
                     </span>
-                    {% elif banner.expires_at %}
+                    {% elif banner.is_expired %}
                     <span class="banner-preview-label">Expired {{ banner.expires_at.strftime('%Y-%m-%d %H:%M %Z') }}</span>
                     {% endif %}
                 </div>
