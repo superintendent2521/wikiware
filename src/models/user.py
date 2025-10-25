@@ -2,8 +2,9 @@
 User data models and validation for WikiWare.
 """
 
-from datetime import datetime, timezone
 import re
+from datetime import datetime, timezone
+from typing import Optional
 
 from pydantic import BaseModel, Field, validator
 
@@ -16,6 +17,8 @@ class User(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
     is_admin: bool = False
+    password_changed_at: Optional[datetime] = None  # Track last password update
+    last_collection_export_at: Optional[datetime] = None  # Export cooldown timestamp
     page_edits: dict = Field(
         default_factory=dict
     )  # Dictionary to track edits per page: {"page_title": edit_count}
