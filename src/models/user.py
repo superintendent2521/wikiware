@@ -20,6 +20,7 @@ class User(BaseModel):
         default_factory=dict
     )  # Dictionary to track edits per page: {"page_title": edit_count}
     total_edits: int = 0  # Total number of edits by this user
+    favorites: list = Field(default_factory=list)  # List of favorited page titles
 
     @validator("username")
     def validate_username(cls, v):
@@ -39,6 +40,11 @@ class User(BaseModel):
     def validate_password_hash(cls, v):
         if not v or not v.strip():
             raise ValueError("Password hash cannot be empty")
+        return v
+    @validator("favorites")
+    def validate_favorites(cls, v):
+        if not isinstance(v, list):
+            raise ValueError("Favorites must be a list")
         return v
 
 
