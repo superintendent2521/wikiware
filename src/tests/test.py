@@ -219,6 +219,110 @@ def test_page_view(test_client, user_credentials):
     assert 'view page content' in content, "Page content not found in view"
 
 
+def test_favorites_flow(test_client, user_credentials):
+    """
+    Test adding and removing favorites through the API.
+    """
+    test_client.cookies.clear()
+    csrf_token = fetch_csrf_token(test_client, "/login")
+    login_response = test_client.post(
+        f"{BASE_URL}/login",
+        data={
+            "username": user_credentials["username"],
+            "password": user_credentials["password"],
+            "csrf_token": csrf_token,
+            "next": "/",
+        },
+        allow_redirects=False,
+    )
+
+    if login_response.status_code in [301, 302, 303]:
+        redirect_location = login_response.headers.get("Location")
+        if redirect_location:
+            redirect_url = (
+                f"{BASE_URL}{redirect_location}"
+                if redirect_location.startswith("/")
+                else redirect_location
+            )
+            test_client.get(redirect_url, allow_redirects=False)
+
+    if "user_session" not in test_client.cookies:
+        pytest.fail("Failed to authenticate before managing favorites")
+
+    page_title = f"Favorites Test Page {int(time.time())}"
+    edit_csrf_token = fetch_csrf_token(test_client, f"/edit/{page_title}")
+    create_response = test_client.post(
+        f"{BASE_URL}/edit/{page_title}",
+        data={
+            "content": "## Favorite Test Page\n\nEnsuring favorite API works.",
+            "edit_summary": "Create page for favorites flow",
+            "edit_permission": "everybody",
+            "allowed_users": "",
+            "csrf_token": edit_csrf_token,
+        },
+        allow_redirects=False,
+    )
+
+    assert create_response.status_code in [301, 302, 303], (
+        f"Failed to create page for favorites test: {create_response.status_code}"
+    )
+
+    redirect_location = create_response.headers.get("Location")
+    if redirect_location:
+        created_page_url = (
+            f"{BASE_URL}{redirect_location}"
+            if redirect_location.startswith("/")
+            else redirect_location
+        )
+        test_client.get(created_page_url)
+
+    favorites_url = f"{BASE_URL}/api/favorites"
+    headers = {"Accept": "application/json"}
+    favorite_entry = {"title": page_title, "branch": "main"}
+
+    favorites_response = test_client.get(favorites_url, headers=headers)
+    assert favorites_response.status_code == 200, (
+        f"Initial favorites fetch failed: {favorites_response.status_code}"
+    )
+    favorites_data = favorites_response.json()
+    assert isinstance(favorites_data.get("favorites"), list), "Favorites response malformed"
+    assert favorite_entry not in favorites_data["favorites"], "Page already favorited unexpectedly"
+
+    encoded_title = quote(page_title, safe="")
+    add_response = test_client.post(
+        f"{BASE_URL}/api/favorites/{encoded_title}", headers=headers
+    )
+    assert add_response.status_code == 200, f"Adding favorite failed: {add_response.status_code}"
+    add_data = add_response.json()
+    assert add_data.get("status") == "favorited", "Favorite status not returned as favorited"
+    assert favorite_entry in add_data.get("favorites", []), "Favorite not present after addition"
+
+    confirm_response = test_client.get(favorites_url, headers=headers)
+    assert confirm_response.status_code == 200, (
+        f"Favorites check after add failed: {confirm_response.status_code}"
+    )
+    confirm_data = confirm_response.json()
+    assert favorite_entry in confirm_data.get("favorites", []), "Favorite missing in subsequent check"
+
+    delete_response = test_client.delete(
+        f"{BASE_URL}/api/favorites/{encoded_title}", headers=headers
+    )
+    assert delete_response.status_code == 200, (
+        f"Removing favorite failed: {delete_response.status_code}"
+    )
+    delete_data = delete_response.json()
+    assert delete_data.get("status") == "unfavorited", "Favorite status not returned as unfavorited"
+    assert favorite_entry not in delete_data.get("favorites", []), "Favorite still present after removal"
+
+    final_response = test_client.get(favorites_url, headers=headers)
+    assert final_response.status_code == 200, (
+        f"Final favorites fetch failed: {final_response.status_code}"
+    )
+    final_data = final_response.json()
+    assert favorite_entry not in final_data.get("favorites", []), (
+        "Favorite entry still present after deletion"
+    )
+
 
 # def test_login_rate_limit(test_client, user_credentials):
 #     """Test login rate limiting"""
