@@ -59,7 +59,7 @@ async def search(
         pages = []
         if q:
             pages = await PageService.search_pages(q, branch)
-            await AnalyticsService.record_search(request, q, branch, len(pages), user)
+            await AnalyticsService.record_search(q, branch, len(pages))
         elif show_all:
             pages = await PageService.get_pages_by_branch(branch)
             logger.info(

@@ -265,7 +265,7 @@ async def home(
     )
     page["sources"] = sources
 
-    await AnalyticsService.record_page_view(request, "Home", branch, user)
+    await AnalyticsService.record_page_view(request, "Home", branch)
 
     template = templates.TemplateResponse(
         "page.html",
@@ -384,7 +384,7 @@ async def get_page(
         )
         page["sources"] = sources
         logger.info(f"Page viewed: {title} on branch: {branch}")
-        await AnalyticsService.record_page_view(request, title, branch, user)
+        await AnalyticsService.record_page_view(request, title, branch)
         template = templates.TemplateResponse(
             "page.html",
             {

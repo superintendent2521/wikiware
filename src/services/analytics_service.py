@@ -37,7 +37,6 @@ class AnalyticsService:
         request: Request,
         page_title: str,
         branch: str,
-        user: dict | None,
     ) -> None:
         """Persist a page-view analytics event."""
         if request.method == "HEAD":
@@ -59,11 +58,9 @@ class AnalyticsService:
 
     @staticmethod
     async def record_search(
-        request: Request,
         query: str,
         branch: str,
         result_count: int,
-        user: dict | None,
     ) -> None:
         """Persist a search analytics event."""
         if not query:
@@ -87,10 +84,8 @@ class AnalyticsService:
 
     @staticmethod
     async def record_favorite_added(
-        request: Request,
         page_title: str,
         branch: str,
-        user: dict | None,
     ) -> None:
         """Persist a favorite-added analytics event."""
         collection = AnalyticsService._get_collection()
@@ -111,10 +106,8 @@ class AnalyticsService:
 
     @staticmethod
     async def record_favorite_removed(
-        request: Request,
         page_title: str,
         branch: str,
-        user: dict | None,
     ) -> None:
         """Persist a favorite-removed analytics event."""
         collection = AnalyticsService._get_collection()
