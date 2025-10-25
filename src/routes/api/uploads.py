@@ -52,8 +52,7 @@ async def upload_image(
         feature_flags = request.state.feature_flags
         if not feature_flags.image_upload_enabled and not user.get("is_admin", False):
             logger.info(
-                "Image upload blocked for user '%s' because uploads are disabled",
-                user.get("username"),
+                f"Image upload blocked for user '{user.get('username')}' because uploads are disabled"
             )
             return JSONResponse(
                 status_code=403,
@@ -202,7 +201,7 @@ async def upload_image(
         try:
             stored_image = await upload_image_bytes(file_content, unique_filename, file.content_type)
         except StorageError as exc:
-            logger.error("Image upload failed for '%s': %s", unique_filename, exc)
+            logger.error(f"Image upload failed for '{unique_filename}': {exc}")
             return JSONResponse(
                 status_code=500,
                 content={"error": "Failed to store the image. Please try again later."},

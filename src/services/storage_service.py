@@ -146,7 +146,7 @@ async def upload_image_bytes(
                 **extra_args,
             )
         except (BotoCoreError, ClientError) as exc:
-            logger.exception("Failed to upload image '%s' to S3: %s", filename, exc)
+            logger.exception(f"Failed to upload image '{filename}' to S3: {exc}")
             raise StorageError("Upload to object storage failed.") from exc
         return StoredImage(
             filename=filename,
@@ -162,7 +162,7 @@ async def upload_image_bytes(
             await file_obj.write(data)
         stat = file_path.stat()
     except OSError as exc:
-        logger.exception("Failed to write image '%s' locally: %s", filename, exc)
+        logger.exception(f"Failed to write image '{filename}' locally: {exc}")
         raise StorageError("Local upload failed.") from exc
     return StoredImage(
         filename=filename,
@@ -200,7 +200,7 @@ async def list_images() -> List[Dict[str, Any]]:
                         }
                     )
         except (BotoCoreError, ClientError) as exc:
-            logger.exception("Failed to list images from S3: %s", exc)
+            logger.exception(f"Failed to list images from S3: {exc}")
             raise StorageError("Listing images from object storage failed.") from exc
         
         items.sort(key=lambda item: item["modified"], reverse=True)
@@ -216,7 +216,7 @@ async def list_images() -> List[Dict[str, Any]]:
             try:
                 stat = entry.stat()
             except OSError as exc:
-                logger.warning("Failed to stat image %s: %s", entry, exc)
+                logger.warning(f"Failed to stat image {entry}: {exc}")
                 continue
             items.append(
                 {
@@ -246,18 +246,16 @@ async def download_image_bytes(filename: str) -> bytes:
             if error_code in ("404", "NoSuchKey", "NotFound"):
                 s3_missing = True
                 logger.warning(
-                    "Image '%s' missing in S3 (code=%s); checking local storage.",
-                    filename,
-                    error_code or "unknown",
+                    f"Image '{filename}' missing in S3 (code={error_code or 'unknown'}); checking local storage."
                 )
             else:
-                logger.exception("Failed to download image '%s' from S3: %s", filename, exc)
+                logger.exception(f"Failed to download image '{filename}' from S3: {exc}")
                 raise StorageError("Download from object storage failed.") from exc
         except BotoCoreError as exc:
-            logger.exception("Failed to download image '%s' from S3: %s", filename, exc)
+            logger.exception(f"Failed to download image '{filename}' from S3: {exc}")
             raise StorageError("Download from object storage failed.") from exc
         except StorageError as exc:
-            logger.exception("Failed to download image '%s' from S3: %s", filename, exc)
+            logger.exception(f"Failed to download image '{filename}' from S3: {exc}")
             raise
         else:
             return data
@@ -265,16 +263,16 @@ async def download_image_bytes(filename: str) -> bytes:
     file_path = Path(UPLOAD_DIR) / filename
     if not file_path.exists():
         if s3_missing:
-            logger.warning("Image '%s' not found in S3 or local storage.", filename)
+            logger.warning(f"Image '{filename}' not found in S3 or local storage.")
         else:
-            logger.warning("Image '%s' not found in local storage.", filename)
+            logger.warning(f"Image '{filename}' not found in local storage.")
         raise StorageError("Image not found.")
     
     try:
         async with aiofiles.open(file_path, "rb") as file_obj:
             return await file_obj.read()
     except OSError as exc:
-        logger.exception("Failed to read local image '%s': %s", filename, exc)
+        logger.exception(f"Failed to read local image '{filename}': {exc}")
         raise StorageError("Local image read failed.") from exc
 
 
@@ -285,7 +283,7 @@ async def delete_image(filename: str) -> None:
         try:
             await client.delete_object(Bucket=S3_BUCKET, Key=_object_key(filename))
         except (BotoCoreError, ClientError) as exc:
-            logger.exception("Failed to delete image '%s' from S3: %s", filename, exc)
+            logger.exception(f"Failed to delete image '{filename}' from S3: {exc}")
             raise StorageError("Delete from object storage failed.") from exc
         return
 
@@ -294,7 +292,7 @@ async def delete_image(filename: str) -> None:
         if file_path.exists():
             file_path.unlink()
     except OSError as exc:
-        logger.exception("Failed to delete local image '%s': %s", filename, exc)
+        logger.exception(f"Failed to delete local image '{filename}': {exc}")
         raise StorageError("Local delete failed.") from exc
 
 
@@ -310,14 +308,12 @@ async def image_exists(filename: str) -> bool:
             if error_code in ("404", "NoSuchKey", "NotFound"):
                 return False
             logger.exception(
-                "Failed to check existence for image '%s' in S3: %s", filename, exc
+                f"Failed to check existence for image '{filename}' in S3: {exc}"
             )
             raise StorageError("Image existence check failed.") from exc
         except BotoCoreError as exc:
             logger.exception(
-                "BotoCore error while checking image '%s' existence: %s",
-                filename,
-                exc,
+                f"BotoCore error while checking image '{filename}' existence: {exc}"
             )
             raise StorageError("Image existence check failed.") from exc
 

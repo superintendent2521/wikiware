@@ -89,7 +89,7 @@ class AnalyticsService:
             }
             await collection.insert_one(event)
         except Exception as exc:  # IGNORE W0718
-            logger.warning("Failed to record page view for %s: %s", page_title, exc)
+            logger.warning(f"Failed to record page view for {page_title}: {exc}")
 
     @staticmethod
     async def record_search(
@@ -120,7 +120,7 @@ class AnalyticsService:
             }
             await collection.insert_one(event)
         except Exception as exc:  # IGNORE W0718
-            logger.warning("Failed to record search query %r: %s", query, exc)
+            logger.warning(f"Failed to record search query {query!r}: {exc}")
 
     @staticmethod
     async def get_admin_dashboard_metrics() -> Dict[str, Any]:
@@ -230,7 +230,7 @@ class AnalyticsService:
                 collection.aggregate(top_search_pipeline).to_list(None),
             )
         except Exception as exc:  # IGNORE W0718
-            logger.warning("Failed to aggregate analytics metrics: %s", exc)
+            logger.warning(f"Failed to aggregate analytics metrics: {exc}")
             return metrics
 
         # Build date buckets for the trailing 7 days

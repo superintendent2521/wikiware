@@ -22,7 +22,7 @@ async def serve_uploaded_image(filename: str):
     try:
         data = await download_image_bytes(filename)
     except StorageError as exc:
-        logger.warning("Failed to retrieve image '%s': %s", filename, exc)
+        logger.warning(f"Failed to retrieve image '{filename}': {exc}")
         raise HTTPException(status_code=404, detail="Image not found") from exc
 
     media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"

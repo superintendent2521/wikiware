@@ -317,7 +317,9 @@ class PageService:
     ) -> List[Dict[str, Any]]:
         try:
             if not db_instance.is_connected:
-                logger.warning("Database not connected - cannot search pages with query: %s", query)
+                logger.warning(
+                    f"Database not connected - cannot search pages with query: {query}"
+                )
                 return []
 
             pages_collection = get_pages_collection()
@@ -341,7 +343,9 @@ class PageService:
                 )
                 pages = await cursor.to_list(limit)
             except OperationFailure as op_err:
-                logger.warning("Text search unavailable, falling back to regex search: %s", op_err)
+                logger.warning(
+                    f"Text search unavailable, falling back to regex search: {op_err}"
+                )
                 import re
                 safe = re.escape(query)
                 cursor = (
@@ -369,7 +373,9 @@ class PageService:
             return pages
 
         except Exception as e:
-            logger.error("Error searching pages with query %r on branch %r: %s", query, branch, e)
+            logger.error(
+                f"Error searching pages with query {query!r} on branch {branch!r}: {e}"
+            )
             return []
 
 
@@ -498,16 +504,13 @@ class PageService:
         try:
             if old_title == new_title:
                 logger.info(
-                    "Rename skipped because the old and new titles are identical: %s",
-                    old_title,
+                    f"Rename skipped because the old and new titles are identical: {old_title}"
                 )
                 return True, None
 
             if not db_instance.is_connected:
                 logger.error(
-                    "Database not connected - cannot rename page: %s to %s",
-                    old_title,
-                    new_title,
+                    f"Database not connected - cannot rename page: {old_title} to {new_title}"
                 )
                 return False, "offline"
 
@@ -523,16 +526,14 @@ class PageService:
             existing_page = await pages_collection.find_one({"title": old_title})
             if existing_page is None:
                 logger.warning(
-                    "Cannot rename page '%s' because it was not found", old_title
+                    f"Cannot rename page '{old_title}' because it was not found"
                 )
                 return False, "not_found"
 
             conflict_page = await pages_collection.find_one({"title": new_title})
             if conflict_page is not None:
                 logger.warning(
-                    "Cannot rename page '%s' to '%s' because the target title exists",
-                    old_title,
-                    new_title,
+                    f"Cannot rename page '{old_title}' to '{new_title}' because the target title exists"
                 )
                 return False, "conflict"
 
@@ -544,8 +545,7 @@ class PageService:
 
             if page_update_result.matched_count == 0:
                 logger.error(
-                    "Rename failed because no page documents matched '%s' despite prior lookup",
-                    old_title,
+                    f"Rename failed because no page documents matched '{old_title}' despite prior lookup"
                 )
                 return False, "not_found"
 
@@ -579,10 +579,10 @@ class PageService:
                         },
                     )
 
-            logger.info("Page renamed from %s to %s", old_title, new_title)
+            logger.info(f"Page renamed from {old_title} to {new_title}")
             return True, None
         except Exception as e:
             logger.error(
-                "Error renaming page %s to %s: %s", old_title, new_title, str(e)
+                f"Error renaming page {old_title} to {new_title}: {str(e)}"
             )
             return False, "error"

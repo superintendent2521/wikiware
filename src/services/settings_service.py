@@ -55,8 +55,7 @@ class SettingsService:
         level = level.lower().strip()
         if level not in _ALLOWED_LEVELS:
             logger.warning(
-                "Attempted to set unsupported banner level '%s'; defaulting to 'info'",
-                level,
+                f"Attempted to set unsupported banner level '{level}'; defaulting to 'info'"
             )
             return "info"
         return level
@@ -112,7 +111,7 @@ class SettingsService:
         )
 
         cls._banner_cache = Banner(**payload)
-        logger.info("Updated global banner; active=%s", cls._banner_cache.is_active)
+        logger.info(f"Updated global banner; active={cls._banner_cache.is_active}")
         return True
 
     @classmethod
@@ -174,7 +173,7 @@ class SettingsService:
         )
 
         cls._feature_flags_cache = FeatureFlags(**payload)
-        logger.info("Updated feature flags: %s", cls._feature_flags_cache)
+        logger.info(f"Updated feature flags: {cls._feature_flags_cache}")
         return True
 
 

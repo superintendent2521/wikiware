@@ -760,12 +760,8 @@ async def save_page(
                 became_protected = edit_permission != EDIT_PERMISSION_EVERYBODY
                 if became_protected and (permission_changed or allowed_users_changed):
                     logger.info(
-                        "Page protection updated for '%s' on branch '%s' by admin %s: mode=%s allowed_users=%s",
-                        title,
-                        branch,
-                        author,
-                        edit_permission,
-                        normalized_current,
+                        f"Page protection updated for '{title}' on branch '{branch}' "
+                        f"by admin {author}: mode={edit_permission} allowed_users={normalized_current}"
                     )
 
             redirect_url = _build_page_redirect_url(request, title, branch)
@@ -839,9 +835,7 @@ async def rename_page(
 
     except CsrfProtectError as e:
         logger.warning(
-            "CSRF validation failed while renaming page %s: %s",
-            title,
-            str(e),
+            f"CSRF validation failed while renaming page {title}: {str(e)}",
         )
         fallback = request.url_for("edit_page", title=title)
         fallback = fallback.include_query_params(rename_status="csrf")

@@ -79,10 +79,8 @@ async def get_history_versions(title: str, branch: str = "main", limit: int = 10
         entries = _build_version_entries(versions_raw)
     except Exception as exc:
         logger.error(
-            "Database error while fetching history for %s (branch: %s): %s",
-            title,
-            normalized_branch,
-            exc,
+            f"Database error while fetching history for {title} "
+            f"(branch: {normalized_branch}): {exc}"
         )
         raise HTTPException(status_code=500, detail="Failed to fetch history data")
 

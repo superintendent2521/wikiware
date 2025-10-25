@@ -10,5 +10,5 @@ async def _list_images() -> List[Dict]:
     try:
         return await storage_list_images()
     except StorageError as exc:
-        logger.error("Failed to list images from storage: %s", exc)
+        logger.error(f"Failed to list images from storage: {exc}")
         return []

@@ -87,8 +87,7 @@ class UserService:
         try:
             if not db_instance.is_connected:
                 logger.warning(
-                    "Database not connected - cannot list favorites for user: %s",
-                    username,
+                    f"Database not connected - cannot list favorites for user: {username}"
                 )
                 return None
 
@@ -144,9 +143,7 @@ class UserService:
             return normalized
         except Exception as e:
             logger.error(
-                "Error listing favorites for user %s: %s",
-                username,
-                str(e),
+                f"Error listing favorites for user {username}: {str(e)}",
             )
             return None
 
@@ -178,8 +175,7 @@ class UserService:
 
             if not db_instance.is_connected:
                 logger.warning(
-                    "Database not connected - cannot add favorite for user: %s",
-                    username,
+                    f"Database not connected - cannot add favorite for user: {username}"
                 )
                 return False
 
@@ -196,25 +192,17 @@ class UserService:
 
             if update_result.matched_count == 0:
                 logger.warning(
-                    "User not found while adding favorite: %s",
-                    username,
+                    f"User not found while adding favorite: {username}",
                 )
                 return False
 
             logger.info(
-                "Added favorite '%s' (branch: %s) for user '%s'",
-                title,
-                branch,
-                username,
+                f"Added favorite '{title}' (branch: {branch}) for user '{username}'",
             )
             return True
         except Exception as e:
             logger.error(
-                "Error adding favorite '%s' (branch: %s) for user %s: %s",
-                title,
-                branch,
-                username,
-                str(e),
+                f"Error adding favorite '{title}' (branch: {branch}) for user {username}: {str(e)}",
             )
             return False
 
@@ -246,8 +234,7 @@ class UserService:
 
             if not db_instance.is_connected:
                 logger.warning(
-                    "Database not connected - cannot remove favorite for user: %s",
-                    username,
+                    f"Database not connected - cannot remove favorite for user: {username}"
                 )
                 return False
 
@@ -270,25 +257,17 @@ class UserService:
 
             if update_result.matched_count == 0:
                 logger.warning(
-                    "User not found while removing favorite: %s",
-                    username,
+                    f"User not found while removing favorite: {username}",
                 )
                 return False
 
             logger.info(
-                "Removed favorite '%s' (branch: %s) for user '%s'",
-                title,
-                branch,
-                username,
+                f"Removed favorite '{title}' (branch: {branch}) for user '{username}'",
             )
             return True
         except Exception as e:
             logger.error(
-                "Error removing favorite '%s' (branch: %s) for user %s: %s",
-                title,
-                branch,
-                username,
-                str(e),
+                f"Error removing favorite '{title}' (branch: {branch}) for user {username}: {str(e)}",
             )
             return False
 

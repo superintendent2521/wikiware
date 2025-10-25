@@ -102,8 +102,7 @@ async def create_branch(
             request.state.feature_flags = feature_flags
         if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
             logger.info(
-                "Branch creation blocked for user '%s' because page editing is disabled",
-                user.get("username"),
+                f"Branch creation blocked for user '{user.get('username')}' because page editing is disabled"
             )
             return JSONResponse(
                 status_code=403,

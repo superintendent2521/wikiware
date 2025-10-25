@@ -70,9 +70,8 @@ async def add_favorite(
     page = await PageService.get_page(normalized_title, normalized_branch)
     if page is None:
         logger.info(
-            "Favorite add skipped because page '%s' (branch: %s) was not found",
-            normalized_title,
-            normalized_branch,
+            f"Favorite add skipped because page '{normalized_title}' "
+            f"(branch: {normalized_branch}) was not found"
         )
         raise HTTPException(status_code=404, detail="Page not found")
 
@@ -83,10 +82,8 @@ async def add_favorite(
         raise HTTPException(status_code=500, detail="Failed to update favorites")
 
     logger.info(
-        "User '%s' favorited page '%s' on branch '%s'",
-        user["username"],
-        normalized_title,
-        normalized_branch,
+        f"User '{user['username']}' favorited page '{normalized_title}' "
+        f"on branch '{normalized_branch}'"
     )
     response = await _favorites_response(user["username"])
     response["status"] = "favorited"
@@ -115,10 +112,8 @@ async def remove_favorite(
         raise HTTPException(status_code=500, detail="Failed to update favorites")
 
     logger.info(
-        "User '%s' removed favorite '%s' on branch '%s'",
-        user["username"],
-        normalized_title,
-        normalized_branch,
+        f"User '{user['username']}' removed favorite '{normalized_title}' "
+        f"on branch '{normalized_branch}'"
     )
     response = await _favorites_response(user["username"])
     response["status"] = "unfavorited"
