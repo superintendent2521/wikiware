@@ -5,7 +5,7 @@ Contains business logic for user operations.
 
 import secrets
 from datetime import timedelta
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List, Set
 from datetime import datetime, timezone
 from passlib.context import CryptContext
 from loguru import logger
@@ -74,6 +74,225 @@ class UserService:
             return None
 
     @staticmethod
+    async def list_favorites(username: str) -> Optional[List[Dict[str, str]]]:
+        """
+        Return the sanitized favorites list for a user.
+
+        Args:
+            username: Username whose favorites should be returned
+
+        Returns:
+            List of favorites as dictionaries with title/branch keys, or None if lookup failed
+        """
+        try:
+            if not db_instance.is_connected:
+                logger.warning(
+                    "Database not connected - cannot list favorites for user: %s",
+                    username,
+                )
+                return None
+
+            users_collection = get_users_collection()
+            if users_collection is None:
+                logger.error("Users collection not available")
+                return None
+
+            user_doc = await users_collection.find_one(
+                {"username": username}, {"favorites": 1, "_id": 0}
+            )
+            if user_doc is None:
+                logger.warning(f"User not found while listing favorites: {username}")
+                return None
+
+            raw_favorites = user_doc.get("favorites") or []
+            normalized: List[Dict[str, str]] = []
+            seen: Set[Tuple[str, str]] = set()
+            mutated = False
+
+            for entry in raw_favorites:
+                if isinstance(entry, dict):
+                    title = entry.get("title")
+                    if not title:
+                        mutated = True
+                        continue
+                    branch = (entry.get("branch") or "main").strip() or "main"
+                    key = (title, branch)
+                    if key in seen:
+                        mutated = True
+                        continue
+                    if branch != entry.get("branch"):
+                        mutated = True
+                    seen.add(key)
+                    normalized.append({"title": title, "branch": branch})
+                elif isinstance(entry, str):
+                    key = (entry, "main")
+                    if key in seen:
+                        mutated = True
+                        continue
+                    seen.add(key)
+                    normalized.append({"title": entry, "branch": "main"})
+                    mutated = True
+                else:
+                    mutated = True
+
+            if mutated:
+                await users_collection.update_one(
+                    {"username": username},
+                    {"$set": {"favorites": normalized}},
+                )
+
+            return normalized
+        except Exception as e:
+            logger.error(
+                "Error listing favorites for user %s: %s",
+                username,
+                str(e),
+            )
+            return None
+
+    @staticmethod
+    async def add_favorite(
+        username: str, title: str, branch: str = "main"
+    ) -> bool:
+        """
+        Add a favorite page for the specified user.
+
+        Args:
+            username: Username to update
+            title: Page title to favorite
+            branch: Branch name for the page
+
+        Returns:
+            True if the operation succeeded or favorite already exists, False otherwise
+        """
+        try:
+            favorites = await UserService.list_favorites(username)
+            if favorites is None:
+                return False
+
+            if any(
+                fav["title"] == title and fav["branch"] == branch
+                for fav in favorites
+            ):
+                return True
+
+            if not db_instance.is_connected:
+                logger.warning(
+                    "Database not connected - cannot add favorite for user: %s",
+                    username,
+                )
+                return False
+
+            users_collection = get_users_collection()
+            if users_collection is None:
+                logger.error("Users collection not available")
+                return False
+
+            favorite_entry = {"title": title, "branch": branch}
+            update_result = await users_collection.update_one(
+                {"username": username},
+                {"$addToSet": {"favorites": favorite_entry}},
+            )
+
+            if update_result.matched_count == 0:
+                logger.warning(
+                    "User not found while adding favorite: %s",
+                    username,
+                )
+                return False
+
+            logger.info(
+                "Added favorite '%s' (branch: %s) for user '%s'",
+                title,
+                branch,
+                username,
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "Error adding favorite '%s' (branch: %s) for user %s: %s",
+                title,
+                branch,
+                username,
+                str(e),
+            )
+            return False
+
+    @staticmethod
+    async def remove_favorite(
+        username: str, title: str, branch: str = "main"
+    ) -> bool:
+        """
+        Remove a favorite page for the specified user.
+
+        Args:
+            username: Username to update
+            title: Page title to remove
+            branch: Branch name for the page
+
+        Returns:
+            True if the operation succeeded or favorite was already missing, False otherwise
+        """
+        try:
+            favorites = await UserService.list_favorites(username)
+            if favorites is None:
+                return False
+
+            if not any(
+                fav["title"] == title and fav["branch"] == branch
+                for fav in favorites
+            ):
+                return True
+
+            if not db_instance.is_connected:
+                logger.warning(
+                    "Database not connected - cannot remove favorite for user: %s",
+                    username,
+                )
+                return False
+
+            users_collection = get_users_collection()
+            if users_collection is None:
+                logger.error("Users collection not available")
+                return False
+
+            favorite_entry = {"title": title, "branch": branch}
+            update_result = await users_collection.update_one(
+                {"username": username},
+                {"$pull": {"favorites": favorite_entry}},
+            )
+
+            # Remove legacy string-only entries if present
+            await users_collection.update_one(
+                {"username": username},
+                {"$pull": {"favorites": title}},
+            )
+
+            if update_result.matched_count == 0:
+                logger.warning(
+                    "User not found while removing favorite: %s",
+                    username,
+                )
+                return False
+
+            logger.info(
+                "Removed favorite '%s' (branch: %s) for user '%s'",
+                title,
+                branch,
+                username,
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "Error removing favorite '%s' (branch: %s) for user %s: %s",
+                title,
+                branch,
+                username,
+                str(e),
+            )
+            return False
+
+    @staticmethod
     async def create_user(user_data: UserRegistration) -> Optional[Dict[str, Any]]:
         """
         Create a new user.
@@ -110,6 +329,7 @@ class UserService:
                 "created_at": datetime.now(timezone.utc),
                 "is_active": True,
                 "is_admin": False,
+                "favorites": [],
             }
 
             # Insert user
