@@ -31,9 +31,6 @@
                         <span class="user-info">Welcome, {{ user.username }}! <i class="fas fa-chevron-down" aria-hidden="true"></i></span>
                         <div class="dropdown-menu">
                             <a href="/user/{{ user.username }}">My Page</a>
-                            {% if feature_flags.page_editing_enabled or user.is_admin %}
-                            <a href="/user/{{ user.username }}/edit">Edit My Page</a>
-                            {% endif %}
                             <a href="/account/password"><i class="fas fa-key"></i> Change Password</a>
                             <a href="/exports"><i class="fas fa-download"></i> Download Collections</a>
                             <a href="/favorites"><i class="fas fa-star"></i> Favorites</a>
