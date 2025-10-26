@@ -76,6 +76,24 @@ async def add_favorite(
         )
         raise HTTPException(status_code=404, detail="Page not found")
 
+    existing_favorites = await UserService.list_favorites(user["username"])
+    if existing_favorites is None:
+        raise HTTPException(status_code=500, detail="Failed to load favorites")
+
+    if any(
+        fav["title"] == normalized_title and fav["branch"] == normalized_branch
+        for fav in existing_favorites
+    ):
+        logger.info(
+            f"User '{user['username']}' attempted to re-favorite page "
+            f"'{normalized_title}' on branch '{normalized_branch}'"
+        )
+        return {
+            "favorites": existing_favorites,
+            "status": "already_favorited",
+            "message": "This page is already in your favorites.",
+        }
+
     success = await UserService.add_favorite(
         user["username"], normalized_title, normalized_branch
     )

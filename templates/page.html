@@ -80,6 +80,11 @@
                         <span class="history-menu__label"><i class="fas fa-file-pdf"></i> Download PDF</span>
                         <span class="history-menu__meta">Generate a PDF export</span>
                     </button>
+                    <div class="history-menu__divider"></div>
+                    <button type="button" class="history-menu__item history-menu__item--action" data-favorites-action="toggle-favorite" role="menuitem" data-is-favorited="false">
+                        <span class="history-menu__label"><i class="far fa-star"></i> <span class="favorites-text">Add to favorites</span></span>
+                        <span class="history-menu__meta">Save this page to your favorites</span>
+                    </button>
                 </div>
             </div>
             {% if can_edit_page %}
@@ -298,6 +303,11 @@
 .history-menu__view-all:focus {
     text-decoration: underline;
 }
+.history-menu__divider {
+    height: 1px;
+    background: var(--surface-border);
+    margin: 4px 0;
+}
 .download-pdf-button.is-busy {
     pointer-events: none;
 }
@@ -473,6 +483,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const historyMenu = historySelector.querySelector('.history-menu');
         const historyLink = historySelector.querySelector('.history-menu__item--link');
         const downloadAction = historySelector.querySelector('[data-history-action="download-pdf"]');
+        const favoritesAction = historySelector.querySelector('[data-favorites-action="toggle-favorite"]');
         const pageTitle = historySelector.getAttribute('data-history-title') || '';
         const pageBranch = historySelector.getAttribute('data-history-branch') || 'main';
         let historyMenuOpen = false;
@@ -623,6 +634,200 @@ document.addEventListener('DOMContentLoaded', function () {
                     downloadAction.innerHTML = originalHtml;
                 }
             });
+        }
+
+        // Favorites functionality
+        if (favoritesAction) {
+            const updateFavoriteUI = (isFavorited) => {
+                const icon = favoritesAction.querySelector('i');
+                const text = favoritesAction.querySelector('.favorites-text');
+                
+                if (isFavorited) {
+                    icon.classList.remove('far');
+                    icon.classList.add('fas');
+                    favoritesAction.classList.add('is-favorited');
+                    text.textContent = 'Remove from favorites';
+                } else {
+                    icon.classList.remove('fas');
+                    icon.classList.add('far');
+                    favoritesAction.classList.remove('is-favorited');
+                    text.textContent = 'Add to favorites';
+                }
+                
+                favoritesAction.setAttribute('data-is-favorited', isFavorited);
+            };
+
+            // Check if page is already favorited
+            const checkFavoriteStatus = async () => {
+                try {
+                    const response = await fetch('/api/favorites', {
+                        method: 'GET',
+                        credentials: 'include',
+                        headers: {
+                            'Accept': 'application/json',
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('Favorites response:', data); // Debug log
+                        const isFavorited = data.favorites && data.favorites.some(fav => 
+                            fav.title === pageTitle && fav.branch === pageBranch
+                        );
+                        console.log('Is favorited:', isFavorited); // Debug log
+                        updateFavoriteUI(isFavorited);
+                    } else {
+                        // Treat non-OK responses (e.g., unauthenticated) as not favorited
+                        updateFavoriteUI(false);
+                    }
+                } catch (error) {
+                    console.error('Failed to check favorite status:', error);
+                    updateFavoriteUI(false); // Default to not favorited on error
+                }
+            };
+
+            // Toggle favorite status
+            favoritesAction.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeHistoryMenu();
+
+                const isCurrentlyFavorited = favoritesAction.getAttribute('data-is-favorited') === 'true';
+                const method = isCurrentlyFavorited ? 'DELETE' : 'POST';
+                const action = isCurrentlyFavorited ? 'remove' : 'add';
+
+                const originalHtml = favoritesAction.innerHTML;
+                favoritesAction.disabled = true;
+                favoritesAction.classList.add('is-busy');
+                favoritesAction.innerHTML = `<span class="history-menu__label"><i class="fas fa-spinner fa-spin"></i> ${action === 'add' ? 'Adding to favorites…' : 'Removing from favorites…'}</span>`;
+
+                let nextFavoriteState = null;
+                let toastMessage = null;
+                let toastType = 'success';
+                let errorMessage = null;
+
+                try {
+                    const response = await fetch(`/api/favorites/${encodeURIComponent(pageTitle)}?branch=${encodeURIComponent(pageBranch)}`, {
+                        method: method,
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+
+                    console.log('Response status:', response.status); // Debug log
+                    
+                    if (!response.ok) {
+                        throw new Error(`Request failed with status ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    console.log('Toggle response:', data); // Debug log
+
+                    const responseStatus = data.status;
+                    const recognizedStatuses = ['favorited', 'unfavorited', 'already_favorited'];
+                    const wasSuccessful = responseStatus && recognizedStatuses.includes(responseStatus);
+                    const isNowFavorited =
+                        responseStatus === 'favorited' || responseStatus === 'already_favorited';
+
+                    if (wasSuccessful) {
+                        nextFavoriteState = isNowFavorited;
+
+                        let message;
+                        if (responseStatus === 'already_favorited') {
+                            message = data.message || 'This page is already in your favorites.';
+                            toastType = 'info';
+                        } else {
+                            message = isNowFavorited
+                                ? 'Page added to favorites!'
+                                : 'Page removed from favorites!';
+                        }
+
+                        toastMessage = message;
+                    } else {
+                        // Fallback: check if the page is in the favorites list
+                        const isFavoritedInList = data.favorites && data.favorites.some(fav =>
+                            fav.title === pageTitle && fav.branch === pageBranch
+                        );
+                        nextFavoriteState = Boolean(isFavoritedInList);
+                        toastMessage = nextFavoriteState
+                            ? 'Page added to favorites!'
+                            : 'Page removed from favorites!';
+                    }
+
+                } catch (error) {
+                    console.error(`Failed to ${action} favorite:`, error);
+                    errorMessage = `Unable to ${action} this page to favorites. Please try again later.`;
+                } finally {
+                    favoritesAction.disabled = false;
+                    favoritesAction.classList.remove('is-busy');
+                    favoritesAction.innerHTML = originalHtml;
+
+                    if (nextFavoriteState !== null) {
+                        updateFavoriteUI(nextFavoriteState);
+                    } else {
+                        updateFavoriteUI(isCurrentlyFavorited);
+                    }
+
+                    if (toastMessage) {
+                        showToast(toastMessage, toastType);
+                    }
+
+                    if (errorMessage) {
+                        window.alert(errorMessage);
+                    }
+                }
+            });
+
+            // Check favorite status when menu opens
+            if (historyButton) {
+                historyButton.addEventListener('click', () => {
+                    if (!historyMenuOpen) {
+                        checkFavoriteStatus();
+                    }
+                });
+            }
+        }
+
+        // Toast notification helper
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            const backgroundColor =
+                type === 'success' ? '#4CAF50' :
+                type === 'info' ? '#2196F3' :
+                '#f44336';
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: ${backgroundColor};
+                color: white;
+                padding: 12px 24px;
+                border-radius: 4px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                z-index: 9999;
+                opacity: 0;
+                transition: opacity 0.3s ease-in-out;
+            `;
+            
+            document.body.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => {
+                toast.style.opacity = '1';
+            }, 10);
+            
+            // Remove after delay
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => {
+                    if (document.body.contains(toast)) {
+                        document.body.removeChild(toast);
+                    }
+                }, 300);
+            }, 2000);
         }
 
         document.addEventListener('click', (event) => {
