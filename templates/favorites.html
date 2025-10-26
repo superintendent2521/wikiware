@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Favorites - {{ config.NAME }}{% endblock %}
+
+{% block content %}
+<div class="container favorites-page">
+    <h2><i class="fas fa-star"></i> Your Favorites</h2>
+    <p>Quick access to the pages you've saved for later.</p>
+
+    {% if load_error %}
+    <div class="alert alert-error">
+        {{ load_error }}
+    </div>
+    {% elif favorites %}
+    <div class="history-list">
+        <table class="history-table favorites-table">
+            <thead>
+                <tr>
+                    <th>Page</th>
+                    <th>Branch</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for favorite in favorites %}
+                <tr>
+                    <td>
+                        <strong>{{ favorite.title }}</strong>
+                    </td>
+                    <td>
+                        {% if favorite.branch == 'main' %}
+                            Main
+                        {% else %}
+                            {{ favorite.branch }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="btn btn-small btn-primary" href="{{ favorite.url }}">
+                            <i class="fas fa-arrow-right"></i> View Page
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <p>You haven't added any favorites yet. Explore the wiki and use the star icon in the history menu to save pages you care about.</p>
+    </div>
+    <a class="btn btn-secondary" href="/"><i class="fas fa-compass"></i> Browse Pages</a>
+    {% endif %}
+</div>
+{% endblock %}

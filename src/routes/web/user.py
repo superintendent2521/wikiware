@@ -13,6 +13,7 @@ from loguru import logger
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.page_service import PageService
+from ...services.user_service import UserService
 from ...services.settings_service import FeatureFlags, SettingsService
 from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
@@ -66,6 +67,68 @@ def _build_user_page_redirect_url(request: Request, username: str, branch: str) 
     if branch != "main":
         target_url = target_url.include_query_params(branch=branch)
     return str(target_url)
+
+
+@router.get("/favorites", response_class=HTMLResponse)
+async def favorites_page(
+    request: Request,
+    response: Response,
+    csrf_protect: CsrfProtect = Depends(),
+):
+    """Display the authenticated user's favorite pages."""
+    user = await AuthMiddleware.require_auth(request)
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    csrf_protect.set_csrf_cookie(signed_token, response)
+
+    offline = not db_instance.is_connected
+    favorites = []
+    load_error = None
+
+    if offline:
+        load_error = "Favorites are unavailable while the database is offline."
+    else:
+        favorites_data = await UserService.list_favorites(user["username"])
+        if favorites_data is None:
+            load_error = (
+                "We couldn't load your favorites right now. Please try again later."
+            )
+        else:
+            for entry in favorites_data:
+                title = entry.get("title")
+                branch = (entry.get("branch") or "main").strip() or "main"
+                if not title:
+                    continue
+
+                try:
+                    page_url = request.url_for("get_page", title=title)
+                except Exception:
+                    logger.warning(f"Unable to build page URL for favorite '{title}'")
+                    continue
+
+                if branch != "main" and is_safe_branch_parameter(branch):
+                    page_url = page_url.include_query_params(branch=branch)
+
+                favorites.append(
+                    {
+                        "title": title,
+                        "branch": branch,
+                        "url": str(page_url),
+                    }
+                )
+
+    template = templates.TemplateResponse(
+        "favorites.html",
+        {
+            "request": request,
+            "user": user,
+            "favorites": favorites,
+            "csrf_token": csrf_token,
+            "offline": offline,
+            "load_error": load_error,
+        },
+    )
+    csrf_protect.set_csrf_cookie(signed_token, template)
+    return template
 
 
 @router.get("/user/{username}", response_class=HTMLResponse)
