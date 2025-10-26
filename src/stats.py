@@ -91,7 +91,7 @@ async def get_total_characters():
             else "never cached"
         )
         logger.info(
-            f"Cache is old or uninitialized, Updating! Time delta is {time_delta}"
+            f"CHAR: Cache is old or uninitialized, Updating! Time delta is {time_delta}"
         )
 
     try:
@@ -163,7 +163,7 @@ async def get_total_images():
             else "never cached"
         )
         logger.info(
-            f"Cache is old or uninitialized, Updating! Time delta is {time_delta}"
+            f"IMG: Cache is old or uninitialized, Updating! Time delta is {time_delta}"
         )
     try: 
         image_hashes_collection = get_image_hashes_collection()
