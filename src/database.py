@@ -72,7 +72,7 @@ def _timed_wrapper(original_method, method_name, collection_name):
         try:
             result = original_method(*args, **kwargs)
             duration = time.monotonic() - start_time
-            if config.DB_QUERY_LOGGING_ENABLED:
+            if config.DB_QUERY_LOGGING_ENABLED and duration >= DB_OPERATION_LOG_THRESHOLD_MS:
                 logger.info(f"DB {method_name} on {collection_name} took {duration:.4f}s")
             return result
         except Exception as e:
