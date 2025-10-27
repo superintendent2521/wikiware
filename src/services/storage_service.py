@@ -6,6 +6,7 @@ Supports S3-compatible backends with a local fallback for development.
 from __future__ import annotations
 
 import time
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
@@ -48,6 +49,7 @@ class StoredImage:
 
 # Global S3 client and lock for thread-safe initialization
 _S3_CLIENT = None
+_S3_EXIT_STACK: AsyncExitStack | None = None
 _S3_LOCK = asyncio.Lock()
 
 
@@ -66,19 +68,47 @@ def _normalise_endpoint(endpoint: str) -> str:
     return f"https://{endpoint.rstrip('/')}"
 
 
+async def _reset_s3_client() -> None:
+    """Close and clear the cached S3 client."""
+    global _S3_CLIENT, _S3_EXIT_STACK
+    stack = _S3_EXIT_STACK
+    _S3_CLIENT = None
+    _S3_EXIT_STACK = None
+    if stack is not None:
+        try:
+            await stack.aclose()
+        except Exception as exc:
+            logger.warning(f"Failed to close S3 client cleanly: {exc}")
+
+
+async def _handle_client_attribute_error(operation: str, exc: AttributeError) -> None:
+    """Translate attribute errors into storage errors and reset the client."""
+    await _reset_s3_client()
+    logger.exception(
+        f"S3 client missing expected attribute during {operation}: {exc}"
+    )
+    raise StorageError("Object storage client is not usable.") from exc
+
+
 async def _get_s3_client():
     """Get or create async S3 client with connection pooling."""
-    global _S3_CLIENT
+    global _S3_CLIENT, _S3_EXIT_STACK
     if _S3_CLIENT is not None:
-        return _S3_CLIENT
+        if hasattr(_S3_CLIENT, "get_object"):
+            return _S3_CLIENT
+        logger.warning("Cached S3 client missing methods; resetting cached client.")
+        await _reset_s3_client()
     
     if not _s3_enabled():
         raise StorageError("S3 client requested but storage is not configured.")
     
     async with _S3_LOCK:
         if _S3_CLIENT is not None:
-            return _S3_CLIENT
-            
+            if hasattr(_S3_CLIENT, "get_object"):
+                return _S3_CLIENT
+            logger.warning("Cached S3 client missing methods after lock; resetting.")
+            await _reset_s3_client()
+        
         # Configure S3 client with connection pooling
         config_kwargs: Dict[str, Any] = {
             "signature_version": "s3v4",
@@ -95,13 +125,27 @@ async def _get_s3_client():
         from aiobotocore.session import get_session
         session = get_session()
         
-        _S3_CLIENT = session.create_client(
-            "s3",
-            endpoint_url=_normalise_endpoint(S3_ENDPOINT),
-            aws_access_key_id=S3_ACCESS_KEY,
-            aws_secret_access_key=S3_SECRET_KEY,
-            config=Config(**config_kwargs),
-        )
+        stack = AsyncExitStack()
+        try:
+            client_cm = session.create_client(
+                "s3",
+                endpoint_url=_normalise_endpoint(S3_ENDPOINT),
+                aws_access_key_id=S3_ACCESS_KEY,
+                aws_secret_access_key=S3_SECRET_KEY,
+                config=Config(**config_kwargs),
+            )
+            client = await stack.enter_async_context(client_cm)
+        except Exception:
+            await stack.aclose()
+            raise
+        
+        if not hasattr(client, "get_object"):
+            await stack.aclose()
+            logger.error("Created S3 client missing required methods; aborting.")
+            raise StorageError("Failed to initialise object storage client.")
+        
+        _S3_CLIENT = client
+        _S3_EXIT_STACK = stack
         return _S3_CLIENT
 
 
@@ -145,6 +189,8 @@ async def upload_image_bytes(
                 Body=data,
                 **extra_args,
             )
+        except AttributeError as exc:
+            await _handle_client_attribute_error("upload", exc)
         except (BotoCoreError, ClientError) as exc:
             logger.exception(f"Failed to upload image '{filename}' to S3: {exc}")
             raise StorageError("Upload to object storage failed.") from exc
@@ -199,6 +245,8 @@ async def list_images() -> List[Dict[str, Any]]:
                             "modified": modified_ts,
                         }
                     )
+        except AttributeError as exc:
+            await _handle_client_attribute_error("list images", exc)
         except (BotoCoreError, ClientError) as exc:
             logger.exception(f"Failed to list images from S3: {exc}")
             raise StorageError("Listing images from object storage failed.") from exc
@@ -241,6 +289,8 @@ async def download_image_bytes(filename: str) -> bytes:
             if body is None:
                 raise StorageError("Empty response body from object storage.")
             data = await body.read()
+        except AttributeError as exc:
+            await _handle_client_attribute_error("download", exc)
         except ClientError as exc:
             error_code = exc.response.get("Error", {}).get("Code", "")
             if error_code in ("404", "NoSuchKey", "NotFound"):
@@ -282,6 +332,8 @@ async def delete_image(filename: str) -> None:
         client = await _get_s3_client()
         try:
             await client.delete_object(Bucket=S3_BUCKET, Key=_object_key(filename))
+        except AttributeError as exc:
+            await _handle_client_attribute_error("delete", exc)
         except (BotoCoreError, ClientError) as exc:
             logger.exception(f"Failed to delete image '{filename}' from S3: {exc}")
             raise StorageError("Delete from object storage failed.") from exc
@@ -303,6 +355,8 @@ async def image_exists(filename: str) -> bool:
         try:
             await client.head_object(Bucket=S3_BUCKET, Key=_object_key(filename))
             return True
+        except AttributeError as exc:
+            await _handle_client_attribute_error("existence check", exc)
         except ClientError as exc:
             error_code = exc.response.get("Error", {}).get("Code", "")
             if error_code in ("404", "NoSuchKey", "NotFound"):
