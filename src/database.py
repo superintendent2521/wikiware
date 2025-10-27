@@ -57,7 +57,7 @@ def _timed_wrapper(original_method, method_name, collection_name):
             try:
                 result = await original_method(*args, **kwargs)
                 duration = time.monotonic() - start_time
-                if config.DB_QUERY_LOGGING_ENABLED:
+                if config.DB_QUERY_LOGGING_ENABLED and duration >= DB_OPERATION_LOG_THRESHOLD_MS:
                     logger.info(f"DB {method_name} on {collection_name} took {duration:.4f}s")
                 return result
             except Exception as e:
@@ -95,6 +95,7 @@ class Database:
         self._connection_lock = asyncio.Lock()
         self._max_pool_size = MONGODB_MAX_CONNECTIONS
         self._min_pool_size = MONGODB_MIN_CONNECTIONS
+        self._wrapped_collections: Dict[str, AsyncIOMotorCollection] = {}
         # List of methods to wrap with timing
         self._methods_to_wrap = [
             'find_one', 'insert_one', 'update_one', 'delete_one',
@@ -108,6 +109,7 @@ class Database:
         self.client = None
         self.db = None
         self.is_connected = False
+        self._wrapped_collections.clear()
 
     async def connect(self, max_retries: Optional[int] = 10) -> None:
         """Establish connection to MongoDB with connection pooling and retry logic."""
@@ -195,13 +197,20 @@ class Database:
     def get_collection(self, name: str) -> Optional[AsyncIOMotorCollection]: # pyright: ignore[reportInvalidTypeForm]
         """Get a collection by name if database is connected."""
         if self.is_connected and self.db is not None:
+            if name in self._wrapped_collections:
+                return self._wrapped_collections[name]
+
             collection = self.db[name]
-            # Wrap methods for timing
+            # Wrap methods for timing once per collection
             for method_name in self._methods_to_wrap:
                 if hasattr(collection, method_name):
                     original_method = getattr(collection, method_name)
+                    if getattr(original_method, "_wikiware_timed", False):
+                        continue
                     wrapped_method = _timed_wrapper(original_method, method_name, name)
+                    setattr(wrapped_method, "_wikiware_timed", True)
                     setattr(collection, method_name, wrapped_method)
+            self._wrapped_collections[name] = collection
             return collection
         return None
 
