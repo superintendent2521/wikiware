@@ -39,6 +39,8 @@ S3_PUBLIC_URL = ""  # Optional public CDN/base URL override
 LOG_DIR = "logs"
 LOG_RETENTION = "7 days"
 LOG_LEVEL = "INFO"
+DB_QUERY_LOGGING_ENABLED = False
+REQUEST_LOGGING_ENABLED = False
 
 # Name shown on all pages
 NAME = "Starship Wiki"
