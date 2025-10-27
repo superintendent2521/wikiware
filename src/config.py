@@ -36,9 +36,12 @@ S3_FORCE_PATH_STYLE = True
 S3_PUBLIC_URL = ""  # Optional public CDN/base URL override
 
 # Logging settings
+#UNUSED
 LOG_DIR = "logs"
 LOG_RETENTION = "7 days"
 LOG_LEVEL = "INFO"
+# USED!
+# DONT ACTIVATE IN PROD! IT SLOWS THINGS DOWN
 DB_QUERY_LOGGING_ENABLED = False
 REQUEST_LOGGING_ENABLED = False
 
