@@ -63,6 +63,15 @@ class SettingsService:
 
     _banner_cache: Banner = _DEFAULT_BANNER
     _feature_flags_cache: FeatureFlags = _DEFAULT_FEATURE_FLAGS
+    _CACHE_TTL = timedelta(minutes=5)
+    _banner_cache_fetched_at: Optional[datetime] = None
+    _feature_flags_cache_fetched_at: Optional[datetime] = None
+
+    @classmethod
+    def _cache_is_fresh(cls, fetched_at: Optional[datetime]) -> bool:
+        if fetched_at is None:
+            return False
+        return datetime.now(timezone.utc) - fetched_at < cls._CACHE_TTL
 
     @staticmethod
     def _normalize_level(level: Optional[str]) -> str:
@@ -100,9 +109,12 @@ class SettingsService:
         return None
 
     @classmethod
-    async def get_banner(cls) -> Banner:
+    async def get_banner(cls, *, force_refresh: bool = False) -> Banner:
         """Fetch the current banner details, using the cache if offline."""
         if not db_instance.is_connected:
+            return cls._banner_cache
+
+        if not force_refresh and cls._cache_is_fresh(cls._banner_cache_fetched_at):
             return cls._banner_cache
 
         settings_collection = db_instance.get_collection("settings")
@@ -112,6 +124,7 @@ class SettingsService:
         doc = await settings_collection.find_one({"_id": "global_banner"})
         if not doc:
             cls._banner_cache = _DEFAULT_BANNER
+            cls._banner_cache_fetched_at = datetime.now(timezone.utc)
             return cls._banner_cache
 
         expires_at = cls._parse_expires_at(doc.get("expires_at"))
@@ -146,6 +159,7 @@ class SettingsService:
             duration_hours=duration_hours,
         )
         cls._banner_cache = banner
+        cls._banner_cache_fetched_at = datetime.now(timezone.utc)
         return banner
 
     @classmethod
@@ -213,6 +227,7 @@ class SettingsService:
             expires_at=expires_at,
             duration_hours=duration_hours_value,
         )
+        cls._banner_cache_fetched_at = datetime.now(timezone.utc)
         logger.info(f"Updated global banner; active={cls._banner_cache.is_active}")
         return True
 
@@ -227,9 +242,12 @@ class SettingsService:
         )
 
     @classmethod
-    async def get_feature_flags(cls) -> FeatureFlags:
+    async def get_feature_flags(cls, *, force_refresh: bool = False) -> FeatureFlags:
         """Return the current set of feature toggles, cached when offline."""
         if not db_instance.is_connected:
+            return cls._feature_flags_cache
+
+        if not force_refresh and cls._cache_is_fresh(cls._feature_flags_cache_fetched_at):
             return cls._feature_flags_cache
 
         settings_collection = db_instance.get_collection("settings")
@@ -239,6 +257,7 @@ class SettingsService:
         doc = await settings_collection.find_one({"_id": "feature_flags"})
         if not doc:
             cls._feature_flags_cache = _DEFAULT_FEATURE_FLAGS
+            cls._feature_flags_cache_fetched_at = datetime.now(timezone.utc)
             return cls._feature_flags_cache
 
         flags = FeatureFlags(
@@ -247,6 +266,7 @@ class SettingsService:
             image_upload_enabled=doc.get("image_upload_enabled", True),
         )
         cls._feature_flags_cache = flags
+        cls._feature_flags_cache_fetched_at = datetime.now(timezone.utc)
         return flags
 
     @classmethod
@@ -280,6 +300,7 @@ class SettingsService:
         )
 
         cls._feature_flags_cache = FeatureFlags(**payload)
+        cls._feature_flags_cache_fetched_at = datetime.now(timezone.utc)
         logger.info(f"Updated feature flags: {cls._feature_flags_cache}")
         return True
 
