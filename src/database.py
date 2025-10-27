@@ -1,13 +1,17 @@
 """Database connection and management for MongoDB."""
 
 import asyncio
+import inspect
 import os
+import time
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from loguru import logger
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorDatabase
 from pymongo.errors import ServerSelectionTimeoutError
+
+from . import config
 
 load_dotenv()
 
@@ -18,6 +22,7 @@ MONGODB_MIN_CONNECTIONS = int(os.getenv("MONGODB_MIN_CONNECTIONS", "10"))
 MONGODB_MAX_IDLE_TIME_MS = int(os.getenv("MONGODB_MAX_IDLE_TIME_MS", "30000"))
 MONGODB_SERVER_SELECTION_TIMEOUT_MS = int(os.getenv("MONGODB_SERVER_SELECTION_TIMEOUT_MS", "5000"))
 MONGODB_SOCKET_TIMEOUT_MS = int(os.getenv("MONGODB_SOCKET_TIMEOUT_MS", "30000"))
+DB_OPERATION_LOG_THRESHOLD_MS = float(os.getenv("DB_OPERATION_LOG_THRESHOLD_MS", "100")) / 1000  # Convert to seconds
 
 IndexKey = str
 IndexSpec = tuple[IndexKey, Dict[str, Any]]
@@ -44,6 +49,40 @@ INDEX_CONFIGS: Dict[str, List[IndexSpec]] = {
 }
 
 
+def _timed_wrapper(original_method, method_name, collection_name):
+    """Wrap collection methods with timing logs while preserving their sync/async nature."""
+    if inspect.iscoroutinefunction(original_method):
+        async def timed_method(*args, **kwargs):
+            start_time = time.monotonic()
+            try:
+                result = await original_method(*args, **kwargs)
+                duration = time.monotonic() - start_time
+                if config.DB_QUERY_LOGGING_ENABLED and duration >= DB_OPERATION_LOG_THRESHOLD_MS:
+                    logger.info(f"DB {method_name} on {collection_name} took {duration:.4f}s")
+                return result
+            except Exception as e:
+                duration = time.monotonic() - start_time
+                logger.error(f"DB {method_name} on {collection_name} failed after {duration:.4f}s: {e}")
+                raise
+
+        return timed_method
+
+    def timed_method(*args, **kwargs):
+        start_time = time.monotonic()
+        try:
+            result = original_method(*args, **kwargs)
+            duration = time.monotonic() - start_time
+            if config.DB_QUERY_LOGGING_ENABLED and duration >= DB_OPERATION_LOG_THRESHOLD_MS:
+                logger.info(f"DB {method_name} on {collection_name} took {duration:.4f}s")
+            return result
+        except Exception as e:
+            duration = time.monotonic() - start_time
+            logger.error(f"DB {method_name} on {collection_name} failed after {duration:.4f}s: {e}")
+            raise
+
+    return timed_method
+
+
 class Database:
     """Manages MongoDB connection and provides access to collections."""
 
@@ -56,6 +95,12 @@ class Database:
         self._connection_lock = asyncio.Lock()
         self._max_pool_size = MONGODB_MAX_CONNECTIONS
         self._min_pool_size = MONGODB_MIN_CONNECTIONS
+        self._wrapped_collections: Dict[str, AsyncIOMotorCollection] = {}
+        # List of methods to wrap with timing
+        self._methods_to_wrap = [
+            'find_one', 'insert_one', 'update_one', 'delete_one',
+            'find', 'count_documents', 'aggregate', 'distinct'
+        ]
 
     def _reset_state(self) -> None:
         """Clear cached client/db handles and connection flags."""
@@ -64,6 +109,7 @@ class Database:
         self.client = None
         self.db = None
         self.is_connected = False
+        self._wrapped_collections.clear()
 
     async def connect(self, max_retries: Optional[int] = 10) -> None:
         """Establish connection to MongoDB with connection pooling and retry logic."""
@@ -151,7 +197,21 @@ class Database:
     def get_collection(self, name: str) -> Optional[AsyncIOMotorCollection]: # pyright: ignore[reportInvalidTypeForm]
         """Get a collection by name if database is connected."""
         if self.is_connected and self.db is not None:
-            return self.db[name]
+            if name in self._wrapped_collections:
+                return self._wrapped_collections[name]
+
+            collection = self.db[name]
+            # Wrap methods for timing once per collection
+            for method_name in self._methods_to_wrap:
+                if hasattr(collection, method_name):
+                    original_method = getattr(collection, method_name)
+                    if getattr(original_method, "_wikiware_timed", False):
+                        continue
+                    wrapped_method = _timed_wrapper(original_method, method_name, name)
+                    setattr(wrapped_method, "_wikiware_timed", True)
+                    setattr(collection, method_name, wrapped_method)
+            self._wrapped_collections[name] = collection
+            return collection
         return None
 
     async def get_pool_stats(self) -> Dict[str, Any]:

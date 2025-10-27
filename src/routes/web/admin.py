@@ -49,8 +49,8 @@ async def admin_panel(
     analytics = await AnalyticsService.get_admin_dashboard_metrics()
     # Get recent logs (last 5)
     recent_logs = await get_paginated_logs(1, 5)
-    banner = await SettingsService.get_banner()
-    feature_flags = await SettingsService.get_feature_flags()
+    banner = await SettingsService.get_banner(force_refresh=True)
+    feature_flags = await SettingsService.get_feature_flags(force_refresh=True)
     # CSRF token for templates (logout form in base.html)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     template = templates.TemplateResponse(

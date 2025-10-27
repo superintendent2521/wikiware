@@ -8,6 +8,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 from loguru import logger
 
+from .. import config
+
 
 class UserAgentMiddleware(BaseHTTPMiddleware):
     """Middleware to log user agent information for all requests."""
@@ -26,12 +28,13 @@ class UserAgentMiddleware(BaseHTTPMiddleware):
         method = request.method
         path = request.url.path
         
-        # Log the request with user agent
-        logger.info(
-            f"Request: {method} {path} | "
-            f"Client: {client_ip} | "
-            f"User-Agent: {user_agent}"
-        )
+        if config.REQUEST_LOGGING_ENABLED:
+            # Log the request with user agent
+            logger.info(
+                f"Request: {method} {path} | "
+                f"Client: {client_ip} | "
+                f"User-Agent: {user_agent}"
+            )
         
         # Process the request
         response = await call_next(request)

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 import os
 from loguru import logger
@@ -149,6 +150,8 @@ async def get_total_images():
     Returns:
         int: Total number of images
     """
+    global last_image_count, last_image_count_time
+
     # Check if we have a cached value that's still valid
     if (
         last_image_count_time is not None
@@ -189,12 +192,18 @@ async def get_stats():
         dict: Dictionary containing all statistics
     """
     user_edit_stats = await get_user_edit_stats()
+    total_edits, total_characters, total_pages, total_images = await asyncio.gather(
+        get_total_edits(),
+        get_total_characters(),
+        get_total_pages(),
+        get_total_images(),
+    )
 
     return {
-        "total_edits": await get_total_edits(),
-        "total_characters": await get_total_characters(),
-        "total_pages": await get_total_pages(),
-        "total_images": await get_total_images(),
+        "total_edits": total_edits,
+        "total_characters": total_characters,
+        "total_pages": total_pages,
+        "total_images": total_images,
         "last_updated": (
             last_character_count_time.strftime("%Y-%m-%d %H:%M:%S")
             if last_character_count_time
