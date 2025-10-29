@@ -18,7 +18,7 @@ router = APIRouter()
 
 
 
-@router.get("/api/logs", response_model=Dict[str, Any])
+@router.get("/logs", response_model=Dict[str, Any])
 async def get_logs(
     request: Request,
     page: int = 1,
