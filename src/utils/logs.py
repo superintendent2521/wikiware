@@ -21,7 +21,7 @@ async def get_paginated_logs(
     Args:
         page: Page number (1-indexed)
         limit: Number of items per page (max 50)
-        action_type: Filter by action type ("edit", "branch_create", or None for all)
+        action_type: Filter by action type ("edit", "branch_create", "page_create", or None for all)
 
     Returns:
         Dictionary containing:
@@ -53,9 +53,13 @@ async def get_paginated_logs(
 
         history_collection = get_history_collection()
         branches_collection = get_branches_collection()
+        system_logs_collection = db_instance.get_collection("system_logs")
 
-        if history_collection is None or branches_collection is None:
-            logger.error("Required collections not available")
+        if (
+            (action_type in (None, "edit") and history_collection is None)
+            or (action_type in (None, "branch_create") and branches_collection is None)
+        ):
+            logger.error("Required collections not available for requested logs")
             return {
                 "items": [],
                 "total": 0,
@@ -65,14 +69,27 @@ async def get_paginated_logs(
             }
 
         history_count = 0
-        if action_type == "edit" or action_type is None:
+        if history_collection is not None and (
+            action_type == "edit" or action_type is None
+        ):
             history_count = await history_collection.count_documents({})
 
         branch_count = 0
-        if action_type == "branch_create" or action_type is None:
+        if branches_collection is not None and (
+            action_type == "branch_create" or action_type is None
+        ):
             branch_count = await branches_collection.count_documents({})
 
-        total_items = history_count + branch_count
+        page_create_filter = {"action": "page_create"}
+        create_count = 0
+        if system_logs_collection is not None and (
+            action_type == "page_create" or action_type is None
+        ):
+            create_count = await system_logs_collection.count_documents(
+                page_create_filter
+            )
+
+        total_items = history_count + branch_count + create_count
 
         if total_items == 0:
             total_pages = 1
@@ -107,78 +124,108 @@ async def get_paginated_logs(
             current_page = page
 
         items = []
+        fetch_limit = total_items if bypass else offset + effective_limit
 
-        if action_type == "edit" or action_type is None:
-            history_cursor = history_collection.find().sort("updated_at", -1)
-            history_skip = 0 if bypass else offset
-            history_fetch_limit = history_count if bypass else effective_limit
-            history_items = []
+        if history_collection is not None and (
+            action_type == "edit" or action_type is None
+        ):
+            history_fetch_limit = (
+                history_count if bypass else min(history_count, fetch_limit)
+            )
             if history_fetch_limit > 0:
-                history_items = (
-                    await history_cursor.skip(history_skip)
-                    .limit(history_fetch_limit)
-                    .to_list(history_fetch_limit)
+                history_cursor = history_collection.find().sort("updated_at", -1)
+                history_items = await history_cursor.limit(history_fetch_limit).to_list(
+                    history_fetch_limit
                 )
-
-            for item in history_items:
-                log_author = item.get("edited_by") or item.get("author", "Anonymous")
-                items.append(
-                    {
-                        "type": "edit",
-                        "title": item["title"],
-                        "author": log_author,
-                        "branch": item["branch"],
-                        "timestamp": item["updated_at"],
-                        "action": "page_edit",
-                        "details": {
-                            "edited_by": log_author,
-                            "previous_author": item.get("author"),
-                            "content_length": (
-                                len(item.get("content", ""))
-                                if "content" in item
-                                else 0
-                            )
-                        },
-                    }
-                )
-
-        if action_type == "branch_create" or action_type is None:
-            needs_branches = bypass or len(items) < effective_limit
-            if needs_branches:
-                branches_cursor = branches_collection.find().sort("created_at", -1)
-                if bypass:
-                    remaining_limit = max(0, effective_limit - len(items))
-                    branches_offset = 0
-                else:
-                    remaining_limit = effective_limit - len(items)
-                    branches_offset = max(0, offset - len(items))
-
-                if remaining_limit > 0:
-                    branches_items = (
-                        await branches_cursor.skip(branches_offset)
-                        .limit(remaining_limit)
-                        .to_list(remaining_limit)
+                for item in history_items:
+                    log_author = item.get("edited_by") or item.get("author", "Anonymous")
+                    items.append(
+                        {
+                            "type": "edit",
+                            "title": item["title"],
+                            "author": log_author,
+                            "branch": item["branch"],
+                            "timestamp": item["updated_at"],
+                            "action": "page_edit",
+                            "details": {
+                                "edited_by": log_author,
+                                "previous_author": item.get("author"),
+                                "content_length": (
+                                    len(item.get("content", ""))
+                                    if "content" in item
+                                    else 0
+                                ),
+                            },
+                        }
                     )
 
-                    for item in branches_items:
-                        items.append(
-                            {
-                                "type": "branch_create",
-                                "title": item["page_title"],
-                                "author": "System",
-                                "branch": item["branch_name"],
-                                "timestamp": item["created_at"],
-                                "action": "branch_create",
-                                "details": {"source_branch": item["created_from"]},
-                            }
-                        )
+        if branches_collection is not None and (
+            action_type == "branch_create" or action_type is None
+        ):
+            branch_fetch_limit = (
+                branch_count if bypass else min(branch_count, fetch_limit)
+            )
+            if branch_fetch_limit > 0:
+                branches_cursor = branches_collection.find().sort("created_at", -1)
+                branches_items = await branches_cursor.limit(branch_fetch_limit).to_list(
+                    branch_fetch_limit
+                )
+                for item in branches_items:
+                    items.append(
+                        {
+                            "type": "branch_create",
+                            "title": item["page_title"],
+                            "author": "System",
+                            "branch": item["branch_name"],
+                            "timestamp": item["created_at"],
+                            "action": "branch_create",
+                            "details": {"source_branch": item["created_from"]},
+                        }
+                    )
+
+        if system_logs_collection is not None and (
+            action_type == "page_create" or action_type is None
+        ):
+            creation_fetch_limit = (
+                create_count if bypass else min(create_count, fetch_limit)
+            )
+            if creation_fetch_limit > 0:
+                creations_cursor = system_logs_collection.find(page_create_filter).sort(
+                    "timestamp", -1
+                )
+                creation_logs = await creations_cursor.limit(
+                    creation_fetch_limit
+                ).to_list(creation_fetch_limit)
+                for item in creation_logs:
+                    metadata = item.get("metadata") or {}
+                    timestamp = item.get("timestamp") or datetime.now(timezone.utc)
+                    items.append(
+                        {
+                            "type": "page_create",
+                            "title": metadata.get("title")
+                            or metadata.get("page_title")
+                            or item.get("message", ""),
+                            "author": metadata.get("author")
+                            or item.get("username", "Unknown"),
+                            "branch": metadata.get("branch", "main"),
+                            "timestamp": timestamp,
+                            "action": "page_create",
+                            "details": {
+                                "created_by": metadata.get("author")
+                                or item.get("username"),
+                                "branch": metadata.get("branch", "main"),
+                            },
+                        }
+                    )
 
         items.sort(key=lambda x: x["timestamp"], reverse=True)
 
-        if not bypass and len(items) > effective_limit:
-            items = items[:effective_limit]
+        if not bypass:
+            start_index = offset
+            end_index = offset + effective_limit
+            items = items[start_index:end_index]
 
-        response_limit = len(items) if bypass else effective_limit
+        response_limit = len(items)
 
         return {
             "items": items,

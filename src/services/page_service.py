@@ -14,6 +14,7 @@ from ..database import (
     get_branches_collection,
     db_instance,
 )
+from ..utils.logs import log_action
 
 
 class PageService:
@@ -242,6 +243,17 @@ class PageService:
                                 allowed_users=allowed_users or [],
                             )
                     if created_main and created_talk:
+                        await log_action(
+                            author,
+                            "page_create",
+                            f"Page '{title}' created on branch 'main'",
+                            category="page",
+                            metadata={
+                                "title": title,
+                                "branch": "main",
+                                "author": author,
+                            },
+                        )
                         if author != "Anonymous" and users_collection is not None:
                             await users_collection.update_one(
                                 {"username": author},
