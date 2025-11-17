@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 
 import aiofiles
 import asyncio
+import os
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from loguru import logger
@@ -33,6 +34,22 @@ from ..config import (
 
 IMAGE_PREFIX = "uploads/"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff"}
+
+def _safe_local_image_path(filename: str) -> Path:
+    """
+    Validate and return a safe local path for an image filename.
+    Raises StorageError on path traversal or if not within UPLOAD_DIR.
+    """
+    # Normalize and join the path
+    raw_path = os.path.normpath(os.path.join(UPLOAD_DIR, filename))
+    # Ensure absolute path
+    abs_upload_dir = os.path.abspath(UPLOAD_DIR)
+    abs_path = os.path.abspath(raw_path)
+    # Compare common path prefix
+    if not abs_path.startswith(abs_upload_dir + os.path.sep):
+        logger.warning(f"Attempted access outside upload dir: {filename}")
+        raise StorageError("Invalid image path.")
+    return Path(abs_path)
 
 
 class StorageError(Exception):
@@ -310,7 +327,7 @@ async def download_image_bytes(filename: str) -> bytes:
         else:
             return data
 
-    file_path = Path(UPLOAD_DIR) / filename
+    file_path = _safe_local_image_path(filename)
     if not file_path.exists():
         if s3_missing:
             logger.warning(f"Image '{filename}' not found in S3 or local storage.")
@@ -339,7 +356,7 @@ async def delete_image(filename: str) -> None:
             raise StorageError("Delete from object storage failed.") from exc
         return
 
-    file_path = Path(UPLOAD_DIR) / filename
+    file_path = _safe_local_image_path(filename)
     try:
         if file_path.exists():
             file_path.unlink()
@@ -371,5 +388,5 @@ async def image_exists(filename: str) -> bool:
             )
             raise StorageError("Image existence check failed.") from exc
 
-    file_path = Path(UPLOAD_DIR) / filename
+    file_path = _safe_local_image_path(filename)
     return file_path.exists()
