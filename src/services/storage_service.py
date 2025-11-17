@@ -41,15 +41,15 @@ def _safe_local_image_path(filename: str) -> Path:
     Raises StorageError on path traversal or if not within UPLOAD_DIR.
     """
     # Normalize and join the path
-    raw_path = os.path.normpath(os.path.join(UPLOAD_DIR, filename))
-    # Ensure absolute path
-    abs_upload_dir = os.path.abspath(UPLOAD_DIR)
-    abs_path = os.path.abspath(raw_path)
-    # Compare common path prefix
-    if not abs_path.startswith(abs_upload_dir + os.path.sep):
+    # Use realpath to resolve symlinks and prevent traversal vulnerabilities.
+    real_upload_dir = os.path.realpath(UPLOAD_DIR)
+    real_path = os.path.realpath(os.path.join(UPLOAD_DIR, filename))
+
+    # Check that the resolved path is within the upload directory.
+    if not (real_path.startswith(real_upload_dir + os.path.sep) or real_path == real_upload_dir):
         logger.warning(f"Attempted access outside upload dir: {filename}")
         raise StorageError("Invalid image path.")
-    return Path(abs_path)
+    return Path(real_path)
 
 
 class StorageError(Exception):
