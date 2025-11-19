@@ -46,7 +46,7 @@ def _safe_local_image_path(filename: str) -> Path:
     real_path = os.path.realpath(os.path.join(UPLOAD_DIR, filename))
 
     # Check that the resolved path is within the upload directory.
-    if not (real_path.startswith(real_upload_dir + os.path.sep) or real_path == real_upload_dir):
+    if not real_path.startswith(real_upload_dir + os.path.sep):
         logger.warning(f"Attempted access outside upload dir: {filename}")
         raise StorageError("Invalid image path.")
     return Path(real_path)
