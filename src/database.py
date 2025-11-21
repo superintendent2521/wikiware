@@ -46,6 +46,10 @@ INDEX_CONFIGS: Dict[str, List[IndexSpec]] = {
         ("timestamp", {}),
         ("query_normalized", {}),
     ],
+    "edit_sessions": [
+        ("lease_expires_at", {"expireAfterSeconds": 0}),
+        ([("page", 1), ("branch", 1), ("mode", 1), ("lease_expires_at", 1)], {}),
+    ],
 }
 
 
@@ -301,7 +305,13 @@ async def create_indexes() -> None:
     if pages is not None:
         await _ensure_pages_indexes(pages)
 
-    for collection_name in ("users", "sessions", "image_hashes", "analytics_events"):
+    for collection_name in (
+        "users",
+        "sessions",
+        "image_hashes",
+        "analytics_events",
+        "edit_sessions",
+    ):
         collection = db_instance.get_collection(collection_name)
         if collection is None:
             logger.warning(

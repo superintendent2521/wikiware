@@ -12,6 +12,7 @@ from .api import (
     exports as api_exports,
     uploads,
 )
+from . import edit_presence
 from .web import (
     pages,
     search,
@@ -42,4 +43,5 @@ __all__ = [
     "api_images",
     "api_exports",
     "media",
+    "edit_presence",
 ]

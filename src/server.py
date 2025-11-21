@@ -27,6 +27,7 @@ from .routes.web import (
     user,
     exports,
 )
+from .routes import edit_presence
 from .routes.api import (
     stats as api_stats,
     images as api_images,
@@ -145,6 +146,7 @@ app.include_router(api_favorites.router, prefix="/api")
 app.include_router(api_logs.router, prefix="/api")
 # From Utils, because its a service, not a route
 app.include_router(log_streamer.router)
+app.include_router(edit_presence.router)
 # Initilize log streaming.
 log_streamer.setup_log_streaming(app, add_file_sink=False)
 

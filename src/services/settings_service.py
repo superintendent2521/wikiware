@@ -53,6 +53,7 @@ class FeatureFlags:
     page_editing_enabled: bool = True
     account_creation_enabled: bool = True
     image_upload_enabled: bool = True
+    edit_presence_enabled: bool = False
 
 
 _DEFAULT_FEATURE_FLAGS = FeatureFlags()
@@ -264,6 +265,7 @@ class SettingsService:
             page_editing_enabled=doc.get("page_editing_enabled", True),
             account_creation_enabled=doc.get("account_creation_enabled", True),
             image_upload_enabled=doc.get("image_upload_enabled", True),
+            edit_presence_enabled=doc.get("edit_presence_enabled", False),
         )
         cls._feature_flags_cache = flags
         cls._feature_flags_cache_fetched_at = datetime.now(timezone.utc)
@@ -276,6 +278,7 @@ class SettingsService:
         page_editing_enabled: bool,
         account_creation_enabled: bool,
         image_upload_enabled: bool,
+        edit_presence_enabled: bool,
     ) -> bool:
         """Persist feature toggle values and refresh the cache."""
         if not db_instance.is_connected:
@@ -291,6 +294,7 @@ class SettingsService:
             "page_editing_enabled": page_editing_enabled,
             "account_creation_enabled": account_creation_enabled,
             "image_upload_enabled": image_upload_enabled,
+            "edit_presence_enabled": edit_presence_enabled,
         }
 
         await settings_collection.update_one(

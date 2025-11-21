@@ -55,6 +55,7 @@ async def update_feature_flags(request: Request, csrf_protect: CsrfProtect = Dep
         "page_editing_enabled": form.get("page_editing_enabled") == "on",
         "account_creation_enabled": form.get("account_creation_enabled") == "on",
         "image_upload_enabled": form.get("image_upload_enabled") == "on",
+        "edit_presence_enabled": form.get("edit_presence_enabled") == "on",
     }
 
     success = await SettingsService.update_feature_flags(**flags)

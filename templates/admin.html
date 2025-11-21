@@ -231,6 +231,13 @@
                     </label>
                     <p class="feature-toggle__help">When disabled, only admins can upload media.</p>
                 </div>
+                <div class="feature-toggle">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="edit_presence_enabled" {% if feature_flags.edit_presence_enabled %}checked{% endif %} {% if offline %}disabled{% endif %}>
+                        <span>Enable edit presence (beta)</span>
+                    </label>
+                    <p class="feature-toggle__help">When enabled, editors can see who else is working on the same page/branch via heartbeats. Disabled by default.</p>
+                </div>
                 <div class="feature-form__actions">
                     <button type="submit" class="btn btn-primary" {% if offline %}disabled{% endif %}>
                         <i class="fas fa-save"></i> Save Feature Settings
