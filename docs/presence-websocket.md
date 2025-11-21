@@ -1,9 +1,9 @@
 # Edit Presence WebSocket
 
-Real-time, low-friction edit presence that shows who is editing or watching a page/branch. Presence is informational only (no locking) and mirrors the FastAPI/WebSocket approach used by `log_streamer`. All state is coordinated through MongoDB TTL documents so multiple workers stay in sync without bespoke locks.
+Real-time, low-friction edit presence that shows who is editing a page/branch. Presence is informational only (no locking) and mirrors the FastAPI/WebSocket approach used by `log_streamer`. All state is coordinated through MongoDB TTL documents so multiple workers stay in sync without bespoke locks.
 
 ## Goals
-- Surface active editors/watchers for the current page/branch with second-level freshness.
+- Surface active editors for the current page/branch with second-level freshness.
 - Self-heal via heartbeats and TTL expiry so stale connections disappear automatically.
 - Keep save flows unchanged; presence metadata is optional and should never block edits.
 
@@ -15,7 +15,7 @@ Real-time, low-friction edit presence that shows who is editing or watching a pa
 - `page`: normalized title
 - `branch`: branch name for the edit context
 - `user_id`, `username`: bound to the session cookie user
-- `mode`: `"edit"` or `"view"` (for read-only observers)
+- `mode`: `"edit"` or `"view"` (view mode is accepted but not broadcast; only editors are shown)
 - `session_id`: short random string returned to the client
 - `client_id`: per-tab UUID supplied by the frontend
 - `created_at`, `last_heartbeat`: timestamps for diagnostics
@@ -34,7 +34,7 @@ Indexes:
 ## API Reference
 ### `POST /api/pages/{title}/edit-session`
 - **Body**: `{ "branch": "main", "mode": "edit" | "view", "client_id": "uuid" }`
-- **Response**: `{ "status": "ok", "session_id": "abc123", "lease_expires_at": "...", "active_editors": [...], "active_watchers": [...] }`
+- **Response**: `{ "status": "ok", "session_id": "abc123", "lease_expires_at": "...", "active_editors": [...] }`
 - **Errors**: `401` unauthenticated, `404` missing page (optional), `409` when an existing live lease already exists for the same `client_id` and user.
 
 ### `DELETE /api/pages/{title}/edit-session/{session_id}`
@@ -46,7 +46,7 @@ Indexes:
 - **Auth**: Valid session cookie; rejects with `4401` if missing/invalid, `4409` for mismatched session/page/branch, `4404` when feature is disabled.
 - **Client -> server**: `{type:"ping"}` to extend lease; `{type:"release"}` to drop presence and close.
 - **Server -> client**:
-  - `presence`: `{type:"presence", editors:[{username, client_id}], watchers:[{username, client_id}] }`
+  - `presence`: `{type:"presence", editors:[{username, client_id}] }`
   - `goodbye`: `{type:"goodbye", reason:"expired"|"released"|"invalid"}` before closing
 
 ## Server Components
@@ -55,7 +55,7 @@ Indexes:
 - Create leases with `session_id`, `lease_expires_at`, and per-tab `client_id`.
 - `touch_heartbeat(session_id)` to extend `lease_expires_at` and `last_heartbeat`.
 - `release_session(session_id)` to expire early and return whether a broadcast is needed.
-- `get_roster(page, branch)` to fetch active editors/watchers (filtering expired rows).
+- `get_roster(page, branch)` to fetch active editors (filtering expired rows).
 - `attach_presence_context(user_id, page, branch, session_id)` helper for log enrichment; no-op if the lease is missing or expired.
 
 ### `edit_presence_router`
@@ -78,7 +78,7 @@ Indexes:
 ## Client Integration (`templates/edit.html`)
 - Generate a stable `client_id` per tab (UUID stored in `sessionStorage`).
 - Before rendering the editor, call the `edit-session` endpoint; if it fails, proceed without presence UI.
-- Open the WebSocket and render a “Currently editing” pill showing initials/usernames for editors and watchers.
+- Open the WebSocket and render a “Currently editing” pill showing initials/usernames for editors.
 - Send `{type:"ping"}` on a 20s interval and on typing bursts; send `{type:"release"}` on `beforeunload`.
 - Post saves may include header `X-Wikiware-Edit-Session: {session_id}` for analytics/trace logs; saves must continue without it.
 - If the socket closes unexpectedly, show a soft warning and stop pinging/deleting (TTL cleanup will remove the lease).

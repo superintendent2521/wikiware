@@ -40,25 +40,22 @@
   function renderRoster(roster) {
     if (!rosterList) return;
     const editors = roster.editors || [];
-    const watchers = roster.watchers || [];
-    if (!editors.length && !watchers.length) {
+    if (!editors.length) {
       rosterList.innerHTML = '<span class="presence-empty">You are the only one here.</span>';
       return;
     }
 
-    function pill(user, kind) {
+    function pill(user) {
       const name = user.username || "Unknown";
       const initial = name.substring(0, 1).toUpperCase();
-      return `<div class="presence-pill presence-${kind}" title="${name}">
+      return `<div class="presence-pill" title="${name}">
         <span class="presence-avatar">${initial}</span>
         <span class="presence-name">${name}</span>
       </div>`;
     }
 
-    const editorMarkup = editors.map((u) => pill(u, "editor")).join("");
-    const watcherMarkup = watchers.map((u) => pill(u, "watcher")).join("");
-
-    rosterList.innerHTML = `${editorMarkup}${watcherMarkup}`;
+    const editorMarkup = editors.map((u) => pill(u)).join("");
+    rosterList.innerHTML = editorMarkup;
   }
 
   function buildWsUrl(sessionId, branch, mode) {
@@ -161,7 +158,7 @@
 
       const data = await resp.json();
       state.sessionId = data.session_id;
-      renderRoster({ editors: data.active_editors || [], watchers: data.active_watchers || [] });
+      renderRoster({ editors: data.active_editors || [] });
       startWebSocket(config.branch, config.mode);
       setStatus("", "info");
     } catch (err) {
