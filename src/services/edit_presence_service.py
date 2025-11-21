@@ -225,6 +225,7 @@ class EditPresenceService:
             {
                 "page": page,
                 "branch": cls._normalize_branch(branch),
+                "mode": "edit",
                 "lease_expires_at": {"$gt": now},
             },
             {"_id": 0, "username": 1, "client_id": 1, "mode": 1},
