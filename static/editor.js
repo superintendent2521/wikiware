@@ -369,7 +369,7 @@
           const altRaw = (node.getAttribute('alt') || '').replace(/\u200B/g, '');
           const src = (node.getAttribute('src') || '').trim();
           const titleAttr = (node.getAttribute('title') || '').trim();
-          const altText = altRaw.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+          const altText = altRaw.replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/\]/g, '\\]');
           let markdownImage = `![${altText}](${src}`;
           if (titleAttr) {
             const escapedTitle = titleAttr
