@@ -323,8 +323,7 @@
           captionText = (captionNode.textContent || '').replace(/\u200B/g, '').trim();
         }
         const normalizeInline = value => value.replace(/\s+/g, ' ').trim();
-        const alt = normalizeInline(altRaw).replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-        const caption = normalizeInline(captionText);
+        const alt = normalizeInline(altRaw).replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/]/g, '\\]');        
         let markdown = `![${alt}](${srcRaw}`;
         if (caption) {
           const escapedCaption = caption
