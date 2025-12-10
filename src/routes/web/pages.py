@@ -5,7 +5,7 @@ Handles page viewing, editing, and saving operations.
 
 import re
 from typing import Dict, List, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import markdown
 from markdown.extensions.toc import TocExtension
@@ -953,9 +953,13 @@ async def delete_branch(
                 return RedirectResponse(url="/", status_code=303)
             safe_title = quote(title, safe="")
             safe_branch = quote(branch, safe="")
-            return RedirectResponse(
-                url=f"/page/{safe_title}?branch={safe_branch}", status_code=303
-            )
+            redirect_url = f"/page/{safe_title}?branch={safe_branch}".replace("\\", "")
+            parsed = urlparse(redirect_url)
+            if not parsed.netloc and not parsed.scheme:
+                # relative path, safe to redirect
+                return RedirectResponse(url=redirect_url, status_code=303)
+            # fallback to home page if unsafe
+                return RedirectResponse(url="/", status_code=303)
         else:
             logger.warning(f"Branch not found for deletion: {branch} from page {title}")
             return {"error": "Branch not found"}
