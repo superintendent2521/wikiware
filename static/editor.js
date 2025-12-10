@@ -323,7 +323,7 @@
           captionText = (captionNode.textContent || '').replace(/\u200B/g, '').trim();
         }
         const normalizeInline = value => value.replace(/\s+/g, ' ').trim();
-        const alt = normalizeInline(altRaw).replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+        const alt = normalizeInline(altRaw).replace(/\\/g, '\\\\').replace(/[\[\]]/g, '\\$&');
         const caption = normalizeInline(captionText);
         let markdown = `![${alt}](${srcRaw}`;
         if (caption) {
@@ -369,7 +369,7 @@
           const altRaw = (node.getAttribute('alt') || '').replace(/\u200B/g, '');
           const src = (node.getAttribute('src') || '').trim();
           const titleAttr = (node.getAttribute('title') || '').trim();
-          const altText = altRaw.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+          const altText = altRaw.replace(/\\/g, '\\\\').replace(/[\[\]]/g, '\\$&');
           let markdownImage = `![${altText}](${src}`;
           if (titleAttr) {
             const escapedTitle = titleAttr
