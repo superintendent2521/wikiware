@@ -1,235 +1,479 @@
-"""Database connection and management for MongoDB."""
+"""
+Postgres-backed database layer for WikiWare.
+
+This module replaces the previous MongoDB driver with a lightweight JSONB
+storage model in Postgres while preserving the collection-style API used by
+the rest of the codebase.
+"""
+
+from __future__ import annotations
 
 import asyncio
-import inspect
 import os
-import time
-from typing import Any, Dict, List, Optional
+import uuid
+from dataclasses import dataclass
+from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Optional
 
+import asyncpg
 from dotenv import load_dotenv
 from loguru import logger
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorDatabase
-from pymongo.errors import ServerSelectionTimeoutError
 
 from . import config
 
 load_dotenv()
 
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "wikiware")
-MONGODB_MAX_CONNECTIONS = int(os.getenv("MONGODB_MAX_CONNECTIONS", "100"))
-MONGODB_MIN_CONNECTIONS = int(os.getenv("MONGODB_MIN_CONNECTIONS", "10"))
-MONGODB_MAX_IDLE_TIME_MS = int(os.getenv("MONGODB_MAX_IDLE_TIME_MS", "30000"))
-MONGODB_SERVER_SELECTION_TIMEOUT_MS = int(os.getenv("MONGODB_SERVER_SELECTION_TIMEOUT_MS", "5000"))
-MONGODB_SOCKET_TIMEOUT_MS = int(os.getenv("MONGODB_SOCKET_TIMEOUT_MS", "30000"))
-DB_OPERATION_LOG_THRESHOLD_MS = float(os.getenv("DB_OPERATION_LOG_THRESHOLD_MS", "100")) / 1000  # Convert to seconds
-
-IndexKey = str
-IndexSpec = tuple[IndexKey, Dict[str, Any]]
-
-INDEX_CONFIGS: Dict[str, List[IndexSpec]] = {
-    "users": [
-        ("username", {"unique": True}),
-        ("created_at", {}),
-    ],
-    "sessions": [
-        ("session_id", {"unique": True}),
-        ("user_id", {}),
-        ("expires_at", {"expireAfterSeconds": 0}),
-    ],
-    "image_hashes": [
-        ("filename", {"unique": True}),
-        ("sha256", {}),
-    ],
-    "analytics_events": [
-        ([("event_type", 1), ("timestamp", -1)], {}),
-        ("timestamp", {}),
-        ("query_normalized", {}),
-    ],
-}
+POSTGRES_DSN = os.getenv(
+    "POSTGRES_DSN", "postgresql://postgres:postgres@localhost:5432/wikiware"
+)
+DB_OPERATION_LOG_THRESHOLD_MS = (
+    float(os.getenv("DB_OPERATION_LOG_THRESHOLD_MS", "100")) / 1000
+)
+TABLE_NAME = "wikiware_documents"
 
 
-def _timed_wrapper(original_method, method_name, collection_name):
-    """Wrap collection methods with timing logs while preserving their sync/async nature."""
-    if inspect.iscoroutinefunction(original_method):
-        async def timed_method(*args, **kwargs):
-            start_time = time.monotonic()
-            try:
-                result = await original_method(*args, **kwargs)
-                duration = time.monotonic() - start_time
-                if config.DB_QUERY_LOGGING_ENABLED and duration >= DB_OPERATION_LOG_THRESHOLD_MS:
-                    logger.info(f"DB {method_name} on {collection_name} took {duration:.4f}s")
-                return result
-            except Exception as e:
-                duration = time.monotonic() - start_time
-                logger.error(f"DB {method_name} on {collection_name} failed after {duration:.4f}s: {e}")
-                raise
+# ---------------------- Result helpers ----------------------
 
-        return timed_method
 
-    def timed_method(*args, **kwargs):
-        start_time = time.monotonic()
-        try:
-            result = original_method(*args, **kwargs)
-            duration = time.monotonic() - start_time
-            if config.DB_QUERY_LOGGING_ENABLED and duration >= DB_OPERATION_LOG_THRESHOLD_MS:
-                logger.info(f"DB {method_name} on {collection_name} took {duration:.4f}s")
-            return result
-        except Exception as e:
-            duration = time.monotonic() - start_time
-            logger.error(f"DB {method_name} on {collection_name} failed after {duration:.4f}s: {e}")
-            raise
+@dataclass
+class InsertOneResult:
+    inserted_id: Optional[str]
 
-    return timed_method
+
+@dataclass
+class UpdateResult:
+    matched_count: int
+    modified_count: int
+    upserted_id: Optional[str] = None
+
+
+@dataclass
+class DeleteResult:
+    deleted_count: int
+
+
+# ---------------------- Utility helpers ----------------------
+
+
+def _ensure_loop() -> Optional[asyncio.AbstractEventLoop]:
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
+def _get_by_path(doc: Dict[str, Any], path: str) -> Any:
+    parts = path.split(".")
+    current: Any = doc
+    for part in parts:
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
+def _set_by_path(doc: Dict[str, Any], path: str, value: Any) -> None:
+    parts = path.split(".")
+    current = doc
+    for part in parts[:-1]:
+        if part not in current or not isinstance(current[part], dict):
+            current[part] = {}
+        current = current[part]
+    current[parts[-1]] = value
+
+
+def _apply_projection(doc: Dict[str, Any], projection: Optional[Dict[str, int]]) -> Dict[str, Any]:
+    if projection is None:
+        return doc
+    include_keys = {k for k, v in projection.items() if v}
+    exclude_keys = {k for k, v in projection.items() if not v}
+
+    if include_keys:
+        projected = {k: doc[k] for k in include_keys if k in doc}
+        if "_id" in doc and "_id" not in projected and projection.get("_id", 1):
+            projected["_id"] = doc["_id"]
+        return projected
+
+    if exclude_keys:
+        return {k: v for k, v in doc.items() if k not in exclude_keys}
+
+    return doc
+
+
+def _matches_filter(doc: Dict[str, Any], filt: Dict[str, Any]) -> bool:
+    if not filt:
+        return True
+
+    def compare(val: Any, condition: Any) -> bool:
+        if isinstance(condition, dict):
+            for op, expected in condition.items():
+                if op == "$gte" and not (val is not None and val >= expected):
+                    return False
+                if op == "$gt" and not (val is not None and val > expected):
+                    return False
+                if op == "$lte" and not (val is not None and val <= expected):
+                    return False
+                if op == "$lt" and not (val is not None and val < expected):
+                    return False
+                if op == "$in" and val not in expected:
+                    return False
+                if op == "$nin" and val in expected:
+                    return False
+            return True
+        return val == condition
+
+    for key, expected in filt.items():
+        value = _get_by_path(doc, key) if "." in key else doc.get(key)
+        if not compare(value, expected):
+            return False
+    return True
+
+
+def _apply_update(doc: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    updated = dict(doc)
+    for op, changes in update.items():
+        if op == "$set":
+            for path, value in changes.items():
+                _set_by_path(updated, path, value)
+        elif op == "$inc":
+            for path, delta in changes.items():
+                current = _get_by_path(updated, path)
+                if current is None:
+                    _set_by_path(updated, path, delta)
+                else:
+                    _set_by_path(updated, path, current + delta)
+        else:
+            logger.warning("Unsupported update operator {}", op)
+    return updated
+
+
+def _project_sort_key(doc: Dict[str, Any], key: str) -> Any:
+    if "." in key:
+        return _get_by_path(doc, key)
+    return doc.get(key)
+
+
+# ---------------------- Cursor ----------------------
+
+
+class PostgresCursor:
+    def __init__(
+        self,
+        loader: Callable[[], asyncio.Future],
+        *,
+        limit: Optional[int] = None,
+    ):
+        self._loader = loader
+        self._docs: Optional[List[Dict[str, Any]]] = None
+        self._sorts: List[tuple[str, int]] = []
+        self._limit = limit
+
+    async def _ensure_loaded(self) -> None:
+        if self._docs is None:
+            self._docs = await self._loader()
+            self._apply_sorts_and_limit()
+
+    def _apply_sorts_and_limit(self) -> None:
+        if self._docs is None:
+            return
+        for key, direction in reversed(self._sorts):
+            self._docs.sort(key=lambda d: _project_sort_key(d, key) or 0, reverse=direction < 0)
+        if self._limit is not None:
+            self._docs = self._docs[: self._limit]
+
+    def sort(self, key: str, direction: int = 1) -> "PostgresCursor":
+        self._sorts.append((key, direction))
+        return self
+
+    async def to_list(self, length: Optional[int]) -> List[Dict[str, Any]]:
+        await self._ensure_loaded()
+        if self._docs is None:
+            return []
+        if length is None:
+            return list(self._docs)
+        return list(self._docs[:length])
+
+    def __aiter__(self) -> AsyncIterator[Dict[str, Any]]:
+        async def iterator():
+            await self._ensure_loaded()
+            for doc in self._docs or []:
+                yield doc
+
+        return iterator()
+
+    def __iter__(self) -> Iterable[Dict[str, Any]]:
+        loop = _ensure_loop()
+        if self._docs is None:
+            if loop and loop.is_running():
+                raise RuntimeError("Synchronous iteration is not supported while loop is running.")
+            asyncio.run(self._ensure_loaded())
+        return iter(self._docs or [])
+
+
+# ---------------------- Collection ----------------------
+
+
+class PostgresCollection:
+    def __init__(self, name: str, db: "Database"):
+        self.name = name
+        self._db = db
+
+    async def _fetch_docs(self) -> List[Dict[str, Any]]:
+        rows = await self._db.fetch(
+            f"SELECT doc FROM {TABLE_NAME} WHERE collection = $1",
+            self.name,
+        )
+        return [row["doc"] for row in rows]
+
+    def find(
+        self,
+        filt: Optional[Dict[str, Any]] = None,
+        projection: Optional[Dict[str, int]] = None,
+        limit: Optional[int] = None,
+    ) -> PostgresCursor:
+        async def loader():
+            docs = await self._fetch_docs()
+            matched = [doc for doc in docs if _matches_filter(doc, filt or {})]
+            if projection:
+                matched = [_apply_projection(doc, projection) for doc in matched]
+            return matched
+
+        return PostgresCursor(loader, limit=limit)
+
+    async def find_one(self, filt: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        cursor = self.find(filt, limit=1)
+        results = await cursor.to_list(1)
+        return results[0] if results else None
+
+    async def insert_one(self, document: Dict[str, Any]) -> InsertOneResult:
+        doc = dict(document)
+        if "_id" not in doc:
+            doc["_id"] = str(uuid.uuid4())
+        await self._db.execute(
+            f"""
+            INSERT INTO {TABLE_NAME} (collection, id, doc)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (collection, id) DO UPDATE SET doc = EXCLUDED.doc
+            """,
+            self.name,
+            str(doc["_id"]),
+            doc,
+        )
+        return InsertOneResult(inserted_id=str(doc["_id"]))
+
+    async def update_one(
+        self,
+        filt: Dict[str, Any],
+        update: Dict[str, Any],
+        *,
+        upsert: bool = False,
+    ) -> UpdateResult:
+        existing = await self.find_one(filt)
+        if existing is None:
+            if not upsert:
+                return UpdateResult(matched_count=0, modified_count=0, upserted_id=None)
+            base = {k: v for k, v in filt.items() if not isinstance(v, dict)}
+            new_doc = _apply_update(base, update)
+            result = await self.insert_one(new_doc)
+            return UpdateResult(matched_count=0, modified_count=1, upserted_id=result.inserted_id)
+
+        updated_doc = _apply_update(existing, update)
+        await self._db.execute(
+            f"UPDATE {TABLE_NAME} SET doc = $3 WHERE collection = $1 AND id = $2",
+            self.name,
+            str(existing.get("_id")),
+            updated_doc,
+        )
+        return UpdateResult(matched_count=1, modified_count=1, upserted_id=None)
+
+    async def delete_one(self, filt: Dict[str, Any]) -> DeleteResult:
+        existing = await self.find_one(filt)
+        if existing is None:
+            return DeleteResult(deleted_count=0)
+        await self._db.execute(
+            f"DELETE FROM {TABLE_NAME} WHERE collection = $1 AND id = $2",
+            self.name,
+            str(existing.get("_id")),
+        )
+        return DeleteResult(deleted_count=1)
+
+    async def count_documents(self, filt: Optional[Dict[str, Any]] = None) -> int:
+        docs = await self._fetch_docs()
+        return sum(1 for doc in docs if _matches_filter(doc, filt or {}))
+
+    async def distinct(self, key: str, filt: Optional[Dict[str, Any]] = None) -> List[Any]:
+        docs = await self._fetch_docs()
+        values = []
+        for doc in docs:
+            if filt and not _matches_filter(doc, filt):
+                continue
+            value = _get_by_path(doc, key) if "." in key else doc.get(key)
+            if value is not None:
+                values.append(value)
+        return list({v for v in values})
+
+    def aggregate(self, pipeline: List[Dict[str, Any]]) -> PostgresCursor:
+        async def loader():
+            docs = await self._fetch_docs()
+            for stage in pipeline:
+                if "$match" in stage:
+                    docs = [doc for doc in docs if _matches_filter(doc, stage["$match"])]
+                elif "$project" in stage:
+                    projected = []
+                    for doc in docs:
+                        new_doc: Dict[str, Any] = {}
+                        for key, expr in stage["$project"].items():
+                            if expr == 1:
+                                new_doc[key] = doc.get(key)
+                            elif isinstance(expr, str) and expr.startswith("$"):
+                                    new_doc[key] = _get_by_path(doc, expr[1:]) if "." in expr[1:] else doc.get(expr[1:])
+                            elif isinstance(expr, dict) and "$dateToString" in expr:
+                                fmt = expr["$dateToString"]["format"]
+                                date_val = _get_by_path(doc, expr["$dateToString"]["date"][1:])
+                                new_doc[key] = date_val.strftime(fmt) if hasattr(date_val, "strftime") else None
+                            else:
+                                new_doc[key] = expr
+                        projected.append(new_doc)
+                    docs = projected or docs
+                elif "$group" in stage:
+                    grouped: Dict[Any, Dict[str, Any]] = {}
+                    group_spec = stage["$group"]
+                    for doc in docs:
+                        group_id_expr = group_spec.get("_id")
+                        if isinstance(group_id_expr, dict):
+                            group_id = {}
+                            for k, v in group_id_expr.items():
+                                if isinstance(v, dict) and "$dateToString" in v:
+                                    date_val = _get_by_path(doc, v["$dateToString"]["date"][1:])
+                                    fmt = v["$dateToString"]["format"]
+                                    group_id[k] = date_val.strftime(fmt) if hasattr(date_val, "strftime") else None
+                                elif isinstance(v, str) and v.startswith("$"):
+                                    group_id[k] = _get_by_path(doc, v[1:]) if "." in v[1:] else doc.get(v[1:])
+                                else:
+                                    group_id[k] = v
+                        elif isinstance(group_id_expr, str) and group_id_expr.startswith("$"):
+                            group_id = _get_by_path(doc, group_id_expr[1:]) if "." in group_id_expr[1:] else doc.get(group_id_expr[1:])
+                        else:
+                            group_id = group_id_expr
+
+                        if group_id not in grouped:
+                            grouped[group_id] = {"_id": group_id}
+
+                        for field, expr in group_spec.items():
+                            if field == "_id":
+                                continue
+                            if isinstance(expr, dict) and "$sum" in expr:
+                                val = expr["$sum"]
+                                addend = 0
+                                if isinstance(val, (int, float)):
+                                    addend = val
+                                elif isinstance(val, str) and val.startswith("$"):
+                                    addend = _get_by_path(doc, val[1:]) if "." in val[1:] else doc.get(val[1:]) or 0
+                                grouped[group_id][field] = grouped[group_id].get(field, 0) + (addend or 0)
+                            elif isinstance(expr, dict) and "$max" in expr:
+                                candidate = expr["$max"]
+                                if isinstance(candidate, str) and candidate.startswith("$"):
+                                    candidate = _get_by_path(doc, candidate[1:]) if "." in candidate[1:] else doc.get(candidate[1:])
+                                current = grouped[group_id].get(field)
+                                if current is None or (candidate is not None and candidate > current):
+                                    grouped[group_id][field] = candidate
+                            elif isinstance(expr, dict) and "$first" in expr:
+                                if field not in grouped[group_id]:
+                                    val = expr["$first"]
+                                    if isinstance(val, str) and val.startswith("$"):
+                                        val = _get_by_path(doc, val[1:]) if "." in val[1:] else doc.get(val[1:])
+                                    grouped[group_id][field] = val
+                    docs = list(grouped.values())
+                elif "$sort" in stage:
+                    for key, direction in reversed(list(stage["$sort"].items())):
+                        docs.sort(key=lambda d: _project_sort_key(d, key) or 0, reverse=direction < 0)
+                elif "$limit" in stage:
+                    docs = docs[: stage["$limit"]]
+            return docs
+
+        return PostgresCursor(loader)
+
+
+# ---------------------- Database ----------------------
 
 
 class Database:
-    """Manages MongoDB connection and provides access to collections."""
+    """Manages Postgres connection and collection-style access."""
 
-    def __init__(self, mongo_url: str = MONGODB_URL, db_name: str = MONGODB_DB_NAME):
-        self._mongo_url = mongo_url
-        self._db_name = db_name
-        self.client: Optional[AsyncIOMotorClient] = None # type: ignore
-        self.db: Optional[AsyncIOMotorDatabase] = None # type: ignore
+    def __init__(self, dsn: str = POSTGRES_DSN):
+        self._dsn = dsn
+        self.pool: Optional[asyncpg.Pool] = None
         self.is_connected = False
         self._connection_lock = asyncio.Lock()
-        self._max_pool_size = MONGODB_MAX_CONNECTIONS
-        self._min_pool_size = MONGODB_MIN_CONNECTIONS
-        self._wrapped_collections: Dict[str, AsyncIOMotorCollection] = {}
-        # List of methods to wrap with timing
-        self._methods_to_wrap = [
-            'find_one', 'insert_one', 'update_one', 'delete_one',
-            'find', 'count_documents', 'aggregate', 'distinct'
-        ]
+        self._wrapped_collections: Dict[str, PostgresCollection] = {}
 
     def _reset_state(self) -> None:
-        """Clear cached client/db handles and connection flags."""
-        if self.client is not None:
-            self.client.close()
-        self.client = None
-        self.db = None
+        self.pool = None
         self.is_connected = False
         self._wrapped_collections.clear()
 
-    async def connect(self, max_retries: Optional[int] = 10) -> None:
-        """Establish connection to MongoDB with connection pooling and retry logic."""
-        if max_retries is None:
-            max_retries = float("inf")
-            delay = 10
-        else:
-            delay = 5
-
-        retry_count = 0
-
+    async def connect(self) -> None:
         async with self._connection_lock:
-            while retry_count < max_retries:
-                try:
-                    logger.info(
-                        "Attempting to connect to MongoDB at {}... (attempt {}) with pool_size={}, min_pool_size={}",
-                        self._mongo_url,
-                        retry_count + 1,
-                        self._max_pool_size,
-                        self._min_pool_size,
-                    )
-                    
-                    self.client = AsyncIOMotorClient(
-                        self._mongo_url,
-                        maxPoolSize=self._max_pool_size,
-                        minPoolSize=self._min_pool_size,
-                        maxIdleTimeMS=MONGODB_MAX_IDLE_TIME_MS,
-                        serverSelectionTimeoutMS=MONGODB_SERVER_SELECTION_TIMEOUT_MS,
-                        socketTimeoutMS=MONGODB_SOCKET_TIMEOUT_MS,
-                        retryWrites=True,
-                        retryReads=True,
-                        connectTimeoutMS=MONGODB_SERVER_SELECTION_TIMEOUT_MS,
-                    )
-                    
-                    # Test the connection
-                    await self.client.admin.command("ping")
-                    self.db = self.client[self._db_name]
-                    self.is_connected = True
-                    logger.info(
-                        "Connected to MongoDB database '{}' with connection pool configured",
-                        self._db_name
-                    )
-                    return
-                except ServerSelectionTimeoutError:
-                    retry_count += 1
-                    self._reset_state()
-                    if max_retries != float("inf"):
-                        logger.warning(
-                            "MongoDB server not available. Attempt {}/{}. Retrying in {} seconds...",
-                            retry_count,
-                            max_retries,
-                            delay,
-                        )
-                    else:
-                        logger.warning(
-                            "MongoDB connection lost. Retrying in {} seconds...", delay
-                        )
-                    await asyncio.sleep(delay)
-                except Exception:
-                    logger.exception("Database connection error")
-                    self._reset_state()
-                    if max_retries != float("inf"):
-                        return
-                    await asyncio.sleep(delay)
-
-            if max_retries != float("inf"):
-                logger.error(
-                    "Failed to connect to MongoDB after multiple attempts. Running in offline mode."
-                )
+            if self.is_connected:
+                return
+            try:
+                logger.info("Connecting to Postgres at {}", self._dsn)
+                self.pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=10)
+                await self._ensure_table()
+                self.is_connected = True
+                logger.info("Connected to Postgres and storage table ensured")
+            except Exception:
+                logger.exception("Failed to connect to Postgres")
                 self._reset_state()
 
-    async def monitor_connection(self) -> None:
-        """Background task to monitor and retry connection if lost."""
-        logger.info("Starting MongoDB connection monitor (retries every 10s)")
-        while True:
-            if not self.is_connected:
-                await self.connect(max_retries=None)
-            await asyncio.sleep(10)
+    async def _ensure_table(self) -> None:
+        if self.pool is None:
+            return
+        await self.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
+                collection TEXT NOT NULL,
+                id TEXT NOT NULL,
+                doc JSONB NOT NULL,
+                PRIMARY KEY (collection, id)
+            );
+            """
+        )
 
     async def disconnect(self) -> None:
-        """Close the MongoDB connection."""
         async with self._connection_lock:
+            if self.pool:
+                await self.pool.close()
             self._reset_state()
 
-    def get_collection(self, name: str) -> Optional[AsyncIOMotorCollection]: # pyright: ignore[reportInvalidTypeForm]
-        """Get a collection by name if database is connected."""
-        if self.is_connected and self.db is not None:
-            if name in self._wrapped_collections:
-                return self._wrapped_collections[name]
+    def get_collection(self, name: str) -> Optional[PostgresCollection]:
+        if not self.is_connected:
+            return None
+        if name in self._wrapped_collections:
+            return self._wrapped_collections[name]
+        collection = PostgresCollection(name, self)
+        self._wrapped_collections[name] = collection
+        return collection
 
-            collection = self.db[name]
-            # Wrap methods for timing once per collection
-            for method_name in self._methods_to_wrap:
-                if hasattr(collection, method_name):
-                    original_method = getattr(collection, method_name)
-                    if getattr(original_method, "_wikiware_timed", False):
-                        continue
-                    wrapped_method = _timed_wrapper(original_method, method_name, name)
-                    setattr(wrapped_method, "_wikiware_timed", True)
-                    setattr(collection, method_name, wrapped_method)
-            self._wrapped_collections[name] = collection
-            return collection
-        return None
+    async def execute(self, query: str, *args: Any) -> None:
+        if self.pool is None:
+            raise RuntimeError("Database not connected")
+        async with self.pool.acquire() as conn:
+            await conn.execute(query, *args)
+
+    async def fetch(self, query: str, *args: Any) -> List[asyncpg.Record]:
+        if self.pool is None:
+            raise RuntimeError("Database not connected")
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(query, *args)
 
     async def get_pool_stats(self) -> Dict[str, Any]:
-        """Get connection pool statistics."""
-        if self.client is None:
+        if self.pool is None:
             return {"status": "not_connected"}
-        
-        try:
-            server_info = await self.client.server_info()
-            return {
-                "status": "connected",
-                "max_pool_size": self._max_pool_size,
-                "min_pool_size": self._min_pool_size,
-                "server_info": server_info,
-            }
-        except Exception:
-            logger.error("Error getting pool stats")
-            return {"status": "error", "error": "Failed to get pool stats"}
+        return {
+            "status": "connected",
+            "pool_size": self.pool.max_size,
+            "free": self.pool.free_size,
+        }
 
 
 # Global database instance
@@ -238,85 +482,35 @@ db_instance = Database()
 
 # Collections
 def get_pages_collection():
-    """Get the pages collection."""
     return db_instance.get_collection("pages")
 
 
 def get_history_collection():
-    """Get the history collection."""
     return db_instance.get_collection("history")
 
 
 def get_branches_collection():
-    """Get the branches collection."""
     return db_instance.get_collection("branches")
 
 
 def get_users_collection():
-    """Get the users collection."""
     return db_instance.get_collection("users")
 
 
 def get_image_hashes_collection():
-    """Get the image_hashes collection."""
     return db_instance.get_collection("image_hashes")
 
 
-# Helper functions
-async def _drop_legacy_page_index(pages: AsyncIOMotorCollection) -> None: # type: ignore
-    """Remove deprecated single-field title index if present."""
-    try:
-        existing_indexes = await pages.index_information()
-        if "title_1" in existing_indexes:
-            await pages.drop_index("title_1")
-            logger.info("Dropped legacy unique index on pages.title")
-    except Exception:
-        logger.warning("Failed to drop legacy title index")
-
-async def _ensure_pages_indexes(pages: AsyncIOMotorCollection) -> None: # type: ignore
-    """Ensure compound and text indexes exist for the pages collection."""
-    await _drop_legacy_page_index(pages)
-    await pages.create_index([("title", 1), ("branch", 1)], unique=True)
-    await pages.create_index("updated_at")
-    await pages.create_index(
-        [("title", "text"), ("content", "text")], name="page_text_search"
-    )
-    logger.info("Pages collection indexes created")
-
-async def _create_collection_indexes(
-    collection_name: str, collection: AsyncIOMotorCollection # type: ignore
-) -> None:
-    """Create indexes declared in INDEX_CONFIGS for a given collection."""
-    for keys, options in INDEX_CONFIGS.get(collection_name, []):
-        await collection.create_index(keys, **options)
-    logger.info("{} collection indexes created", collection_name.capitalize())
-
 async def create_indexes() -> None:
-    """Create required indexes on MongoDB collections."""
-    if not db_instance.is_connected:
-        logger.warning("Skipping index creation because database is disconnected")
-        return
+    # JSONB storage uses application-level filtering; explicit DB indexes can be added later.
+    logger.info("Index creation skipped (JSONB storage)")
 
-    pages = get_pages_collection()
-    if pages is not None:
-        await _ensure_pages_indexes(pages)
-
-    for collection_name in ("users", "sessions", "image_hashes", "analytics_events"):
-        collection = db_instance.get_collection(collection_name)
-        if collection is None:
-            logger.warning(
-                "Collection '{}' unavailable while creating indexes", collection_name
-            )
-            continue
-        await _create_collection_indexes(collection_name, collection)
 
 async def init_database() -> None:
-    """Initialize database connection and create indexes."""
     try:
         await db_instance.connect()
         if db_instance.is_connected:
             await create_indexes()
-            # Log connection pool stats
             pool_stats = await db_instance.get_pool_stats()
             logger.info("Database pool stats: {}", pool_stats)
     except Exception:

@@ -19,3 +19,4 @@ aiozipstream
 markdown-pdf
 boto3
 pydantic-settings
+asyncpg
