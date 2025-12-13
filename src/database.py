@@ -12,7 +12,7 @@ import asyncio
 import os
 import uuid
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, List, Optional
 
 import asyncpg
 from dotenv import load_dotenv
@@ -158,7 +158,7 @@ def _project_sort_key(doc: Dict[str, Any], key: str) -> Any:
 class PostgresCursor:
     def __init__(
         self,
-        loader: Callable[[], asyncio.Future],
+        loader: Callable[[], Awaitable[List[Dict[str, Any]]]],
         *,
         limit: Optional[int] = None,
     ):
@@ -471,8 +471,8 @@ class Database:
             return {"status": "not_connected"}
         return {
             "status": "connected",
-            "pool_size": self.pool.max_size,
-            "free": self.pool.free_size,
+            "pool_size": getattr(self.pool, "get_max_size", lambda: None)(),
+            "free": getattr(self.pool, "get_idle_size", lambda: None)(),
         }
 
 
