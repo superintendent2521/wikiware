@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
-from pydantic import BaseModel
+from pydantic_settings import BaseSettings
 from loguru import logger
 from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
 from .database import init_database
@@ -50,15 +50,18 @@ os.makedirs("logs", exist_ok=True)
 logger.add("logs/wikiware.log", rotation="1 day", retention="7 days", level="INFO")
 logger.add("logs/errors.log", rotation="1 day", retention="7 days", level="ERROR")
 
-_CSRF_SECRET = os.getenv("CSRF_SECRET_KEY")
-if not _CSRF_SECRET:
+_CSRF_SECRET: str
+_env_csrf_secret = os.getenv("CSRF_SECRET_KEY")
+if _env_csrf_secret:
+    _CSRF_SECRET = _env_csrf_secret
+else:
     _CSRF_SECRET = secrets.token_urlsafe(64)
     logger.warning(
         "CSRF_SECRET_KEY not set; generated ephemeral secret key for this process"
     )
 
 
-class CsrfSettings(BaseModel):
+class CsrfSettings(BaseSettings):
     secret_key: str
     cookie_samesite: str = "lax"
     # Use env override so local HTTP works by default; set CSRF_COOKIE_SECURE=true in prod
@@ -74,7 +77,7 @@ class CsrfSettings(BaseModel):
 
 
 @CsrfProtect.load_config
-def get_csrf_config():
+def get_csrf_config() -> CsrfSettings:
     settings = CsrfSettings(secret_key=_CSRF_SECRET)
     logger.info(
         f"CSRF config: secure={settings.cookie_secure}, httponly={settings.httponly}"
