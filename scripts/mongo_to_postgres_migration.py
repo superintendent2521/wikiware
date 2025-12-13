@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import datetime as dt
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -35,6 +36,8 @@ import asyncpg
 from dotenv import load_dotenv
 from loguru import logger
 from pymongo import MongoClient
+from bson import ObjectId
+from decimal import Decimal
 
 TABLE_NAME = "wikiware_documents"
 COLLECTIONS = [
@@ -47,11 +50,12 @@ COLLECTIONS = [
     "analytics_events",
     "settings",
     "system_logs",
+    "edit_sessions",
 ]
 
 
 def _timestamp() -> str:
-    return dt.datetime.utcnow().strftime("%Y-%m-%dT%H%M%SZ")
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
 
 
 def run_backup(uri_with_db: str, backup_dir: Path) -> Path:
@@ -108,6 +112,31 @@ def fetch_collection(mongo_db, name: str) -> Iterable[Dict]:
     return mongo_db[name].find()
 
 
+def _jsonable(value):
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, dt.datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.timezone.utc)
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="ignore")
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable(v) for v in value]
+    return value
+
+
+def sanitize_document(doc: Dict) -> Dict:
+    cleaned = _jsonable(doc)
+    if isinstance(cleaned, dict):
+        return cleaned
+    return {}
+
+
 async def upsert_documents(
     pool: asyncpg.Pool, collection: str, documents: Iterable[Dict]
 ) -> int:
@@ -117,7 +146,7 @@ async def upsert_documents(
             stmt = await conn.prepare(
                 f"""
                 INSERT INTO {TABLE_NAME} (collection, id, doc)
-                VALUES ($1, $2, $3)
+                VALUES ($1, $2, $3::jsonb)
                 ON CONFLICT (collection, id) DO UPDATE SET doc = EXCLUDED.doc
                 """
             )
@@ -126,7 +155,10 @@ async def upsert_documents(
                 doc_id = str(doc.get("_id") or doc.get("id") or doc.get("uuid") or "")
                 if not doc_id:
                     continue
-                await stmt.fetch(collection, doc_id, doc)
+                clean_doc = sanitize_document(doc)
+                clean_doc["_id"] = doc_id
+                json_payload = json.dumps(clean_doc, ensure_ascii=False)
+                await stmt.fetch(collection, doc_id, json_payload)
                 inserted += 1
     return inserted
 
