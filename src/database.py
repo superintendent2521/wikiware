@@ -112,13 +112,6 @@ class DeleteResult:
 # ---------------------- Utility helpers ----------------------
 
 
-def _ensure_loop() -> Optional[asyncio.AbstractEventLoop]:
-    try:
-        return asyncio.get_running_loop()
-    except RuntimeError:
-        return None
-
-
 def _get_by_path(doc: Dict[str, Any], path: str) -> Any:
     parts = path.split(".")
     current: Any = doc
@@ -157,56 +150,6 @@ def _apply_projection(doc: Dict[str, Any], projection: Optional[Dict[str, int]])
     return doc
 
 
-def _matches_filter(doc: Dict[str, Any], filt: Dict[str, Any]) -> bool:
-    if not filt:
-        return True
-
-    if "$and" in filt:
-        return all(_matches_filter(doc, sub) for sub in filt.get("$and", []))
-    if "$or" in filt:
-        return any(_matches_filter(doc, sub) for sub in filt.get("$or", []))
-
-    def compare(val: Any, condition: Any) -> bool:
-        if isinstance(condition, dict):
-            if "$regex" in condition:
-                pattern = condition.get("$regex") or ""
-                options = condition.get("$options", "")
-                flags = re.IGNORECASE if "i" in options else 0
-                try:
-                    return re.search(pattern, str(val or ""), flags) is not None
-                except re.error:
-                    return False
-            for op, expected in condition.items():
-                if op == "$options":
-                    continue
-                if op == "$exists":
-                    if expected and val is None:
-                        return False
-                    if not expected and val is not None:
-                        return False
-                    continue
-                if op == "$gte" and not (val is not None and val >= expected):
-                    return False
-                if op == "$gt" and not (val is not None and val > expected):
-                    return False
-                if op == "$lte" and not (val is not None and val <= expected):
-                    return False
-                if op == "$lt" and not (val is not None and val < expected):
-                    return False
-                if op == "$in" and val not in expected:
-                    return False
-                if op == "$nin" and val in expected:
-                    return False
-            return True
-        return val == condition
-
-    for key, expected in filt.items():
-        value = _get_by_path(doc, key) if "." in key else doc.get(key)
-        if not compare(value, expected):
-            return False
-    return True
-
-
 def _apply_update(doc: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
     updated = dict(doc)
     for op, changes in update.items():
@@ -223,13 +166,6 @@ def _apply_update(doc: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]
         else:
             logger.warning("Unsupported update operator {}", op)
     return updated
-
-
-def _project_sort_key(doc: Dict[str, Any], key: str) -> Any:
-    if "." in key:
-        return _get_by_path(doc, key)
-    return doc.get(key)
-
 
 def _jsonable(value: Any) -> Any:
     if isinstance(value, dt.datetime):
@@ -630,20 +566,31 @@ class PostgresCollection:
             return UpdateResult(matched_count=0, modified_count=1, upserted_id=result.inserted_id)
 
         return UpdateResult(matched_count=0, modified_count=0, upserted_id=None)
-
     async def delete_one(
         self, filt: Dict[str, Any], *, connection: Optional[asyncpg.Connection] = None
     ) -> DeleteResult:
-        existing_docs = await self._find_docs(filt, None, [], 1, connection=connection)
-        existing = existing_docs[0] if existing_docs else None
-        if existing is None:
-            return DeleteResult(deleted_count=0)
-        await self._db.execute(
-            f"DELETE FROM {self._table_name} WHERE id = $1",
-            str(existing.get("_id")),
-            conn=connection,
+        await self._ensure_table()
+        params: List[Any] = []
+        where_clause = self._build_where_clause(filt or {}, params)
+
+        target_cte = f"SELECT id FROM {self._table_name}"
+        if where_clause:
+            target_cte += f" WHERE {where_clause}"
+        target_cte += " LIMIT 1"
+
+        query = (
+            f"WITH target AS ({target_cte}), "
+            f"deleted AS ("
+            f"DELETE FROM {self._table_name} t USING target "
+            f"WHERE t.id = target.id RETURNING 1"
+            f") "
+            "SELECT COUNT(*) AS count FROM deleted"
         )
-        return DeleteResult(deleted_count=1)
+
+        rows = await self._db.fetch(query, *params, conn=connection)
+        if not rows:
+            return DeleteResult(deleted_count=0)
+        return DeleteResult(deleted_count=int(rows[0]["count"]))
 
     async def count_documents(self, filt: Optional[Dict[str, Any]] = None) -> int:
         await self._ensure_table()
