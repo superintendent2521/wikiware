@@ -79,6 +79,7 @@ class PageService:
         edit_summary: Optional[str] = None,
         edit_permission: str = "everybody",
         allowed_users: Optional[List[str]] = None,
+        connection: Any = None,
     ) -> bool:
         """
         Create a new page.
@@ -129,7 +130,7 @@ class PageService:
                 "allowed_users": normalized_allowed_users,
             }
 
-            await pages_collection.insert_one(page_data)
+            await pages_collection.insert_one(page_data, connection=connection)
             logger.info(f"Page created: {title} on branch: {branch} by {author}")
             return True
         except Exception as e:
@@ -232,25 +233,28 @@ class PageService:
 
                 any_existing_page = await pages_collection.find_one({"title": title})
                 if not any_existing_page:
-                    # Create both main and talk branches for new pages
-                    created_main = await PageService.create_page(
-                        title,
-                        content,
-                        author,
-                        "main",
-                        edit_summary=summary,
-                        edit_permission=edit_permission,
-                        allowed_users=allowed_users or [],
-                    )
-                    created_talk = await PageService.create_page(
-                        title,
-                        "",
-                        author,
-                        "talk",
-                        edit_summary="wikibot: Auto-created talk page",
-                        edit_permission=edit_permission,
-                        allowed_users=allowed_users or [],
-                    )
+                    # Create both main and talk branches for new pages atomically
+                    async with db_instance.transaction() as conn:
+                        created_main = await PageService.create_page(
+                            title,
+                            content,
+                            author,
+                            "main",
+                            edit_summary=summary,
+                            edit_permission=edit_permission,
+                            allowed_users=allowed_users or [],
+                            connection=conn,
+                        )
+                        created_talk = await PageService.create_page(
+                            title,
+                            "",
+                            author,
+                            "talk",
+                            edit_summary="wikibot: Auto-created talk page",
+                            edit_permission=edit_permission,
+                            allowed_users=allowed_users or [],
+                            connection=conn,
+                        )
                     if created_main and created_talk:
                         await log_action(
                             author,
@@ -349,8 +353,9 @@ class PageService:
                 logger.error("Pages collection not available")
                 return []
 
+            pattern = f"%{query}%"
             pages = await pages_collection.find(
-                {"branch": branch, "title": {"$regex": query, "$options": "i"}},
+                {"branch": branch, "title": {"$ilike": pattern}},
                 projection={"title": 1, "updated_at": 1, "branch": 1},
             ).sort("updated_at", -1).to_list(limit)
 

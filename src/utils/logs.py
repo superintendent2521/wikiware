@@ -4,9 +4,9 @@ Provides core functionality for retrieving and formatting system logs.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from loguru import logger
-from ..database import get_history_collection, get_branches_collection, db_instance
+from ..database import TABLE_PREFIX, db_instance
 
 
 async def get_paginated_logs(
@@ -50,16 +50,9 @@ async def get_paginated_logs(
             }
         if bypass:
             logger.warning("Bypass flag enabled - pagination limits are ignored")
-
-        history_collection = get_history_collection()
-        branches_collection = get_branches_collection()
-        system_logs_collection = db_instance.get_collection("system_logs")
-
-        if (
-            (action_type in (None, "edit") and history_collection is None)
-            or (action_type in (None, "branch_create") and branches_collection is None)
-        ):
-            logger.error("Required collections not available for requested logs")
+        selects = _build_log_selects(action_type)
+        if not selects:
+            logger.warning("No log sources included for requested action type")
             return {
                 "items": [],
                 "total": 0,
@@ -68,28 +61,10 @@ async def get_paginated_logs(
                 "limit": 0 if bypass else sanitized_limit,
             }
 
-        history_count = 0
-        if history_collection is not None and (
-            action_type == "edit" or action_type is None
-        ):
-            history_count = await history_collection.count_documents({})
-
-        branch_count = 0
-        if branches_collection is not None and (
-            action_type == "branch_create" or action_type is None
-        ):
-            branch_count = await branches_collection.count_documents({})
-
-        page_create_filter = {"action": "page_create"}
-        create_count = 0
-        if system_logs_collection is not None and (
-            action_type == "page_create" or action_type is None
-        ):
-            create_count = await system_logs_collection.count_documents(
-                page_create_filter
-            )
-
-        total_items = history_count + branch_count + create_count
+        union_sql = " UNION ALL ".join(selects)
+        count_query = f"SELECT COUNT(*) AS count FROM ({union_sql}) AS combined"
+        count_rows = await db_instance.fetch(count_query)
+        total_items = int(count_rows[0]["count"]) if count_rows else 0
 
         if total_items == 0:
             total_pages = 1
@@ -123,107 +98,14 @@ async def get_paginated_logs(
             offset = (page - 1) * effective_limit
             current_page = page
 
-        items = []
-        fetch_limit = total_items if bypass else offset + effective_limit
-
-        if history_collection is not None and (
-            action_type == "edit" or action_type is None
-        ):
-            history_fetch_limit = (
-                history_count if bypass else min(history_count, fetch_limit)
-            )
-            if history_fetch_limit > 0:
-                history_cursor = history_collection.find().sort("updated_at", -1)
-                history_items = await history_cursor.limit(history_fetch_limit).to_list(
-                    history_fetch_limit
-                )
-                for item in history_items:
-                    log_author = item.get("edited_by") or item.get("author", "Anonymous")
-                    items.append(
-                        {
-                            "type": "edit",
-                            "title": item["title"],
-                            "author": log_author,
-                            "branch": item["branch"],
-                            "timestamp": item["updated_at"],
-                            "action": "page_edit",
-                            "details": {
-                                "edited_by": log_author,
-                                "previous_author": item.get("author"),
-                                "content_length": (
-                                    len(item.get("content", ""))
-                                    if "content" in item
-                                    else 0
-                                ),
-                            },
-                        }
-                    )
-
-        if branches_collection is not None and (
-            action_type == "branch_create" or action_type is None
-        ):
-            branch_fetch_limit = (
-                branch_count if bypass else min(branch_count, fetch_limit)
-            )
-            if branch_fetch_limit > 0:
-                branches_cursor = branches_collection.find().sort("created_at", -1)
-                branches_items = await branches_cursor.limit(branch_fetch_limit).to_list(
-                    branch_fetch_limit
-                )
-                for item in branches_items:
-                    items.append(
-                        {
-                            "type": "branch_create",
-                            "title": item["page_title"],
-                            "author": "System",
-                            "branch": item["branch_name"],
-                            "timestamp": item["created_at"],
-                            "action": "branch_create",
-                            "details": {"source_branch": item["created_from"]},
-                        }
-                    )
-
-        if system_logs_collection is not None and (
-            action_type == "page_create" or action_type is None
-        ):
-            creation_fetch_limit = (
-                create_count if bypass else min(create_count, fetch_limit)
-            )
-            if creation_fetch_limit > 0:
-                creations_cursor = system_logs_collection.find(page_create_filter).sort(
-                    "timestamp", -1
-                )
-                creation_logs = await creations_cursor.limit(
-                    creation_fetch_limit
-                ).to_list(creation_fetch_limit)
-                for item in creation_logs:
-                    metadata = item.get("metadata") or {}
-                    timestamp = item.get("timestamp") or datetime.now(timezone.utc)
-                    items.append(
-                        {
-                            "type": "page_create",
-                            "title": metadata.get("title")
-                            or metadata.get("page_title")
-                            or item.get("message", ""),
-                            "author": metadata.get("author")
-                            or item.get("username", "Unknown"),
-                            "branch": metadata.get("branch", "main"),
-                            "timestamp": timestamp,
-                            "action": "page_create",
-                            "details": {
-                                "created_by": metadata.get("author")
-                                or item.get("username"),
-                                "branch": metadata.get("branch", "main"),
-                            },
-                        }
-                    )
-
-        items.sort(key=lambda x: x["timestamp"], reverse=True)
-
+        data_params: List[Any] = []
+        data_query = f"SELECT * FROM ({union_sql}) AS combined ORDER BY timestamp DESC"
         if not bypass:
-            start_index = offset
-            end_index = offset + effective_limit
-            items = items[start_index:end_index]
+            data_query += f" OFFSET ${len(data_params) + 1} LIMIT ${len(data_params) + 2}"
+            data_params.extend([offset, effective_limit])
+
+        rows = await db_instance.fetch(data_query, *data_params)
+        items = _rows_to_items(rows)
 
         response_limit = len(items)
 
@@ -238,6 +120,93 @@ async def get_paginated_logs(
     except Exception as e:
         logger.error(f"Error fetching logs: {str(e)}")
         raise e
+
+
+def _build_log_selects(action_type: Optional[str]) -> List[str]:
+    history_table = f"{TABLE_PREFIX}history"
+    branches_table = f"{TABLE_PREFIX}branches"
+    system_logs_table = f"{TABLE_PREFIX}system_logs"
+
+    selects: List[str] = []
+
+    if action_type in (None, "edit"):
+        selects.append(
+            f"""
+            SELECT
+                'edit' AS type,
+                doc #>> '{{title}}' AS title,
+                COALESCE(NULLIF(doc #>> '{{edited_by}}', ''), doc #>> '{{author}}', 'Anonymous') AS author,
+                COALESCE(doc #>> '{{branch}}', 'main') AS branch,
+                (doc #>> '{{updated_at}}')::timestamptz AS timestamp,
+                'page_edit' AS action,
+                jsonb_build_object(
+                    'edited_by', COALESCE(NULLIF(doc #>> '{{edited_by}}', ''), doc #>> '{{author}}', 'Anonymous'),
+                    'previous_author', doc #>> '{{author}}',
+                    'content_length', COALESCE(length(doc #>> '{{content}}'), 0)
+                ) AS details
+            FROM {history_table}
+            WHERE doc ? 'updated_at'
+            """
+        )
+
+    if action_type in (None, "branch_create"):
+        selects.append(
+            f"""
+            SELECT
+                'branch_create' AS type,
+                doc #>> '{{page_title}}' AS title,
+                'System' AS author,
+                doc #>> '{{branch_name}}' AS branch,
+                (doc #>> '{{created_at}}')::timestamptz AS timestamp,
+                'branch_create' AS action,
+                jsonb_build_object('source_branch', doc #>> '{{created_from}}') AS details
+            FROM {branches_table}
+            WHERE doc ? 'created_at'
+            """
+        )
+
+    if action_type in (None, "page_create"):
+        selects.append(
+            f"""
+            SELECT
+                'page_create' AS type,
+                COALESCE(
+                    NULLIF(doc #>> '{{metadata,title}}', ''),
+                    NULLIF(doc #>> '{{metadata,page_title}}', ''),
+                    doc #>> '{{message}}',
+                    ''
+                ) AS title,
+                COALESCE(doc #>> '{{metadata,author}}', doc #>> '{{username}}', 'Unknown') AS author,
+                COALESCE(doc #>> '{{metadata,branch}}', 'main') AS branch,
+                (doc #>> '{{timestamp}}')::timestamptz AS timestamp,
+                'page_create' AS action,
+                jsonb_build_object(
+                    'created_by', COALESCE(doc #>> '{{metadata,author}}', doc #>> '{{username}}'),
+                    'branch', COALESCE(doc #>> '{{metadata,branch}}', 'main')
+                ) AS details
+            FROM {system_logs_table}
+            WHERE (doc #>> '{{action}}') = 'page_create' AND doc ? 'timestamp'
+            """
+        )
+
+    return selects
+
+
+def _rows_to_items(rows: List[Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        items.append(
+            {
+                "type": row.get("type"),
+                "title": row.get("title"),
+                "author": row.get("author"),
+                "branch": row.get("branch"),
+                "timestamp": row.get("timestamp"),
+                "action": row.get("action"),
+                "details": row.get("details") or {},
+            }
+        )
+    return items
 
 
 async def log_action(

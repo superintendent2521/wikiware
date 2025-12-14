@@ -147,7 +147,20 @@ async def upsert_documents(
     pool: asyncpg.Pool, collection: str, documents: Iterable[Dict]
 ) -> int:
     table_name = table_name_for(collection)
-    inserted = 0
+    records_to_insert = []
+    for doc in documents:
+        doc = dict(doc)
+        doc_id = str(doc.get("_id") or doc.get("id") or doc.get("uuid") or "")
+        if not doc_id:
+            continue
+        clean_doc = sanitize_document(doc)
+        clean_doc["_id"] = doc_id
+        json_payload = json.dumps(clean_doc, ensure_ascii=False)
+        records_to_insert.append((doc_id, json_payload))
+
+    if not records_to_insert:
+        return 0
+
     async with pool.acquire() as conn:
         async with conn.transaction():
             stmt = await conn.prepare(
@@ -157,17 +170,9 @@ async def upsert_documents(
                 ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc
                 """
             )
-            for doc in documents:
-                doc = dict(doc)
-                doc_id = str(doc.get("_id") or doc.get("id") or doc.get("uuid") or "")
-                if not doc_id:
-                    continue
-                clean_doc = sanitize_document(doc)
-                clean_doc["_id"] = doc_id
-                json_payload = json.dumps(clean_doc, ensure_ascii=False)
-                await stmt.fetch(doc_id, json_payload)
-                inserted += 1
-    return inserted
+            await stmt.executemany(records_to_insert)
+
+    return len(records_to_insert)
 
 
 async def migrate_collections(

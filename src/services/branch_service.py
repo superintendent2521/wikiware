@@ -35,9 +35,10 @@ class BranchService:
                 logger.warning("Branches collection not available")
                 return ["main"]
 
-            branch_docs = await branches_collection.find().to_list(100)
-            branches = list(set(["main"] + [doc["branch_name"] for doc in branch_docs]))
-            return branches
+            branch_names = await branches_collection.distinct("branch_name")
+            branches = set(branch_names or [])
+            branches.add("main")
+            return list(branches)
         except Exception as e:
             logger.error(f"Error getting available branches: {str(e)}")
             return ["main"]
@@ -63,23 +64,19 @@ class BranchService:
             branches_collection = get_branches_collection()
             pages_collection = get_pages_collection()
 
-            branches = ["main"]
+            branches = {"main"}
 
             if branches_collection is not None:
-                # Get branches from branches collection
-                branch_docs = await branches_collection.find(
-                    {"page_title": title}
-                ).to_list(100)
-                branches.extend([doc["branch_name"] for doc in branch_docs])
+                branch_docs = await branches_collection.distinct(
+                    "branch_name", {"page_title": title}
+                )
+                branches.update(branch_docs or [])
 
-            # Also check pages collection for any branches
             if pages_collection is not None:
-                page_docs = await pages_collection.find({"title": title}).to_list(100)
-                page_branches = [doc["branch"] for doc in page_docs if "branch" in doc]
-                branches.extend(page_branches)
+                page_branches = await pages_collection.distinct("branch", {"title": title})
+                branches.update([b for b in page_branches or [] if b])
 
-            # Remove duplicates and return
-            return list(set(branches))
+            return list(branches)
         except Exception as e:
             logger.error(f"Error getting branches for page {title}: {str(e)}")
             return ["main"]

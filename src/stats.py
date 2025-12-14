@@ -99,14 +99,11 @@ async def get_total_characters():
         start = time.perf_counter()
         pages_collection = get_pages_collection()
         if pages_collection is not None:
-            total_characters = 0
-            pages = await pages_collection.find({}, projection={"content": 1}).to_list(None)
-            for page in pages:
-                content = page.get("content", "")
-                if isinstance(content, dict):
-                    # Legacy or malformed; skip
-                    continue
-                total_characters += len(content or "")
+            await pages_collection._ensure_table()
+            rows = await db_instance.fetch(
+                f"SELECT COALESCE(SUM(LENGTH(doc->>'content')), 0) AS total_chars FROM {pages_collection._table_name}"
+            )
+            total_characters = int(rows[0]["total_chars"]) if rows else 0
 
             last_character_count = total_characters
             last_character_count_time = datetime.now()
