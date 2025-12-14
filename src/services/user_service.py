@@ -491,11 +491,13 @@ class UserService:
 
             # Normalize expires_at to timezone-aware UTC for safe comparison
             expires_at = session.get("expires_at")
-            if isinstance(expires_at, datetime):
-                if expires_at.tzinfo is None:
-                    expires_at = expires_at.replace(tzinfo=timezone.utc)
-            else:
-                expires_at = None
+            if isinstance(expires_at, str):
+                try:
+                    expires_at = datetime.fromisoformat(expires_at)
+                except ValueError:
+                    expires_at = None
+            if isinstance(expires_at, datetime) and expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
 
             now_utc = datetime.now(timezone.utc)
             if expires_at and expires_at > now_utc:

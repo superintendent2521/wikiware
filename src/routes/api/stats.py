@@ -28,10 +28,7 @@ async def get_user_stats(username: str):
 
         # Get stats for the specific user
         users_collection = get_users_collection()
-        user_stats = await users_collection.find_one(
-            {"username": username},
-            projection={"_id": 0, "total_edits": 1, "page_edits": 1},
-        )
+        user_stats = await users_collection.find_one({"username": username})
 
         if not user_stats:
             raise HTTPException(status_code=404, detail="User not found")

@@ -99,21 +99,15 @@ async def get_total_characters():
         start = time.perf_counter()
         pages_collection = get_pages_collection()
         if pages_collection is not None:
-            # Aggregate to sum the length of all content
-            pipeline = [
-                {"$project": {"content_length": {"$strLenCP": "$content"}}},
-                {
-                    "$group": {
-                        "_id": None,
-                        "total_characters": {"$sum": "$content_length"},
-                    }
-                },
-            ]
+            total_characters = 0
+            pages = await pages_collection.find({}, projection={"content": 1}).to_list(None)
+            for page in pages:
+                content = page.get("content", "")
+                if isinstance(content, dict):
+                    # Legacy or malformed; skip
+                    continue
+                total_characters += len(content or "")
 
-            result = await pages_collection.aggregate(pipeline).to_list(1)
-            total_characters = result[0]["total_characters"] if result else 0
-
-            # Update cache — this sets last_character_count_time to a valid datetime
             last_character_count = total_characters
             last_character_count_time = datetime.now()
             end = time.perf_counter()

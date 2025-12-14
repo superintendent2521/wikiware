@@ -11,6 +11,9 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+import json
+import datetime as dt
+from decimal import Decimal
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, List, Optional
 
@@ -28,7 +31,31 @@ POSTGRES_DSN = os.getenv(
 DB_OPERATION_LOG_THRESHOLD_MS = (
     float(os.getenv("DB_OPERATION_LOG_THRESHOLD_MS", "100")) / 1000
 )
-TABLE_NAME = "wikiware_documents"
+TABLE_PREFIX = "wikiware_"
+DEFAULT_COLLECTIONS = ("pages", "history", "branches", "users", "image_hashes")
+INDEX_SPECS = {
+    "pages": [
+        ("title_branch", "((doc->>'title'), (doc->>'branch'))"),
+        ("branch", "((doc->>'branch'))"),
+        ("updated_at", "((doc->>'updated_at'))"),
+    ],
+    "history": [
+        ("title_branch", "((doc->>'title'), (doc->>'branch'))"),
+        ("updated_at", "((doc->>'updated_at'))"),
+    ],
+    "branches": [
+        ("page_branch", "((doc->>'page_title'), (doc->>'branch_name'))"),
+        ("created_at", "((doc->>'created_at'))"),
+    ],
+    "users": [
+        ("username", "((doc->>'username'))"),
+        ("email", "((doc->>'email'))"),
+    ],
+    "image_hashes": [
+        ("filename", "((doc->>'filename'))"),
+        ("sha256", "((doc->>'sha256'))"),
+    ],
+}
 
 
 # ---------------------- Result helpers ----------------------
@@ -152,6 +179,24 @@ def _project_sort_key(doc: Dict[str, Any], key: str) -> Any:
     return doc.get(key)
 
 
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, dt.datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.timezone.utc)
+        return value.isoformat()
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="ignore")
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable(v) for v in value]
+    return value
+
+
 # ---------------------- Cursor ----------------------
 
 
@@ -213,16 +258,35 @@ class PostgresCursor:
 
 
 class PostgresCollection:
-    def __init__(self, name: str, db: "Database"):
+    def __init__(self, name: str, table_name: str, db: "Database"):
         self.name = name
+        self._table_name = table_name
         self._db = db
 
+    async def _ensure_table(self) -> None:
+        await self._db.ensure_table(self._table_name)
+
     async def _fetch_docs(self) -> List[Dict[str, Any]]:
+        await self._ensure_table()
         rows = await self._db.fetch(
-            f"SELECT doc FROM {TABLE_NAME} WHERE collection = $1",
-            self.name,
+            f"SELECT doc FROM {self._table_name}",
         )
-        return [row["doc"] for row in rows]
+        docs: List[Dict[str, Any]] = []
+        for row in rows:
+            doc = row["doc"]
+            if isinstance(doc, bytes):
+                doc = doc.decode("utf-8", errors="ignore")
+            if isinstance(doc, str):
+                try:
+                    doc = json.loads(doc)
+                except json.JSONDecodeError:
+                    logger.warning("Skipping non-JSON doc in {}", self._table_name)
+                    continue
+            if isinstance(doc, dict):
+                docs.append(doc)
+            else:
+                logger.warning("Skipping non-dict doc in {}", self._table_name)
+        return docs
 
     def find(
         self,
@@ -245,18 +309,19 @@ class PostgresCollection:
         return results[0] if results else None
 
     async def insert_one(self, document: Dict[str, Any]) -> InsertOneResult:
+        await self._ensure_table()
         doc = dict(document)
         if "_id" not in doc:
             doc["_id"] = str(uuid.uuid4())
+        json_payload = json.dumps(_jsonable(doc), ensure_ascii=False)
         await self._db.execute(
             f"""
-            INSERT INTO {TABLE_NAME} (collection, id, doc)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (collection, id) DO UPDATE SET doc = EXCLUDED.doc
+            INSERT INTO {self._table_name} (id, doc)
+            VALUES ($1, $2::jsonb)
+            ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc
             """,
-            self.name,
             str(doc["_id"]),
-            doc,
+            json_payload,
         )
         return InsertOneResult(inserted_id=str(doc["_id"]))
 
@@ -277,11 +342,11 @@ class PostgresCollection:
             return UpdateResult(matched_count=0, modified_count=1, upserted_id=result.inserted_id)
 
         updated_doc = _apply_update(existing, update)
+        json_payload = json.dumps(_jsonable(updated_doc), ensure_ascii=False)
         await self._db.execute(
-            f"UPDATE {TABLE_NAME} SET doc = $3 WHERE collection = $1 AND id = $2",
-            self.name,
+            f"UPDATE {self._table_name} SET doc = $2::jsonb WHERE id = $1",
             str(existing.get("_id")),
-            updated_doc,
+            json_payload,
         )
         return UpdateResult(matched_count=1, modified_count=1, upserted_id=None)
 
@@ -290,8 +355,7 @@ class PostgresCollection:
         if existing is None:
             return DeleteResult(deleted_count=0)
         await self._db.execute(
-            f"DELETE FROM {TABLE_NAME} WHERE collection = $1 AND id = $2",
-            self.name,
+            f"DELETE FROM {self._table_name} WHERE id = $1",
             str(existing.get("_id")),
         )
         return DeleteResult(deleted_count=1)
@@ -405,11 +469,15 @@ class Database:
         self.is_connected = False
         self._connection_lock = asyncio.Lock()
         self._wrapped_collections: Dict[str, PostgresCollection] = {}
+        self._ensured_tables: set[str] = set()
+        self._ensured_indexes: set[str] = set()
 
     def _reset_state(self) -> None:
         self.pool = None
         self.is_connected = False
         self._wrapped_collections.clear()
+        self._ensured_tables.clear()
+        self._ensured_indexes.clear()
 
     async def connect(self) -> None:
         async with self._connection_lock:
@@ -418,26 +486,61 @@ class Database:
             try:
                 logger.info("Connecting to Postgres at {}", self._dsn)
                 self.pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=10)
-                await self._ensure_table()
+                await self._ensure_tables(DEFAULT_COLLECTIONS)
+                await self._ensure_indexes(DEFAULT_COLLECTIONS)
                 self.is_connected = True
                 logger.info("Connected to Postgres and storage table ensured")
             except Exception:
                 logger.exception("Failed to connect to Postgres")
                 self._reset_state()
 
-    async def _ensure_table(self) -> None:
-        if self.pool is None:
+    def _table_name_for_collection(self, collection: str) -> str:
+        if not collection or not collection.replace("_", "").isalnum():
+            raise ValueError(f"Invalid collection name '{collection}'")
+        return f"{TABLE_PREFIX}{collection}"
+
+    async def _ensure_tables(self, collections: Iterable[str]) -> None:
+        for collection in collections:
+            table_name = self._table_name_for_collection(collection)
+            await self.ensure_table(table_name)
+
+    async def ensure_table(self, table_name: str) -> None:
+        if self.pool is None or table_name in self._ensured_tables:
             return
         await self.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                collection TEXT NOT NULL,
+            CREATE TABLE IF NOT EXISTS {table_name} (
                 id TEXT NOT NULL,
                 doc JSONB NOT NULL,
-                PRIMARY KEY (collection, id)
+                PRIMARY KEY (id)
             );
             """
         )
+        try:
+            await self.execute(
+                f"ALTER TABLE {table_name} ALTER COLUMN doc TYPE JSONB USING doc::jsonb;"
+            )
+        except Exception:
+            logger.warning("Could not coerce doc column to JSONB for {}", table_name)
+        self._ensured_tables.add(table_name)
+
+    async def _ensure_indexes(self, collections: Iterable[str]) -> None:
+        for collection in collections:
+            await self.ensure_indexes_for_collection(collection)
+
+    async def ensure_indexes_for_collection(self, collection: str) -> None:
+        if self.pool is None:
+            return
+        table_name = self._table_name_for_collection(collection)
+        await self.ensure_table(table_name)
+        specs = INDEX_SPECS.get(collection, [])
+        for suffix, expression in specs:
+            index_name = f"{table_name}_{suffix}_idx"
+            cache_key = f"{table_name}:{index_name}"
+            if cache_key in self._ensured_indexes:
+                continue
+            await self.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} {expression};")
+            self._ensured_indexes.add(cache_key)
 
     async def disconnect(self) -> None:
         async with self._connection_lock:
@@ -450,7 +553,8 @@ class Database:
             return None
         if name in self._wrapped_collections:
             return self._wrapped_collections[name]
-        collection = PostgresCollection(name, self)
+        table_name = self._table_name_for_collection(name)
+        collection = PostgresCollection(name, table_name, self)
         self._wrapped_collections[name] = collection
         return collection
 
@@ -502,8 +606,8 @@ def get_image_hashes_collection():
 
 
 async def create_indexes() -> None:
-    # JSONB storage uses application-level filtering; explicit DB indexes can be added later.
-    logger.info("Index creation skipped (JSONB storage)")
+    logger.info("Ensuring JSONB indexes for default collections")
+    await db_instance._ensure_indexes(DEFAULT_COLLECTIONS)
 
 
 async def init_database() -> None:

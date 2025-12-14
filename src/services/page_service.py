@@ -21,6 +21,17 @@ class PageService:
     """Service class for page-related operations."""
 
     @staticmethod
+    def _normalize_timestamp(page: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure updated_at is a datetime for template usage."""
+        ts = page.get("updated_at")
+        if isinstance(ts, str):
+            try:
+                page["updated_at"] = datetime.fromisoformat(ts)
+            except ValueError:
+                page["updated_at"] = None
+        return page
+
+    @staticmethod
     def _normalize_summary(edit_summary: Optional[str]) -> str:
         summary = (edit_summary or "").strip()
         if len(summary) > 250:
@@ -222,26 +233,24 @@ class PageService:
                 any_existing_page = await pages_collection.find_one({"title": title})
                 if not any_existing_page:
                     # Create both main and talk branches for new pages
-                    async with await db_instance.client.start_session() as s:
-                        async with s.start_transaction():
-                            created_main = await PageService.create_page(
-                                title,
-                                content,
-                                author,
-                                "main",
-                                edit_summary=summary,
-                                edit_permission=edit_permission,
-                                allowed_users=allowed_users or [],
-                            )
-                            created_talk = await PageService.create_page(
-                                title,
-                                "",
-                                author,
-                                "talk",
-                                edit_summary="wikibot: Auto-created talk page",
-                                edit_permission=edit_permission,
-                                allowed_users=allowed_users or [],
-                            )
+                    created_main = await PageService.create_page(
+                        title,
+                        content,
+                        author,
+                        "main",
+                        edit_summary=summary,
+                        edit_permission=edit_permission,
+                        allowed_users=allowed_users or [],
+                    )
+                    created_talk = await PageService.create_page(
+                        title,
+                        "",
+                        author,
+                        "talk",
+                        edit_summary="wikibot: Auto-created talk page",
+                        edit_permission=edit_permission,
+                        allowed_users=allowed_users or [],
+                    )
                     if created_main and created_talk:
                         await log_action(
                             author,
@@ -318,6 +327,7 @@ class PageService:
                 .sort("updated_at", -1)
                 .to_list(limit)
             )
+            pages = [PageService._normalize_timestamp(p) for p in pages]
             return pages
         except Exception as e:
             logger.error(f"Error getting pages for branch {branch}: {str(e)}")
@@ -339,48 +349,12 @@ class PageService:
                 logger.error("Pages collection not available")
                 return []
 
-            # Shared helpers
-            collation = {"locale": "en", "strength": 1}  # case + diacritic insensitive
-            projection = {"score": {"$meta": "textScore"}, "title": 1, "updated_at": 1, "branch": 1}  # trim big fields
+            pages = await pages_collection.find(
+                {"branch": branch, "title": {"$regex": query, "$options": "i"}},
+                projection={"title": 1, "updated_at": 1, "branch": 1},
+            ).sort("updated_at", -1).to_list(limit)
 
-            try:
-                cursor = (
-                    pages_collection
-                    .find(
-                        {"$and": [{"branch": branch}, {"$text": {"$search": query}}]},
-                        projection
-                    )
-                    .collation(collation)
-                    .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
-                )
-                pages = await cursor.to_list(limit)
-            except OperationFailure as op_err:
-                logger.warning(
-                    f"Text search unavailable, falling back to regex search: {op_err}"
-                )
-                import re
-                safe = re.escape(query)
-                cursor = (
-                    pages_collection
-                    .find(
-                        {
-                            "$and": [
-                                {"branch": branch},
-                                {
-                                    "$or": [
-                                        {"title": {"$regex": safe, "$options": "i"}},
-                                        {"content": {"$regex": safe, "$options": "i"}},
-                                    ]
-                                },
-                            ]
-                        },
-                        {"title": 1, "updated_at": 1, "branch": 1}  # no text score in regex mode
-                    )
-                    .collation(collation)
-                    .sort([("updated_at", -1)])
-                )
-                pages = await cursor.to_list(limit)
-
+            pages = [PageService._normalize_timestamp(p) for p in pages]
             logger.info(f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results")
             return pages
 

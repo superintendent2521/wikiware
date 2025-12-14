@@ -5,7 +5,7 @@ MongoDB -> Postgres migration helper for WikiWare.
 Steps:
 1) Creates a mongodump backup (gzip archive) before touching data.
 2) Reads MongoDB collections and writes them into Postgres JSONB storage
-   (table: wikiware_documents).
+   using one table per collection (tables prefixed with wikiware_).
 3) Upserts documents so the script can be run multiple times.
 
 Usage:
@@ -39,7 +39,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 from decimal import Decimal
 
-TABLE_NAME = "wikiware_documents"
+TABLE_PREFIX = "wikiware_"
 COLLECTIONS = [
     "pages",
     "history",
@@ -93,15 +93,21 @@ def load_env_defaults() -> Dict[str, str]:
     }
 
 
-async def ensure_table(pool: asyncpg.Pool) -> None:
+def table_name_for(collection: str) -> str:
+    if not collection or not collection.replace("_", "").isalnum():
+        raise ValueError(f"Invalid collection name '{collection}'")
+    return f"{TABLE_PREFIX}{collection}"
+
+
+async def ensure_table(pool: asyncpg.Pool, collection: str) -> None:
+    table_name = table_name_for(collection)
     async with pool.acquire() as conn:
         await conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                collection TEXT NOT NULL,
+            CREATE TABLE IF NOT EXISTS {table_name} (
                 id TEXT NOT NULL,
                 doc JSONB NOT NULL,
-                PRIMARY KEY (collection, id)
+                PRIMARY KEY (id)
             );
             """
         )
@@ -140,14 +146,15 @@ def sanitize_document(doc: Dict) -> Dict:
 async def upsert_documents(
     pool: asyncpg.Pool, collection: str, documents: Iterable[Dict]
 ) -> int:
+    table_name = table_name_for(collection)
     inserted = 0
     async with pool.acquire() as conn:
         async with conn.transaction():
             stmt = await conn.prepare(
                 f"""
-                INSERT INTO {TABLE_NAME} (collection, id, doc)
-                VALUES ($1, $2, $3::jsonb)
-                ON CONFLICT (collection, id) DO UPDATE SET doc = EXCLUDED.doc
+                INSERT INTO {table_name} (id, doc)
+                VALUES ($1, $2::jsonb)
+                ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc
                 """
             )
             for doc in documents:
@@ -158,7 +165,7 @@ async def upsert_documents(
                 clean_doc = sanitize_document(doc)
                 clean_doc["_id"] = doc_id
                 json_payload = json.dumps(clean_doc, ensure_ascii=False)
-                await stmt.fetch(collection, doc_id, json_payload)
+                await stmt.fetch(doc_id, json_payload)
                 inserted += 1
     return inserted
 
@@ -183,15 +190,15 @@ async def migrate_collections(
     mongo_db = mongo_client.get_database()
 
     pool = await asyncpg.create_pool(postgres_dsn, min_size=1, max_size=10)
-    await ensure_table(pool)
+    for name in COLLECTIONS:
+        await ensure_table(pool, name)
 
     if truncate:
         async with pool.acquire() as conn:
             logger.info("Truncating existing rows for selected collections")
-            await conn.execute(
-                f"DELETE FROM {TABLE_NAME} WHERE collection = ANY($1::text[])",
-                COLLECTIONS,
-            )
+            for name in COLLECTIONS:
+                table_name = table_name_for(name)
+                await conn.execute(f"DELETE FROM {table_name}")
 
     for name in COLLECTIONS:
         documents = fetch_collection(mongo_db, name)
