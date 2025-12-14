@@ -506,8 +506,8 @@ class PostgresCollection:
         rows = await self._db.fetch(query, *params, conn=connection)
         return [self._decode_row(row, projection_for_python) for row in rows]
 
-    async def find_one(self, filt: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-        results = await self._find_docs(filt, None, [], 1)
+    async def find_one(self, filt: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, int]] = None) -> Optional[Dict[str, Any]]:
+        results = await self._find_docs(filt, projection, [], 1)
         return results[0] if results else None
 
     async def insert_one(
