@@ -51,6 +51,10 @@ INDEX_SPECS = {
         ("branch", "((doc->>'branch'))"),
         ("updated_at", "((doc->>'updated_at'))"),
         ("title_trgm", "USING gin ((doc->>'title') gin_trgm_ops)"),
+        (
+            "content_fts",
+            "USING gin (to_tsvector('english', coalesce(doc->>'title', '') || ' ' || coalesce(doc->>'content', '')))",
+        ),
     ],
     "history": [
         ("title_branch", "((doc->>'title'), (doc->>'branch'))"),
@@ -628,6 +632,35 @@ class PostgresCollection:
         rows = await self._db.fetch(query, *params, conn=connection)
         return DeleteResult(deleted_count=len(rows))
 
+    def _extract_upsert_base(self, filt: Dict[str, Any]) -> Dict[str, Any]:
+        """Collect simple equality filters to seed an upserted document."""
+        base: Dict[str, Any] = {}
+
+        def set_if_consistent(key: str, value: Any) -> None:
+            if key in base and base[key] != value:
+                base.pop(key, None)
+                return
+            base[key] = value
+
+        def visit(obj: Any) -> None:
+            if not isinstance(obj, dict):
+                return
+            for key, condition in obj.items():
+                if key == "$and" and isinstance(condition, list):
+                    for sub in condition:
+                        visit(sub)
+                    continue
+                if key.startswith("$"):
+                    continue
+                if isinstance(condition, dict):
+                    if "$eq" in condition:
+                        set_if_consistent(key, condition["$eq"])
+                    continue
+                set_if_consistent(key, condition)
+
+        visit(filt)
+        return base
+
     async def update_many(
         self,
         filt: Dict[str, Any],
@@ -652,7 +685,7 @@ class PostgresCollection:
         upserted_id = None
 
         if upsert and matched == 0:
-            base = {k: v for k, v in filt.items() if not isinstance(v, dict)}
+            base = self._extract_upsert_base(filt)
             new_doc = _apply_update(base, update)
             result = await self.insert_one(new_doc, connection=connection)
             upserted_id = result.inserted_id

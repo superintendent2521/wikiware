@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from loguru import logger
 from pymongo.errors import OperationFailure
 from ..database import (
+    TABLE_PREFIX,
     get_pages_collection,
     get_history_collection,
     get_users_collection,
@@ -353,11 +354,53 @@ class PageService:
                 logger.error("Pages collection not available")
                 return []
 
-            pattern = f"%{query}%"
-            pages = await pages_collection.find(
-                {"branch": branch, "title": {"$ilike": pattern}},
-                projection={"title": 1, "updated_at": 1, "branch": 1},
-            ).sort("updated_at", -1).to_list(limit)
+            normalized_query = query.strip()
+            if not normalized_query:
+                logger.info("Search attempted with empty query")
+                return []
+
+            table_name = f"{TABLE_PREFIX}pages"
+            search_sql = f"""
+                WITH search AS (
+                    SELECT
+                        doc,
+                        to_tsvector(
+                            'english',
+                            coalesce(doc->>'title', '') || ' ' || coalesce(doc->>'content', '')
+                        ) AS search_vector,
+                        websearch_to_tsquery('english', $1) AS search_query
+                    FROM {table_name}
+                )
+                SELECT
+                    doc #>> '{{title}}' AS title,
+                    doc #>> '{{content}}' AS content,
+                    NULLIF(doc #>> '{{updated_at}}', '')::timestamptz AS updated_at,
+                    coalesce(doc #>> '{{branch}}', 'main') AS branch,
+                    coalesce(NULLIF(doc #>> '{{author}}', ''), 'Anonymous') AS author,
+                    ts_rank(search_vector, search_query) AS rank
+                FROM search
+                WHERE coalesce(doc #>> '{{branch}}', 'main') = $2
+                  AND search_vector @@ search_query
+                ORDER BY rank DESC, updated_at DESC
+                LIMIT $3
+            """
+
+            effective_limit = 100 if limit is None else limit
+            rows = await db_instance.fetch(
+                search_sql, normalized_query, branch or "main", effective_limit
+            )
+
+            pages = []
+            for row in rows:
+                pages.append(
+                    {
+                        "title": row["title"],
+                        "content": row["content"],
+                        "updated_at": row["updated_at"],
+                        "branch": row["branch"],
+                        "author": row["author"],
+                    }
+                )
 
             pages = [PageService._normalize_timestamp(p) for p in pages]
             logger.info(f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results")
