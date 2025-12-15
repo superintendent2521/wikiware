@@ -127,8 +127,7 @@ def _jsonable(value):
         return value.isoformat()
     if isinstance(value, Decimal):
         return float(value)
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="ignore")
+        return value.decode("utf-8", errors="replace")
     if isinstance(value, dict):
         return {k: _jsonable(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
