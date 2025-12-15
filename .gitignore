@@ -10,3 +10,5 @@ example-page.pdf
 cloudflared.log
 backups/*
 src/env_config.py
+scripts/backups/*
+.DS_Store

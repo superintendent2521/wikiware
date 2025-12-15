@@ -24,6 +24,9 @@ class AnalyticsService:
     """Service responsible for recording and aggregating analytics events."""
 
     _COLLECTION_NAME = "analytics_events"
+    _RETENTION_DAYS = 90
+    _RETENTION_CHECK_INTERVAL = timedelta(hours=1)
+    _last_retention_check: datetime | None = None
 
     @staticmethod
     def _get_collection():
@@ -31,6 +34,19 @@ class AnalyticsService:
         if not db_instance.is_connected:
             return None
         return db_instance.get_collection(AnalyticsService._COLLECTION_NAME)
+
+    @classmethod
+    async def _maybe_enforce_retention(cls, collection) -> None:
+        """Delete analytics events older than the retention window on a fixed cadence."""
+        now = _utcnow()
+        if cls._last_retention_check and now - cls._last_retention_check < cls._RETENTION_CHECK_INTERVAL:
+            return
+        cutoff = now - timedelta(days=cls._RETENTION_DAYS)
+        try:
+            await collection.delete_many({"timestamp": {"$lt": cutoff}})
+        except Exception as exc:  # IGNORE W0718
+            logger.warning(f"Failed to enforce analytics retention: {exc}")
+        cls._last_retention_check = now
 
     @staticmethod
     async def record_page_view(
@@ -53,6 +69,7 @@ class AnalyticsService:
                 "referrer": request.headers.get("referer"),
             }
             await collection.insert_one(event)
+            await AnalyticsService._maybe_enforce_retention(collection)
         except Exception as exc:  # IGNORE W0718
             logger.warning(f"Failed to record page view for {page_title}: {exc}")
 
@@ -79,6 +96,7 @@ class AnalyticsService:
                 "results": result_count,
             }
             await collection.insert_one(event)
+            await AnalyticsService._maybe_enforce_retention(collection)
         except Exception as exc:  # IGNORE W0718
             logger.warning(f"Failed to record search query {query!r}: {exc}")
 
@@ -99,6 +117,7 @@ class AnalyticsService:
                 "branch": branch,
             }
             await collection.insert_one(event)
+            await AnalyticsService._maybe_enforce_retention(collection)
         except Exception as exc:  # IGNORE W0718
             logger.warning(
                 f"Failed to record favorite for {page_title!r} on {branch}: {exc}"
@@ -121,6 +140,7 @@ class AnalyticsService:
                 "branch": branch,
             }
             await collection.insert_one(event)
+            await AnalyticsService._maybe_enforce_retention(collection)
         except Exception as exc:  # IGNORE W0718
             logger.warning(
                 f"Failed to record favorite removal for {page_title!r} on {branch}: {exc}"

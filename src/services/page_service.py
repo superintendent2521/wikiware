@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from loguru import logger
 from pymongo.errors import OperationFailure
 from ..database import (
+    TABLE_PREFIX,
     get_pages_collection,
     get_history_collection,
     get_users_collection,
@@ -19,6 +20,17 @@ from ..utils.logs import log_action
 
 class PageService:
     """Service class for page-related operations."""
+
+    @staticmethod
+    def _normalize_timestamp(page: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure updated_at is a datetime for template usage."""
+        ts = page.get("updated_at")
+        if isinstance(ts, str):
+            try:
+                page["updated_at"] = datetime.fromisoformat(ts)
+            except ValueError:
+                page["updated_at"] = None
+        return page
 
     @staticmethod
     def _normalize_summary(edit_summary: Optional[str]) -> str:
@@ -68,6 +80,7 @@ class PageService:
         edit_summary: Optional[str] = None,
         edit_permission: str = "everybody",
         allowed_users: Optional[List[str]] = None,
+        connection: Any = None,
     ) -> bool:
         """
         Create a new page.
@@ -118,7 +131,7 @@ class PageService:
                 "allowed_users": normalized_allowed_users,
             }
 
-            await pages_collection.insert_one(page_data)
+            await pages_collection.insert_one(page_data, connection=connection)
             logger.info(f"Page created: {title} on branch: {branch} by {author}")
             return True
         except Exception as e:
@@ -221,27 +234,28 @@ class PageService:
 
                 any_existing_page = await pages_collection.find_one({"title": title})
                 if not any_existing_page:
-                    # Create both main and talk branches for new pages
-                    async with await db_instance.client.start_session() as s:
-                        async with s.start_transaction():
-                            created_main = await PageService.create_page(
-                                title,
-                                content,
-                                author,
-                                "main",
-                                edit_summary=summary,
-                                edit_permission=edit_permission,
-                                allowed_users=allowed_users or [],
-                            )
-                            created_talk = await PageService.create_page(
-                                title,
-                                "",
-                                author,
-                                "talk",
-                                edit_summary="wikibot: Auto-created talk page",
-                                edit_permission=edit_permission,
-                                allowed_users=allowed_users or [],
-                            )
+                    # Create both main and talk branches for new pages atomically
+                    async with db_instance.transaction() as conn:
+                        created_main = await PageService.create_page(
+                            title,
+                            content,
+                            author,
+                            "main",
+                            edit_summary=summary,
+                            edit_permission=edit_permission,
+                            allowed_users=allowed_users or [],
+                            connection=conn,
+                        )
+                        created_talk = await PageService.create_page(
+                            title,
+                            "",
+                            author,
+                            "talk",
+                            edit_summary="wikibot: Auto-created talk page",
+                            edit_permission=edit_permission,
+                            allowed_users=allowed_users or [],
+                            connection=conn,
+                        )
                     if created_main and created_talk:
                         await log_action(
                             author,
@@ -318,6 +332,7 @@ class PageService:
                 .sort("updated_at", -1)
                 .to_list(limit)
             )
+            pages = [PageService._normalize_timestamp(p) for p in pages]
             return pages
         except Exception as e:
             logger.error(f"Error getting pages for branch {branch}: {str(e)}")
@@ -339,48 +354,55 @@ class PageService:
                 logger.error("Pages collection not available")
                 return []
 
-            # Shared helpers
-            collation = {"locale": "en", "strength": 1}  # case + diacritic insensitive
-            projection = {"score": {"$meta": "textScore"}, "title": 1, "updated_at": 1, "branch": 1}  # trim big fields
+            normalized_query = query.strip()
+            if not normalized_query:
+                logger.info("Search attempted with empty query")
+                return []
 
-            try:
-                cursor = (
-                    pages_collection
-                    .find(
-                        {"$and": [{"branch": branch}, {"$text": {"$search": query}}]},
-                        projection
-                    )
-                    .collation(collation)
-                    .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
+            table_name = f"{TABLE_PREFIX}pages"
+            search_sql = f"""
+                WITH search AS (
+                    SELECT
+                        doc,
+                        to_tsvector(
+                            'english',
+                            coalesce(doc->>'title', '') || ' ' || coalesce(doc->>'content', '')
+                        ) AS search_vector,
+                        websearch_to_tsquery('english', $1) AS search_query
+                    FROM {table_name}
                 )
-                pages = await cursor.to_list(limit)
-            except OperationFailure as op_err:
-                logger.warning(
-                    f"Text search unavailable, falling back to regex search: {op_err}"
-                )
-                import re
-                safe = re.escape(query)
-                cursor = (
-                    pages_collection
-                    .find(
-                        {
-                            "$and": [
-                                {"branch": branch},
-                                {
-                                    "$or": [
-                                        {"title": {"$regex": safe, "$options": "i"}},
-                                        {"content": {"$regex": safe, "$options": "i"}},
-                                    ]
-                                },
-                            ]
-                        },
-                        {"title": 1, "updated_at": 1, "branch": 1}  # no text score in regex mode
-                    )
-                    .collation(collation)
-                    .sort([("updated_at", -1)])
-                )
-                pages = await cursor.to_list(limit)
+                SELECT
+                    doc #>> '{{title}}' AS title,
+                    doc #>> '{{content}}' AS content,
+                    NULLIF(doc #>> '{{updated_at}}', '')::timestamptz AS updated_at,
+                    coalesce(doc #>> '{{branch}}', 'main') AS branch,
+                    coalesce(NULLIF(doc #>> '{{author}}', ''), 'Anonymous') AS author,
+                    ts_rank(search_vector, search_query) AS rank
+                FROM search
+                WHERE coalesce(doc #>> '{{branch}}', 'main') = $2
+                  AND search_vector @@ search_query
+                ORDER BY rank DESC, updated_at DESC
+                LIMIT $3
+            """
 
+            effective_limit = 100 if limit is None else limit
+            rows = await db_instance.fetch(
+                search_sql, normalized_query, branch or "main", effective_limit
+            )
+
+            pages = []
+            for row in rows:
+                pages.append(
+                    {
+                        "title": row["title"],
+                        "content": row["content"],
+                        "updated_at": row["updated_at"],
+                        "branch": row["branch"],
+                        "author": row["author"],
+                    }
+                )
+
+            pages = [PageService._normalize_timestamp(p) for p in pages]
             logger.info(f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results")
             return pages
 
