@@ -8,6 +8,7 @@ from fastapi_csrf_protect import CsrfProtect
 
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.settings_service import SettingsService
+
 router = APIRouter()
 
 
@@ -64,4 +65,3 @@ async def update_feature_flags(request: Request, csrf_protect: CsrfProtect = Dep
         url=f"{redirect_url}?status={status}",
         status_code=303,
     )
-

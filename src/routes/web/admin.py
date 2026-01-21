@@ -4,7 +4,7 @@ Only accessible to users with admin: true flag.
 """
 
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi_csrf_protect import CsrfProtect
 
 from ...database import db_instance, get_users_collection

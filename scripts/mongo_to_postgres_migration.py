@@ -30,7 +30,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable
 
 import asyncpg
 from dotenv import load_dotenv
@@ -215,9 +215,19 @@ async def migrate_collections(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Migrate MongoDB data into Postgres JSONB storage.")
-    parser.add_argument("--skip-backup", action="store_true", help="Do not run mongodump before migrating.")
-    parser.add_argument("--truncate", action="store_true", help="Delete existing rows for migrated collections first.")
+    parser = argparse.ArgumentParser(
+        description="Migrate MongoDB data into Postgres JSONB storage."
+    )
+    parser.add_argument(
+        "--skip-backup",
+        action="store_true",
+        help="Do not run mongodump before migrating.",
+    )
+    parser.add_argument(
+        "--truncate",
+        action="store_true",
+        help="Delete existing rows for migrated collections first.",
+    )
     return parser.parse_args()
 
 

@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime, timedelta
-import os
 from loguru import logger
 from .database import (
     get_pages_collection,
@@ -19,6 +18,7 @@ character_count_cache_duration = timedelta(minutes=30)  # Cache for 30 Minutes
 last_image_count = 0
 last_image_count_time = None  # Start as None to force first calculation
 image_count_cache_duration = timedelta(minutes=30)  # Cache for 30 Minutes
+
 
 async def get_total_edits():
     """
@@ -159,21 +159,22 @@ async def get_total_images():
         logger.info(
             f"IMG: Cache is old or uninitialized, Updating! Time delta is {time_delta}"
         )
-    try: 
+    try:
         image_hashes_collection = get_image_hashes_collection()
         # only use the db since each image is added to the db when uploaded
         if db_instance.is_connected and image_hashes_collection is not None:
             total_images = await image_hashes_collection.count_documents({})
-            
+
             # CORRECTED CACHE UPDATE
             last_image_count = total_images
             last_image_count_time = datetime.now()
-            
+
             return total_images
         return 0
     except Exception as e:
         logger.error(f"Error counting total images: {str(e)}")
         return 0
+
 
 async def get_stats():
     """

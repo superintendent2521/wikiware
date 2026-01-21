@@ -16,8 +16,6 @@ from ...utils.logs import get_paginated_logs
 router = APIRouter()
 
 
-
-
 @router.get("/logs", response_model=Dict[str, Any])
 async def get_logs(
     request: Request,

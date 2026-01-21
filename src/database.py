@@ -13,17 +13,22 @@ import os
 import uuid
 import json
 import datetime as dt
-import re
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, List, Optional
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+)
 
 import asyncpg
 from dotenv import load_dotenv
 from loguru import logger
 
-from . import config
 
 load_dotenv()
 
@@ -74,8 +79,14 @@ INDEX_SPECS = {
         ("sha256", "((doc->>'sha256'))"),
     ],
     "analytics_events": [
-        ("event_type_timestamp", "((doc->>'event_type'), ((doc->>'timestamp')::timestamptz))"),
-        ("query_normalized_trgm", "USING gin ((doc->>'query_normalized') gin_trgm_ops)"),
+        (
+            "event_type_timestamp",
+            "((doc->>'event_type'), ((doc->>'timestamp')::timestamptz))",
+        ),
+        (
+            "query_normalized_trgm",
+            "USING gin ((doc->>'query_normalized') gin_trgm_ops)",
+        ),
         ("timestamp_only", "(((doc->>'timestamp'))::timestamptz)"),
     ],
     "sessions": [
@@ -136,7 +147,9 @@ def _set_by_path(doc: Dict[str, Any], path: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
-def _apply_projection(doc: Dict[str, Any], projection: Optional[Dict[str, int]]) -> Dict[str, Any]:
+def _apply_projection(
+    doc: Dict[str, Any], projection: Optional[Dict[str, int]]
+) -> Dict[str, Any]:
     if projection is None:
         return doc
     include_keys = {k for k, v in projection.items() if v}
@@ -170,6 +183,7 @@ def _apply_update(doc: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]
         else:
             logger.warning("Unsupported update operator {}", op)
     return updated
+
 
 def _jsonable(value: Any) -> Any:
     if isinstance(value, dt.datetime):
@@ -289,7 +303,9 @@ class PostgresCollection:
         suffix = casts.get(value_type)
         return f"({expr}){suffix}" if suffix else expr
 
-    def _append_param(self, value: Any, value_type: str, params: List[Any], *, is_array: bool = False) -> str:
+    def _append_param(
+        self, value: Any, value_type: str, params: List[Any], *, is_array: bool = False
+    ) -> str:
         normalized = self._normalize_filter_value(value)
         params.append(normalized)
         placeholder = f"${len(params)}"
@@ -325,9 +341,11 @@ class PostgresCollection:
         safe_parts = [json.dumps(part)[1:-1] for part in path.split(".")]
         path_literal = '","'.join(safe_parts)
         operator = "#>>" if as_text else "#>"
-        return f'doc {operator} \'{{"{path_literal}"}}\''
+        return f"doc {operator} '{{\"{path_literal}\"}}'"
 
-    def _build_where_clause(self, filt: Optional[Dict[str, Any]], params: List[Any]) -> str:
+    def _build_where_clause(
+        self, filt: Optional[Dict[str, Any]], params: List[Any]
+    ) -> str:
         if not filt:
             return ""
 
@@ -374,36 +392,60 @@ class PostgresCollection:
                         clauses.append(f"{expr} IS NULL")
                         continue
                     if op == "$exists":
-                        clauses.append(f"{expr} IS NOT NULL" if raw_expected else f"{expr} IS NULL")
+                        clauses.append(
+                            f"{expr} IS NOT NULL" if raw_expected else f"{expr} IS NULL"
+                        )
                         continue
                     value_type = self._value_type(raw_expected)
                     typed_expr = self._cast_expr_for_type(expr, value_type)
                     if op == "$gte":
-                        placeholder = self._append_param(raw_expected, value_type, params)
+                        placeholder = self._append_param(
+                            raw_expected, value_type, params
+                        )
                         clauses.append(f"{typed_expr} >= {placeholder}")
                     elif op == "$gt":
-                        placeholder = self._append_param(raw_expected, value_type, params)
+                        placeholder = self._append_param(
+                            raw_expected, value_type, params
+                        )
                         clauses.append(f"{typed_expr} > {placeholder}")
                     elif op == "$lte":
-                        placeholder = self._append_param(raw_expected, value_type, params)
+                        placeholder = self._append_param(
+                            raw_expected, value_type, params
+                        )
                         clauses.append(f"{typed_expr} <= {placeholder}")
                     elif op == "$lt":
-                        placeholder = self._append_param(raw_expected, value_type, params)
+                        placeholder = self._append_param(
+                            raw_expected, value_type, params
+                        )
                         clauses.append(f"{typed_expr} < {placeholder}")
                     elif op == "$in":
-                        values = expected if isinstance(expected, (list, tuple, set)) else [expected]
+                        values = (
+                            expected
+                            if isinstance(expected, (list, tuple, set))
+                            else [expected]
+                        )
                         value_type = self._value_type_for_iterable(values)
-                        placeholder = self._append_param(list(values), value_type, params, is_array=True)
+                        placeholder = self._append_param(
+                            list(values), value_type, params, is_array=True
+                        )
                         typed_expr = self._cast_expr_for_type(expr, value_type)
                         clauses.append(f"{typed_expr} = ANY({placeholder})")
                     elif op == "$nin":
-                        values = expected if isinstance(expected, (list, tuple, set)) else [expected]
+                        values = (
+                            expected
+                            if isinstance(expected, (list, tuple, set))
+                            else [expected]
+                        )
                         value_type = self._value_type_for_iterable(values)
-                        placeholder = self._append_param(list(values), value_type, params, is_array=True)
+                        placeholder = self._append_param(
+                            list(values), value_type, params, is_array=True
+                        )
                         typed_expr = self._cast_expr_for_type(expr, value_type)
                         clauses.append(f"{typed_expr} <> ALL({placeholder})")
                     else:
-                        placeholder = self._append_param(raw_expected, value_type, params)
+                        placeholder = self._append_param(
+                            raw_expected, value_type, params
+                        )
                         clauses.append(f"{typed_expr} = {placeholder}")
             else:
                 if condition is None:
@@ -447,13 +489,17 @@ class PostgresCollection:
             parts.append(f"{expr} {order}")
         return ", ".join(parts)
 
-    def _decode_row(self, row: asyncpg.Record, projection: Optional[Dict[str, int]]) -> Dict[str, Any]:
+    def _decode_row(
+        self, row: asyncpg.Record, projection: Optional[Dict[str, int]]
+    ) -> Dict[str, Any]:
         doc = row["doc"]
         if projection:
             doc = _apply_projection(doc, projection)
         return doc
 
-    def _build_update_expression(self, update: Dict[str, Any], params: List[Any]) -> str:
+    def _build_update_expression(
+        self, update: Dict[str, Any], params: List[Any]
+    ) -> str:
         if not update:
             raise ValueError("Empty update payload is not supported")
 
@@ -495,7 +541,9 @@ class PostgresCollection:
         await self._ensure_table()
         params: List[Any] = []
         where_clause = self._build_where_clause(filt or {}, params)
-        projection_clause, projection_for_python = self._build_projection_clause(projection)
+        projection_clause, projection_for_python = self._build_projection_clause(
+            projection
+        )
         order_clause = self._build_order_clause(sorts)
 
         query = f"SELECT {projection_clause} FROM {self._table_name}"
@@ -510,12 +558,19 @@ class PostgresCollection:
         rows = await self._db.fetch(query, *params, conn=connection)
         return [self._decode_row(row, projection_for_python) for row in rows]
 
-    async def find_one(self, filt: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, int]] = None) -> Optional[Dict[str, Any]]:
+    async def find_one(
+        self,
+        filt: Optional[Dict[str, Any]] = None,
+        projection: Optional[Dict[str, int]] = None,
+    ) -> Optional[Dict[str, Any]]:
         results = await self._find_docs(filt, projection, [], 1)
         return results[0] if results else None
 
     async def insert_one(
-        self, document: Dict[str, Any], *, connection: Optional[asyncpg.Connection] = None
+        self,
+        document: Dict[str, Any],
+        *,
+        connection: Optional[asyncpg.Connection] = None,
     ) -> InsertOneResult:
         await self._ensure_table()
         doc = dict(document)
@@ -561,15 +616,20 @@ class PostgresCollection:
 
         rows = await self._db.fetch(query, *params, conn=connection)
         if rows:
-            return UpdateResult(matched_count=len(rows), modified_count=len(rows), upserted_id=None)
+            return UpdateResult(
+                matched_count=len(rows), modified_count=len(rows), upserted_id=None
+            )
 
         if upsert:
             base = {k: v for k, v in filt.items() if not isinstance(v, dict)}
             new_doc = _apply_update(base, update)
             result = await self.insert_one(new_doc, connection=connection)
-            return UpdateResult(matched_count=0, modified_count=1, upserted_id=result.inserted_id)
+            return UpdateResult(
+                matched_count=0, modified_count=1, upserted_id=result.inserted_id
+            )
 
         return UpdateResult(matched_count=0, modified_count=0, upserted_id=None)
+
     async def delete_one(
         self, filt: Dict[str, Any], *, connection: Optional[asyncpg.Connection] = None
     ) -> DeleteResult:
@@ -608,7 +668,9 @@ class PostgresCollection:
             return 0
         return int(rows[0]["count"])
 
-    async def distinct(self, key: str, filt: Optional[Dict[str, Any]] = None) -> List[Any]:
+    async def distinct(
+        self, key: str, filt: Optional[Dict[str, Any]] = None
+    ) -> List[Any]:
         await self._ensure_table()
         params: List[Any] = []
         where_clause = self._build_where_clause(filt or {}, params)
@@ -620,7 +682,10 @@ class PostgresCollection:
         return [row["value"] for row in rows if row["value"] is not None]
 
     async def delete_many(
-        self, filt: Optional[Dict[str, Any]], *, connection: Optional[asyncpg.Connection] = None
+        self,
+        filt: Optional[Dict[str, Any]],
+        *,
+        connection: Optional[asyncpg.Connection] = None,
     ) -> DeleteResult:
         await self._ensure_table()
         params: List[Any] = []
@@ -691,7 +756,9 @@ class PostgresCollection:
             upserted_id = result.inserted_id
             modified += 1
 
-        return UpdateResult(matched_count=matched, modified_count=modified, upserted_id=upserted_id)
+        return UpdateResult(
+            matched_count=matched, modified_count=modified, upserted_id=upserted_id
+        )
 
     def aggregate(self, pipeline: List[Dict[str, Any]]) -> PostgresCursor:
         return PostgresCursor(self, {}, None, None, pipeline=pipeline)
@@ -722,7 +789,9 @@ class PostgresCollection:
         params.append(_jsonable(value))
         return f"${len(params)}"
 
-    def _build_group_id_expr(self, group_spec: Any, params: List[Any]) -> tuple[str, List[str]]:
+    def _build_group_id_expr(
+        self, group_spec: Any, params: List[Any]
+    ) -> tuple[str, List[str]]:
         if isinstance(group_spec, dict):
             parts = []
             group_by_exprs: List[str] = []
@@ -765,7 +834,9 @@ class PostgresCollection:
             parts.append(f"{expr} {order}")
         return ", ".join(parts)
 
-    def _apply_project_stage(self, docs: List[Dict[str, Any]], project: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _apply_project_stage(
+        self, docs: List[Dict[str, Any]], project: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         projected: List[Dict[str, Any]] = []
         for doc in docs:
             new_doc: Dict[str, Any] = {}
@@ -775,11 +846,19 @@ class PostgresCollection:
                 if expr == 1:
                     new_doc[key] = doc.get(key)
                 elif isinstance(expr, str) and expr.startswith("$"):
-                    new_doc[key] = _get_by_path(doc, expr[1:]) if "." in expr[1:] else doc.get(expr[1:])
+                    new_doc[key] = (
+                        _get_by_path(doc, expr[1:])
+                        if "." in expr[1:]
+                        else doc.get(expr[1:])
+                    )
                 elif isinstance(expr, dict) and "$dateToString" in expr:
                     fmt = expr["$dateToString"]["format"]
                     date_val = _get_by_path(doc, expr["$dateToString"]["date"][1:])
-                    new_doc[key] = date_val.strftime(fmt) if hasattr(date_val, "strftime") else None
+                    new_doc[key] = (
+                        date_val.strftime(fmt)
+                        if hasattr(date_val, "strftime")
+                        else None
+                    )
                 else:
                     new_doc[key] = expr
             projected.append(new_doc)
@@ -820,12 +899,16 @@ class PostgresCollection:
                 combined_sorts.extend(list(sort_stage.items()))
             combined_sorts.extend(sorts)
             effective_limit = limit_stage if limit_stage is not None else limit
-            results = await self._find_docs(match_filter, None, combined_sorts, effective_limit)
+            results = await self._find_docs(
+                match_filter, None, combined_sorts, effective_limit
+            )
             if project_stage:
                 results = self._apply_project_stage(results, project_stage)
             return results
 
-        group_id_expr, group_by_exprs = self._build_group_id_expr(group_stage.get("_id"), params)
+        group_id_expr, group_by_exprs = self._build_group_id_expr(
+            group_stage.get("_id"), params
+        )
         select_parts = [f"{group_id_expr} AS _id"]
         for field, expr in group_stage.items():
             if field == "_id":
@@ -900,7 +983,9 @@ class Database:
             while attempt <= retries and not self.is_connected:
                 try:
                     logger.info("Connecting to Postgres at {}", self._dsn)
-                    self.pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=10)
+                    self.pool = await asyncpg.create_pool(
+                        self._dsn, min_size=1, max_size=10
+                    )
                     await self._ensure_extensions()
                     await self._ensure_tables(DEFAULT_COLLECTIONS)
                     await self._ensure_indexes(DEFAULT_COLLECTIONS)
@@ -910,7 +995,9 @@ class Database:
                     return
                 except Exception:
                     attempt += 1
-                    logger.exception("Failed to connect to Postgres (attempt {})", attempt)
+                    logger.exception(
+                        "Failed to connect to Postgres (attempt {})", attempt
+                    )
                     self._reset_state()
                     if attempt > retries:
                         break
@@ -933,12 +1020,16 @@ class Database:
                     async with self.pool.acquire() as conn:
                         await conn.execute("SELECT 1")
                 except Exception:
-                    logger.warning("Lost connection to Postgres, attempting to reconnect")
+                    logger.warning(
+                        "Lost connection to Postgres, attempting to reconnect"
+                    )
                     try:
                         if self.pool:
                             await self.pool.close()
                     except Exception:
-                        logger.debug("Error while closing pool during reconnect", exc_info=True)
+                        logger.debug(
+                            "Error while closing pool during reconnect", exc_info=True
+                        )
                     self._reset_state(preserve_monitor=True)
                     await self.connect()
         except asyncio.CancelledError:
@@ -958,7 +1049,9 @@ class Database:
             await self.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
             self._ensured_extensions.add("pg_trgm")
         except Exception:
-            logger.warning("Could not ensure pg_trgm extension; trigram index may not be available")
+            logger.warning(
+                "Could not ensure pg_trgm extension; trigram index may not be available"
+            )
 
     async def _ensure_tables(self, collections: Iterable[str]) -> None:
         for collection in collections:
@@ -1000,7 +1093,9 @@ class Database:
             cache_key = f"{table_name}:{index_name}"
             if cache_key in self._ensured_indexes:
                 continue
-            await self.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} {expression};")
+            await self.execute(
+                f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} {expression};"
+            )
             self._ensured_indexes.add(cache_key)
 
     async def disconnect(self) -> None:
@@ -1034,7 +1129,9 @@ class Database:
             else:
                 await tx.commit()
 
-    async def execute(self, query: str, *args: Any, conn: Optional[asyncpg.Connection] = None) -> None:
+    async def execute(
+        self, query: str, *args: Any, conn: Optional[asyncpg.Connection] = None
+    ) -> None:
         if self.pool is None and conn is None:
             raise RuntimeError("Database not connected")
         if conn is not None:

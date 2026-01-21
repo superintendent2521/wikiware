@@ -754,7 +754,9 @@ async def save_page(
                 normalized_previous = sorted(
                     {username for username in previous_allowed_users}
                 )
-                normalized_current = sorted({username for username in allowed_users_list})
+                normalized_current = sorted(
+                    {username for username in allowed_users_list}
+                )
                 permission_changed = edit_permission != previous_permission
                 allowed_users_changed = normalized_previous != normalized_current
                 became_protected = edit_permission != EDIT_PERMISSION_EVERYBODY
@@ -958,7 +960,7 @@ async def delete_branch(
             if not parsed.netloc and not parsed.scheme:
                 # relative path, safe to redirect
                 return RedirectResponse(url=redirect_url, status_code=303)
-            # fallback to home page if unsafe
+                # fallback to home page if unsafe
                 return RedirectResponse(url="/", status_code=303)
         else:
             logger.warning(f"Branch not found for deletion: {branch} from page {title}")

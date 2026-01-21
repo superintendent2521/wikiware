@@ -73,7 +73,9 @@ class BranchService:
                 branches.update(branch_docs or [])
 
             if pages_collection is not None:
-                page_branches = await pages_collection.distinct("branch", {"title": title})
+                page_branches = await pages_collection.distinct(
+                    "branch", {"title": title}
+                )
                 branches.update([b for b in page_branches or [] if b])
 
             return list(branches)

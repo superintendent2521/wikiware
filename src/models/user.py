@@ -44,6 +44,7 @@ class User(BaseModel):
         if not v or not v.strip():
             raise ValueError("Password hash cannot be empty")
         return v
+
     @validator("favorites")
     def validate_favorites(cls, v):
         if not isinstance(v, list):

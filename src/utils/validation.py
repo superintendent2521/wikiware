@@ -72,8 +72,6 @@ def sanitize_redirect_path(target: Optional[str], default: str = "/") -> str:
     return f"{path}{query}"
 
 
-
-
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename to prevent security issues."""
     # Remove path separators and other dangerous characters

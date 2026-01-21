@@ -99,7 +99,7 @@ class SettingsService:
             except ValueError:
                 logger.warning(f"Could not parse banner expiration '{value}'")
                 return None
-        
+
         if parsed_dt:
             if parsed_dt.tzinfo is None:
                 return parsed_dt.replace(tzinfo=timezone.utc)
@@ -247,7 +247,9 @@ class SettingsService:
         if not db_instance.is_connected:
             return cls._feature_flags_cache
 
-        if not force_refresh and cls._cache_is_fresh(cls._feature_flags_cache_fetched_at):
+        if not force_refresh and cls._cache_is_fresh(
+            cls._feature_flags_cache_fetched_at
+        ):
             return cls._feature_flags_cache
 
         settings_collection = db_instance.get_collection("settings")

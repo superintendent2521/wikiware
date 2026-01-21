@@ -148,9 +148,7 @@ class UserService:
             return None
 
     @staticmethod
-    async def add_favorite(
-        username: str, title: str, branch: str = "main"
-    ) -> bool:
+    async def add_favorite(username: str, title: str, branch: str = "main") -> bool:
         """
         Add a favorite page for the specified user.
 
@@ -168,8 +166,7 @@ class UserService:
                 return False
 
             if any(
-                fav["title"] == title and fav["branch"] == branch
-                for fav in favorites
+                fav["title"] == title and fav["branch"] == branch for fav in favorites
             ):
                 return True
 
@@ -207,9 +204,7 @@ class UserService:
             return False
 
     @staticmethod
-    async def remove_favorite(
-        username: str, title: str, branch: str = "main"
-    ) -> bool:
+    async def remove_favorite(username: str, title: str, branch: str = "main") -> bool:
         """
         Remove a favorite page for the specified user.
 
@@ -227,8 +222,7 @@ class UserService:
                 return False
 
             if not any(
-                fav["title"] == title and fav["branch"] == branch
-                for fav in favorites
+                fav["title"] == title and fav["branch"] == branch for fav in favorites
             ):
                 return True
 

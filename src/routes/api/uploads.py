@@ -3,7 +3,6 @@ Upload routes for WikiWare.
 Handles file upload operations.
 """
 
-import asyncio
 import hashlib
 import uuid
 
@@ -199,7 +198,9 @@ async def upload_image(
 
         # Store file in object storage
         try:
-            stored_image = await upload_image_bytes(file_content, unique_filename, file.content_type)
+            stored_image = await upload_image_bytes(
+                file_content, unique_filename, file.content_type
+            )
         except StorageError as exc:
             logger.error(f"Image upload failed for '{unique_filename}': {exc}")
             return JSONResponse(

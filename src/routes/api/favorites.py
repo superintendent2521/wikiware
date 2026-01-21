@@ -2,7 +2,7 @@
 API routes for managing user favorites.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 from loguru import logger

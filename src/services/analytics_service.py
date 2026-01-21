@@ -39,7 +39,10 @@ class AnalyticsService:
     async def _maybe_enforce_retention(cls, collection) -> None:
         """Delete analytics events older than the retention window on a fixed cadence."""
         now = _utcnow()
-        if cls._last_retention_check and now - cls._last_retention_check < cls._RETENTION_CHECK_INTERVAL:
+        if (
+            cls._last_retention_check
+            and now - cls._last_retention_check < cls._RETENTION_CHECK_INTERVAL
+        ):
             return
         cutoff = now - timedelta(days=cls._RETENTION_DAYS)
         try:
@@ -159,9 +162,7 @@ class AnalyticsService:
             return AnalyticsService._empty_metrics()
 
         now = _utcnow()
-        today_start = datetime(
-            now.year, now.month, now.day, tzinfo=timezone.utc
-        )
+        today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
         window_start = today_start - timedelta(days=6)
 
         metrics = AnalyticsService._empty_metrics()

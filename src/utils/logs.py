@@ -84,9 +84,7 @@ async def get_paginated_logs(
             current_page = 1
         else:
             effective_limit = sanitized_limit
-            total_pages = max(
-                1, (total_items + effective_limit - 1) // effective_limit
-            )
+            total_pages = max(1, (total_items + effective_limit - 1) // effective_limit)
             if page > total_pages:
                 return {
                     "items": [],
@@ -101,7 +99,9 @@ async def get_paginated_logs(
         data_params: List[Any] = []
         data_query = f"SELECT * FROM ({union_sql}) AS combined ORDER BY timestamp DESC"
         if not bypass:
-            data_query += f" OFFSET ${len(data_params) + 1} LIMIT ${len(data_params) + 2}"
+            data_query += (
+                f" OFFSET ${len(data_params) + 1} LIMIT ${len(data_params) + 2}"
+            )
             data_params.extend([offset, effective_limit])
 
         rows = await db_instance.fetch(data_query, *data_params)

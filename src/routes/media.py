@@ -2,7 +2,6 @@
 Media proxy routes for serving uploaded images.
 """
 
-import asyncio
 import mimetypes
 
 from fastapi import APIRouter, HTTPException

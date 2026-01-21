@@ -5,7 +5,7 @@ Centralizes all configuration settings and environment variables.
 
 import os
 from dotenv import load_dotenv
-from .env_config import SECRET_KEY, ACCESS_KEY # Importing sensitive data
+from .env_config import SECRET_KEY, ACCESS_KEY  # Importing sensitive data
 
 # Load environment variables
 load_dotenv()
@@ -36,7 +36,7 @@ S3_FORCE_PATH_STYLE = True
 S3_PUBLIC_URL = ""  # Optional public CDN/base URL override
 
 # Logging settings
-#UNUSED
+# UNUSED
 LOG_DIR = "logs"
 LOG_RETENTION = "7 days"
 LOG_LEVEL = "INFO"

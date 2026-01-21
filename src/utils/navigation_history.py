@@ -42,7 +42,9 @@ def load_history_cookie(request: Request) -> List[Dict[str, object]]:
         title = entry.get("title")
         if not isinstance(title, str) or not title:
             continue
-        branch_value = entry.get("branch") if isinstance(entry.get("branch"), str) else "main"
+        branch_value = (
+            entry.get("branch") if isinstance(entry.get("branch"), str) else "main"
+        )
         history.append(
             {
                 "title": title,
@@ -71,7 +73,7 @@ def apply_history_update(
     updated_history = [entry for entry in updated_history if entry != current_entry]
     updated_history.append(current_entry)
     if len(updated_history) > HISTORY_MAX_LENGTH:
-        updated_history = updated_history[-HISTORY_MAX_LENGTH :]
+        updated_history = updated_history[-HISTORY_MAX_LENGTH:]
     return updated_history
 
 
@@ -84,10 +86,9 @@ def resolve_previous_entry(
 
     for index in range(len(history) - 2, -1, -1):
         entry = history[index]
-        if (
-            entry.get("title") == current_entry.get("title")
-            and entry.get("branch") == current_entry.get("branch")
-        ):
+        if entry.get("title") == current_entry.get("title") and entry.get(
+            "branch"
+        ) == current_entry.get("branch"):
             continue
         return entry
     return None
@@ -122,7 +123,9 @@ def prepare_navigation_context(
     """Return updated history data and previous page context for templates."""
     history = load_history_cookie(request)
     current_entry = build_history_entry(title, branch, is_home)
-    is_back_navigation = request.query_params.get(HISTORY_QUERY_PARAM) == HISTORY_BACK_VALUE
+    is_back_navigation = (
+        request.query_params.get(HISTORY_QUERY_PARAM) == HISTORY_BACK_VALUE
+    )
     updated_history = apply_history_update(history, current_entry, is_back_navigation)
     previous_entry = resolve_previous_entry(updated_history, current_entry)
 

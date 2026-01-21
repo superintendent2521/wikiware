@@ -6,7 +6,6 @@ Contains business logic for page operations.
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from loguru import logger
-from pymongo.errors import OperationFailure
 from ..database import (
     TABLE_PREFIX,
     get_pages_collection,
@@ -403,7 +402,9 @@ class PageService:
                 )
 
             pages = [PageService._normalize_timestamp(p) for p in pages]
-            logger.info(f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results")
+            logger.info(
+                f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results"
+            )
             return pages
 
         except Exception as e:
@@ -411,7 +412,6 @@ class PageService:
                 f"Error searching pages with query {query!r} on branch {branch!r}: {e}"
             )
             return []
-
 
     @staticmethod
     async def delete_page(title: str) -> bool:
@@ -616,7 +616,5 @@ class PageService:
             logger.info(f"Page renamed from {old_title} to {new_title}")
             return True, None
         except Exception as e:
-            logger.error(
-                f"Error renaming page {old_title} to {new_title}: {str(e)}"
-            )
+            logger.error(f"Error renaming page {old_title} to {new_title}: {str(e)}")
             return False, "error"
