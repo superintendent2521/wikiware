@@ -45,6 +45,7 @@ from .services.settings_service import SettingsService
 from .middleware.security_headers import SecurityHeadersMiddleware
 from .middleware.user_agent_middleware import UserAgentMiddleware
 from .utils.template_env import get_templates
+from .types import ensure_feature_flags, set_banner
 
 # Configure loguru
 os.makedirs("logs", exist_ok=True)
@@ -111,14 +112,14 @@ async def inject_global_settings(request: Request, call_next):
     except Exception as exc:
         logger.error(f"Failed to load global banner: {exc}")
         banner = SettingsService._banner_cache
-    request.state.global_banner = banner
+    set_banner(request, banner)
 
     try:
         feature_flags = await SettingsService.get_feature_flags()
     except Exception as exc:
         logger.error(f"Failed to load feature flags: {exc}")
         feature_flags = SettingsService._feature_flags_cache
-    request.state.feature_flags = feature_flags
+    ensure_feature_flags(request, feature_flags)
 
     response = await call_next(request)
     return response

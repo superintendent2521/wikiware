@@ -16,6 +16,7 @@ from ...models.user import UserRegistration
 from ...services.user_service import UserService
 from ...utils.template_env import get_templates
 from ...utils.validation import sanitize_redirect_path
+from ...types import get_state
 
 
 def get_client_ip(request: Request) -> str:
@@ -63,8 +64,9 @@ async def register_form(
     request: Request, response: Response, csrf_protect: CsrfProtect = Depends()
 ):
     """Show user registration form."""
+    state = get_state(request)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-    feature_flags = request.state.feature_flags
+    feature_flags = state.feature_flags
     logger.debug("Generated CSRF token for registration form")
     # Attach CSRF cookie to the actual response being returned
     template = templates.TemplateResponse(
@@ -96,7 +98,7 @@ async def register_user(
     try:
         # Validate CSRF token
         await csrf_protect.validate_csrf(request)
-        feature_flags = request.state.feature_flags
+        feature_flags = get_state(request).feature_flags
         if not feature_flags.account_creation_enabled:
             logger.info("Registration blocked because account creation is disabled")
             csrf_token, signed_token = csrf_protect.generate_csrf_tokens()

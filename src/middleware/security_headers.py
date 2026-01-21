@@ -8,12 +8,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from ..types import set_csp_nonce
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Generate a per-request nonce for inline scripts if needed
-        nonce = secrets.token_urlsafe(16)
-        request.state.csp_nonce = nonce
+        nonce = set_csp_nonce(request, secrets.token_urlsafe(16))
 
         response: Response = await call_next(request)
 

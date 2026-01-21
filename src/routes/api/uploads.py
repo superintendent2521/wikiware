@@ -21,6 +21,7 @@ from ...services.storage_service import (
     upload_image_bytes,
 )
 from ...utils.validation import sanitize_filename
+from ...types import get_state
 
 
 router = APIRouter()
@@ -48,7 +49,7 @@ async def upload_image(
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
 
-        feature_flags = request.state.feature_flags
+        feature_flags = get_state(request).feature_flags
         if not feature_flags.image_upload_enabled and not user.get("is_admin", False):
             logger.info(
                 f"Image upload blocked for user '{user.get('username')}' because uploads are disabled"

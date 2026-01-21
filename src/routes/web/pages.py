@@ -40,6 +40,7 @@ from ...utils.markdown_extensions import (
     SourceExtension,
 )
 from ...utils.error_utils import render_error_page
+from ...types import get_state
 
 router = APIRouter()
 
@@ -65,7 +66,7 @@ EDIT_PAGE_RATE_LIMIT = rate_limit(
 
 def _get_feature_flags(request: Request) -> FeatureFlags:
     """Return feature flags from request state."""
-    return request.state.feature_flags
+    return get_state(request).feature_flags
 
 
 def _sanitize_edit_permission(value: Optional[str]) -> str:

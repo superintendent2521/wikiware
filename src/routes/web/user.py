@@ -15,6 +15,7 @@ from ...middleware.auth_middleware import AuthMiddleware
 from ...services.page_service import PageService
 from ...services.user_service import UserService
 from ...services.settings_service import FeatureFlags, SettingsService
+from ...types import ensure_feature_flags, get_state
 from ...utils.link_processor import process_internal_links
 from ...utils.sanitizer import sanitize_html
 from ...utils.template_env import get_templates
@@ -28,10 +29,12 @@ templates = get_templates()
 
 async def _get_feature_flags(request: Request) -> FeatureFlags:
     """Return feature flags from request state or via settings service."""
-    feature_flags = getattr(request.state, "feature_flags", None)
+    state = get_state(request)
+    feature_flags = getattr(state, "feature_flags", None)
     if feature_flags is None:
-        feature_flags = await SettingsService.get_feature_flags()
-        request.state.feature_flags = feature_flags
+        feature_flags = ensure_feature_flags(
+            request, await SettingsService.get_feature_flags()
+        )
     return feature_flags
 
 

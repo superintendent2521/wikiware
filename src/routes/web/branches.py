@@ -14,6 +14,7 @@ from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.branch_service import BranchService
 from ...services.settings_service import SettingsService
+from ...types import ensure_feature_flags, get_state
 from ...utils.template_env import get_templates
 from ...utils.validation import (
     is_safe_branch_parameter,
@@ -96,10 +97,12 @@ async def create_branch(
         # Check if user is authenticated
         user = await AuthMiddleware.require_auth(request)
 
-        feature_flags = getattr(request.state, "feature_flags", None)
+        state = get_state(request)
+        feature_flags = getattr(state, "feature_flags", None)
         if feature_flags is None:
-            feature_flags = await SettingsService.get_feature_flags()
-            request.state.feature_flags = feature_flags
+            feature_flags = ensure_feature_flags(
+                request, await SettingsService.get_feature_flags()
+            )
         if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
             logger.info(
                 f"Branch creation blocked for user '{user.get('username')}' because page editing is disabled"
