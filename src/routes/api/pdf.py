@@ -192,9 +192,7 @@ async def _collect_linked_pages(
                 "content": processed,
             }
         )
-        logger.info(
-            f"Collected page {title} (branch: {page_branch}) for PDF export"
-        )
+        logger.info(f"Collected page {title} (branch: {page_branch}) for PDF export")
 
         if len(collected) >= limit:
             break

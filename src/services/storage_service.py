@@ -17,12 +17,9 @@ import os
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from loguru import logger
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from ..config import (
     ALLOWED_IMAGE_TYPES,
-    MONGODB_URL,
-    MONGODB_DB_NAME,
     S3_ACCESS_KEY,
     S3_BUCKET,
     S3_ENDPOINT,
@@ -34,6 +31,7 @@ from ..config import (
 
 IMAGE_PREFIX = "uploads/"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff"}
+
 
 def _safe_local_image_path(filename: str) -> Path:
     """
@@ -101,9 +99,7 @@ async def _reset_s3_client() -> None:
 async def _handle_client_attribute_error(operation: str, exc: AttributeError) -> None:
     """Translate attribute errors into storage errors and reset the client."""
     await _reset_s3_client()
-    logger.exception(
-        f"S3 client missing expected attribute during {operation}: {exc}"
-    )
+    logger.exception(f"S3 client missing expected attribute during {operation}: {exc}")
     raise StorageError("Object storage client is not usable.") from exc
 
 
@@ -115,33 +111,31 @@ async def _get_s3_client():
             return _S3_CLIENT
         logger.warning("Cached S3 client missing methods; resetting cached client.")
         await _reset_s3_client()
-    
+
     if not _s3_enabled():
         raise StorageError("S3 client requested but storage is not configured.")
-    
+
     async with _S3_LOCK:
         if _S3_CLIENT is not None:
             if hasattr(_S3_CLIENT, "get_object"):
                 return _S3_CLIENT
             logger.warning("Cached S3 client missing methods after lock; resetting.")
             await _reset_s3_client()
-        
+
         # Configure S3 client with connection pooling
         config_kwargs: Dict[str, Any] = {
             "signature_version": "s3v4",
             "max_pool_connections": 50,  # Configure connection pool
-            "retries": {
-                "max_attempts": 3,
-                "mode": "adaptive"
-            }
+            "retries": {"max_attempts": 3, "mode": "adaptive"},
         }
-        
+
         if S3_FORCE_PATH_STYLE:
             config_kwargs["s3"] = {"addressing_style": "path"}
-        
+
         from aiobotocore.session import get_session
+
         session = get_session()
-        
+
         stack = AsyncExitStack()
         try:
             client_cm = session.create_client(
@@ -155,12 +149,12 @@ async def _get_s3_client():
         except Exception:
             await stack.aclose()
             raise
-        
+
         if not hasattr(client, "get_object"):
             await stack.aclose()
             logger.error("Created S3 client missing required methods; aborting.")
             raise StorageError("Failed to initialise object storage client.")
-        
+
         _S3_CLIENT = client
         _S3_EXIT_STACK = stack
         return _S3_CLIENT
@@ -198,7 +192,7 @@ async def upload_image_bytes(
         extra_args: Dict[str, Any] = {}
         if content_type and content_type in ALLOWED_IMAGE_TYPES:
             extra_args["ContentType"] = content_type
-        
+
         try:
             await client.put_object(
                 Bucket=S3_BUCKET,
@@ -240,7 +234,7 @@ async def list_images() -> List[Dict[str, Any]]:
     if _s3_enabled():
         client = await _get_s3_client()
         items: List[Dict[str, Any]] = []
-        
+
         try:
             paginator = client.get_paginator("list_objects_v2")
             async for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=IMAGE_PREFIX):
@@ -252,7 +246,9 @@ async def list_images() -> List[Dict[str, Any]]:
                     filename = key.split("/")[-1]
                     last_modified = obj.get("LastModified")
                     modified_ts = (
-                        int(last_modified.timestamp()) if last_modified else int(time.time())
+                        int(last_modified.timestamp())
+                        if last_modified
+                        else int(time.time())
                     )
                     items.append(
                         {
@@ -267,14 +263,14 @@ async def list_images() -> List[Dict[str, Any]]:
         except (BotoCoreError, ClientError) as exc:
             logger.exception(f"Failed to list images from S3: {exc}")
             raise StorageError("Listing images from object storage failed.") from exc
-        
+
         items.sort(key=lambda item: item["modified"], reverse=True)
         return items
 
     upload_path = Path(UPLOAD_DIR)
     if not upload_path.exists():
         return []
-    
+
     items: List[Dict[str, Any]] = []
     for entry in upload_path.iterdir():
         if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS:
@@ -301,7 +297,9 @@ async def download_image_bytes(filename: str) -> bytes:
     if _s3_enabled():
         client = await _get_s3_client()
         try:
-            response = await client.get_object(Bucket=S3_BUCKET, Key=_object_key(filename))
+            response = await client.get_object(
+                Bucket=S3_BUCKET, Key=_object_key(filename)
+            )
             body = response.get("Body")
             if body is None:
                 raise StorageError("Empty response body from object storage.")
@@ -316,7 +314,9 @@ async def download_image_bytes(filename: str) -> bytes:
                     f"Image '{filename}' missing in S3 (code={error_code or 'unknown'}); checking local storage."
                 )
             else:
-                logger.exception(f"Failed to download image '{filename}' from S3: {exc}")
+                logger.exception(
+                    f"Failed to download image '{filename}' from S3: {exc}"
+                )
                 raise StorageError("Download from object storage failed.") from exc
         except BotoCoreError as exc:
             logger.exception(f"Failed to download image '{filename}' from S3: {exc}")
@@ -334,7 +334,7 @@ async def download_image_bytes(filename: str) -> bytes:
         else:
             logger.warning(f"Image '{filename}' not found in local storage.")
         raise StorageError("Image not found.")
-    
+
     try:
         async with aiofiles.open(file_path, "rb") as file_obj:
             return await file_obj.read()

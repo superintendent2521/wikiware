@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 router = APIRouter()
 
+
 @router.get("/page/markdown/{title}")
 async def get_markdown_page(title: str):
     """Fetches the markdown content of a page by its title. useful for ai clients."""

@@ -149,7 +149,11 @@ async def set_branch(
         safe_branch = branch if is_safe_branch_parameter(branch) else "main"
         referer_header = request.headers.get("referer")
         # Simple validation - only allow relative URLs
-        safe_referer = referer_header if referer_header and not urlparse(referer_header).scheme else "/"
+        safe_referer = (
+            referer_header
+            if referer_header and not urlparse(referer_header).scheme
+            else "/"
+        )
 
         parsed = urlparse(safe_referer)
         if parsed.scheme or parsed.netloc:

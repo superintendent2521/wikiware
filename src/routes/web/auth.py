@@ -17,19 +17,20 @@ from ...services.user_service import UserService
 from ...utils.template_env import get_templates
 from ...utils.validation import sanitize_redirect_path
 
+
 def get_client_ip(request: Request) -> str:
     """
     Safely retrieve the client IP address from a FastAPI request.
     Handles various scenarios like proxies, VPNs, and privacy tools.
-    
+
     Args:
         request: The FastAPI request object
-        
+
     Returns:
         str: The client IP address or "unknown" if it cannot be determined
     """
     xff = request.headers.get("x-forwarded-for")
-    
+
     try:
         if xff:
             # x-forwarded-for can contain a list of IPs, take the first
@@ -39,8 +40,9 @@ def get_client_ip(request: Request) -> str:
     except Exception:
         # In case accessing attributes raises for some ASGI servers, keep "unknown"
         pass
-    
+
     return "unknown"
+
 
 router = APIRouter()
 

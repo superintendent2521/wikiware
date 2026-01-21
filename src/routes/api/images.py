@@ -5,7 +5,6 @@ Provides API endpoints for image operations.
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
-import asyncio
 
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.storage_service import (
@@ -42,7 +41,7 @@ async def delete_image(
             status_code=403,
             detail="Access Denied: You must be an admin to perform this action.",
         )
-    
+
     # Security check - prevent directory traversal
     if "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -50,7 +49,9 @@ async def delete_image(
     try:
         exists = await storage_image_exists(filename)
     except StorageError as exc:
-        raise HTTPException(status_code=500, detail="Failed to access image storage") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to access image storage"
+        ) from exc
 
     if not exists:
         raise HTTPException(status_code=404, detail="Image not found")

@@ -55,9 +55,8 @@ async def get_paginated_logs(
         branches_collection = get_branches_collection()
         system_logs_collection = db_instance.get_collection("system_logs")
 
-        if (
-            (action_type in (None, "edit") and history_collection is None)
-            or (action_type in (None, "branch_create") and branches_collection is None)
+        if (action_type in (None, "edit") and history_collection is None) or (
+            action_type in (None, "branch_create") and branches_collection is None
         ):
             logger.error("Required collections not available for requested logs")
             return {
@@ -109,9 +108,7 @@ async def get_paginated_logs(
             current_page = 1
         else:
             effective_limit = sanitized_limit
-            total_pages = max(
-                1, (total_items + effective_limit - 1) // effective_limit
-            )
+            total_pages = max(1, (total_items + effective_limit - 1) // effective_limit)
             if page > total_pages:
                 return {
                     "items": [],
@@ -138,7 +135,9 @@ async def get_paginated_logs(
                     history_fetch_limit
                 )
                 for item in history_items:
-                    log_author = item.get("edited_by") or item.get("author", "Anonymous")
+                    log_author = item.get("edited_by") or item.get(
+                        "author", "Anonymous"
+                    )
                     items.append(
                         {
                             "type": "edit",
@@ -167,9 +166,9 @@ async def get_paginated_logs(
             )
             if branch_fetch_limit > 0:
                 branches_cursor = branches_collection.find().sort("created_at", -1)
-                branches_items = await branches_cursor.limit(branch_fetch_limit).to_list(
+                branches_items = await branches_cursor.limit(
                     branch_fetch_limit
-                )
+                ).to_list(branch_fetch_limit)
                 for item in branches_items:
                     items.append(
                         {

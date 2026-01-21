@@ -86,7 +86,9 @@ async def download_collections(request: Request):
         ) from unavailable_error
     except ValueError as missing_user:
         logger.warning("Export denied for {}: {}", username, missing_user)
-        raise HTTPException(status_code=404, detail=EXPORT_NOT_FOUND_MESSAGE) from missing_user
+        raise HTTPException(
+            status_code=404, detail=EXPORT_NOT_FOUND_MESSAGE
+        ) from missing_user
 
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(stream, media_type=EXPORT_MEDIA_TYPE, headers=headers)

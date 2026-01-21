@@ -139,9 +139,7 @@ class AnalyticsService:
             return AnalyticsService._empty_metrics()
 
         now = _utcnow()
-        today_start = datetime(
-            now.year, now.month, now.day, tzinfo=timezone.utc
-        )
+        today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
         window_start = today_start - timedelta(days=6)
 
         metrics = AnalyticsService._empty_metrics()

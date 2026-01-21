@@ -46,12 +46,16 @@ async def _upload_file(path: Path) -> tuple[str, str, int, int]:
 
 async def migrate(delete_local: bool) -> int:
     if not is_s3_configured():
-        logger.error("S3 is not configured. Update src/config.py before running this script.")
+        logger.error(
+            "S3 is not configured. Update src/config.py before running this script."
+        )
         return 1
 
     upload_path = Path(UPLOAD_DIR)
     if not upload_path.exists():
-        logger.info("Upload directory %s does not exist; nothing to migrate.", upload_path)
+        logger.info(
+            "Upload directory %s does not exist; nothing to migrate.", upload_path
+        )
         return 0
 
     await db_instance.connect()
@@ -70,10 +74,14 @@ async def migrate(delete_local: bool) -> int:
         existing_doc = None
         if collection is not None:
             existing_doc = await collection.find_one({"filename": entry.name})
-            if existing_doc and existing_doc.get("url") and not existing_doc["url"].startswith(
-                "/static/uploads/"
+            if (
+                existing_doc
+                and existing_doc.get("url")
+                and not existing_doc["url"].startswith("/static/uploads/")
             ):
-                logger.info("Skipping %s (already points to remote storage).", entry.name)
+                logger.info(
+                    "Skipping %s (already points to remote storage).", entry.name
+                )
                 skipped += 1
                 continue
 
@@ -115,7 +123,12 @@ async def migrate(delete_local: bool) -> int:
 
     await db_instance.disconnect()
 
-    logger.info("Migration complete: %s migrated, %s skipped, %s failures.", migrated, skipped, len(failures))
+    logger.info(
+        "Migration complete: %s migrated, %s skipped, %s failures.",
+        migrated,
+        skipped,
+        len(failures),
+    )
     if failures:
         logger.error("Failures: %s", ", ".join(failures))
         return 2
@@ -123,7 +136,9 @@ async def migrate(delete_local: bool) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Migrate local uploads into S3 storage.")
+    parser = argparse.ArgumentParser(
+        description="Migrate local uploads into S3 storage."
+    )
     parser.add_argument(
         "--delete-local",
         action="store_true",

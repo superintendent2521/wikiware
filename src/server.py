@@ -11,10 +11,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from pydantic_settings import BaseSettings
 from loguru import logger
-from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV, HELP_STATIC_DIR
+from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV
 from .database import init_database
 from .routes import media
-#Why do we do it like this? Because otherwise we import a route that has both web and api routes, casuing circular imports
+
+# Why do we do it like this? Because otherwise we import a route that has both web and api routes, casuing circular imports
 from .routes.web import (
     pages,
     search,

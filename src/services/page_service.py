@@ -341,14 +341,18 @@ class PageService:
 
             # Shared helpers
             collation = {"locale": "en", "strength": 1}  # case + diacritic insensitive
-            projection = {"score": {"$meta": "textScore"}, "title": 1, "updated_at": 1, "branch": 1}  # trim big fields
+            projection = {
+                "score": {"$meta": "textScore"},
+                "title": 1,
+                "updated_at": 1,
+                "branch": 1,
+            }  # trim big fields
 
             try:
                 cursor = (
-                    pages_collection
-                    .find(
+                    pages_collection.find(
                         {"$and": [{"branch": branch}, {"$text": {"$search": query}}]},
-                        projection
+                        projection,
                     )
                     .collation(collation)
                     .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
@@ -359,10 +363,10 @@ class PageService:
                     f"Text search unavailable, falling back to regex search: {op_err}"
                 )
                 import re
+
                 safe = re.escape(query)
                 cursor = (
-                    pages_collection
-                    .find(
+                    pages_collection.find(
                         {
                             "$and": [
                                 {"branch": branch},
@@ -374,14 +378,20 @@ class PageService:
                                 },
                             ]
                         },
-                        {"title": 1, "updated_at": 1, "branch": 1}  # no text score in regex mode
+                        {
+                            "title": 1,
+                            "updated_at": 1,
+                            "branch": 1,
+                        },  # no text score in regex mode
                     )
                     .collation(collation)
                     .sort([("updated_at", -1)])
                 )
                 pages = await cursor.to_list(limit)
 
-            logger.info(f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results")
+            logger.info(
+                f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results"
+            )
             return pages
 
         except Exception as e:
@@ -389,7 +399,6 @@ class PageService:
                 f"Error searching pages with query {query!r} on branch {branch!r}: {e}"
             )
             return []
-
 
     @staticmethod
     async def delete_page(title: str) -> bool:
@@ -594,7 +603,5 @@ class PageService:
             logger.info(f"Page renamed from {old_title} to {new_title}")
             return True, None
         except Exception as e:
-            logger.error(
-                f"Error renaming page {old_title} to {new_title}: {str(e)}"
-            )
+            logger.error(f"Error renaming page {old_title} to {new_title}: {str(e)}")
             return False, "error"
