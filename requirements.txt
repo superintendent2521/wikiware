@@ -1,7 +1,5 @@
 fastapi
 uvicorn[standard]
-motor
-pymongo
 jinja2
 python-multipart
 markdown
@@ -19,3 +17,5 @@ aiozipstream
 markdown-pdf
 boto3
 pydantic-settings
+asyncpg
+pymongo
