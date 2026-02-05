@@ -20,4 +20,6 @@ Install your requirements
 
 It requires `bleach` for HTML sanitization. While this library is not actively maintained, it remains a necessary dependency for security until a suitable modern alternative is implemented.
 
+PostgreSQL is now the primary data store. (priorly postgres) Provide a `DATABASE_URL` in your `.env` (for example `postgresql://wikiware:wikiware@localhost:5432/wikiware`) before starting the server.
+
 IT REQUIRES S3 FOR IMAGES!

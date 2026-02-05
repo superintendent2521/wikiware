@@ -29,8 +29,7 @@ async def images_library(
     # Require authentication (any logged-in user)
     user = await AuthMiddleware.require_auth(request)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-    loop = asyncio.get_running_loop()
-    items = await loop.run_in_executor(None, _list_images)
+    items = await _list_images()
 
     if q:
         q_lower = q.lower()

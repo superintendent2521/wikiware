@@ -145,8 +145,10 @@ class BranchService:
 
             # Copy page to new branch
             new_page = source_page.copy()
-            # Remove MongoDB _id field
             new_page.pop("_id", None)
+            new_page.pop("id", None)
+
+            new_page.pop("search_vector", None)
             new_page["branch"] = branch_name
             new_page["created_at"] = datetime.now(timezone.utc)
             new_page["updated_at"] = datetime.now(timezone.utc)
@@ -160,6 +162,7 @@ class BranchService:
                 for history_item in source_history:
                     new_history_item = history_item.copy()
                     new_history_item.pop("_id", None)
+                    new_history_item.pop("id", None)
                     new_history_item["branch"] = branch_name
                     await history_collection.insert_one(new_history_item)
 

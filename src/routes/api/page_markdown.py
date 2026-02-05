@@ -7,7 +7,7 @@ router = APIRouter()
 
 @router.get("/page/markdown/{title}")
 async def get_markdown_page(title: str):
-    """Fetches the markdown content of a page by its title. useful for ai clients."""
+    """Fetch the markdown content of a page by its title."""
     page = await PageService.get_page(title, "main")
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")

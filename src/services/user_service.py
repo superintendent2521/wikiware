@@ -306,8 +306,7 @@ class UserService:
             }
 
             # Insert user
-            result = await users_collection.insert_one(user_doc)
-            user_doc["_id"] = result.inserted_id
+            await users_collection.insert_one(user_doc)
 
             logger.info(f"User created: {user_data.username}")
             return user_doc
@@ -393,7 +392,7 @@ class UserService:
             new_hash = UserService.hash_password(new_password)
 
             result = await users_collection.update_one(
-                {"_id": user["_id"]},
+                {"username": user["username"]},
                 {
                     "$set": {
                         "password_hash": new_hash,

@@ -25,13 +25,13 @@ def calculate_sha256(filename: str) -> str:
     return hash_sha256.hexdigest()
 
 
-def get_all_image_hashes() -> List[Dict]:
+async def get_all_image_hashes() -> List[Dict]:
     """Retrieve all image hashes from the database."""
     collection = get_image_hashes_collection()
     if collection is None:
         logger.error("Image hashes collection not available")
         return []
-    return list(collection.find({}))
+    return await collection.find({}).to_list(None)
 
 
 async def update_image_hashes():

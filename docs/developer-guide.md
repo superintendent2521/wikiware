@@ -10,7 +10,7 @@ WikiWare follows a clean separation of concerns architecture with three primary 
 2. **Middleware** - Cross-cutting concerns like authentication and security
 3. **Utils** - Reusable helper functions and utilities
 
-The system is built on FastAPI with a MongoDB backend. All components are designed to be modular and testable.
+The system is built on FastAPI with a PostgreSQL backend (asyncpg). All components are designed to be modular and testable.
 
 ## Core Components
 
@@ -149,7 +149,7 @@ The service is designed to be initialized **once per application** via `setup_lo
 
 ### Setting Up
 1. Install dependencies: `pip install -r requirements.txt`
-2. Start MongoDB: `mongod` (ensure it's running on default port)
+2. Ensure PostgreSQL is running and `DATABASE_URL` is configured (see `README.md` for an example DSN)
 3. Run server: `python index.py`
 4. Access at: http://localhost:8000
 
@@ -178,43 +178,17 @@ The service is designed to be initialized **once per application** via `setup_lo
 
 ## Database Schema
 
-### Pages Collection
-```json
-{
-  "_id": "ObjectId",
-  "title": "string",
-  "content": "string",
-  "author": "string",
-  "branch": "string",
-  "created_at": "ISODate",
-  "updated_at": "ISODate"
-}
-```
+PostgreSQL tables are created by `migrations/0001_init.sql`. Key tables:
 
-### Users Collection
-```json
-{
-  "_id": "ObjectId",
-  "username": "string",
-  "password_hash": "string",
-  "is_admin": "boolean",
-  "created_at": "ISODate",
-  "last_login": "ISODate"
-}
-```
-
-### Sessions Collection
-```json
-{
-  "_id": "ObjectId",
-  "user_id": "ObjectId",
-  "session_id": "string",
-  "created_at": "ISODate",
-  "expires_at": "ISODate",
-  "ip_address": "string",
-  "user_agent": "string"
-}
-```
+- `pages`: id (serial), title, branch, content, author, edit_summary, created_at, updated_at, edit_permission, allowed_users (text[]), search_vector.
+- `history`: id (serial), title, content, author, edited_by, branch, updated_at, edit_summary.
+- `users`: username (pk), password_hash, is_active, is_admin, password_changed_at, last_collection_export_at, page_edits (jsonb), total_edits, favorites (jsonb).
+- `branches`: id (serial), page_title, branch_name, created_at, created_from.
+- `sessions`: session_id (pk), user_id, created_at, expires_at.
+- `image_hashes`: id (serial), filename, sha256, size, modified, url.
+- `analytics_events`: id (serial), event_type, timestamp, page_title, branch, referrer, query, query_normalized, results.
+- `settings`: key (pk), data (jsonb), updated_at.
+- `system_logs`: id (serial), username, action, message, category, metadata (jsonb), timestamp.
 
 ### History Collection
 ```json
@@ -263,7 +237,7 @@ The service is designed to be initialized **once per application** via `setup_lo
 ### Debugging Tips
 - Check server logs in `logs/` directory
 - Use browser developer tools to inspect network requests
-- Verify MongoDB is running and accessible
+- Verify PostgreSQL is running and accessible with the configured `DATABASE_URL`
 - Test individual components in isolation using Python REPL
 
 ## Contributing

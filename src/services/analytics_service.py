@@ -10,7 +10,6 @@ from typing import Any, Dict
 
 from fastapi import Request
 from loguru import logger
-import asyncio
 
 from ..database import db_instance
 
@@ -143,91 +142,46 @@ class AnalyticsService:
         window_start = today_start - timedelta(days=6)
 
         metrics = AnalyticsService._empty_metrics()
-        # Populate per-day data for page views and searches
-        page_pipeline = [
-            {
-                "$match": {
-                    "event_type": "page_view",
-                    "timestamp": {"$gte": window_start},
-                }
-            },
-            {
-                "$group": {
-                    "_id": {
-                        "date": {
-                            "$dateToString": {
-                                "format": "%Y-%m-%d",
-                                "date": "$timestamp",
-                            }
-                        }
-                    },
-                    "count": {"$sum": 1},
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "date": "$_id.date",
-                    "count": 1,
-                }
-            },
-            {"$sort": {"date": 1}},
-        ]
-
-        search_pipeline = [
-            {
-                "$match": {
-                    "event_type": "search",
-                    "timestamp": {"$gte": window_start},
-                }
-            },
-            {
-                "$group": {
-                    "_id": {
-                        "date": {
-                            "$dateToString": {
-                                "format": "%Y-%m-%d",
-                                "date": "$timestamp",
-                            }
-                        }
-                    },
-                    "count": {"$sum": 1},
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "date": "$_id.date",
-                    "count": 1,
-                }
-            },
-            {"$sort": {"date": 1}},
-        ]
-
-        top_search_pipeline = [
-            {
-                "$match": {
-                    "event_type": "search",
-                    "timestamp": {"$gte": now - timedelta(days=30)},
-                }
-            },
-            {
-                "$group": {
-                    "_id": "$query_normalized",
-                    "display": {"$first": "$query"},
-                    "count": {"$sum": 1},
-                    "last_used": {"$max": "$timestamp"},
-                }
-            },
-            {"$sort": {"count": -1, "last_used": -1}},
-            {"$limit": 5},
-        ]
 
         try:
-            page_results, search_results, top_search_results = await asyncio.gather(
-                collection.aggregate(page_pipeline).to_list(None),
-                collection.aggregate(search_pipeline).to_list(None),
-                collection.aggregate(top_search_pipeline).to_list(None),
+            page_results = await db_instance.fetch(
+                """
+                SELECT to_char(date_trunc('day', timestamp), 'YYYY-MM-DD') AS date,
+                       COUNT(*) AS count
+                FROM analytics_events
+                WHERE event_type = 'page_view' AND timestamp >= $1
+                GROUP BY 1
+                ORDER BY 1
+                """,
+                window_start,
+            )
+
+            search_results = await db_instance.fetch(
+                """
+                SELECT to_char(date_trunc('day', timestamp), 'YYYY-MM-DD') AS date,
+                       COUNT(*) AS count
+                FROM analytics_events
+                WHERE event_type = 'search' AND timestamp >= $1
+                GROUP BY 1
+                ORDER BY 1
+                """,
+                window_start,
+            )
+
+            top_search_results = await db_instance.fetch(
+                """
+                SELECT query_normalized AS key,
+                       first_value(query) OVER w AS display,
+                       COUNT(*) AS count,
+                       MAX(timestamp) AS last_used
+                FROM analytics_events
+                WHERE event_type = 'search' AND timestamp >= $1
+                WINDOW w AS (PARTITION BY query_normalized ORDER BY timestamp DESC)
+                GROUP BY query_normalized
+                ORDER BY count DESC, last_used DESC
+                LIMIT 5
+                """,
+                now - timedelta(days=30),
             )
         except Exception as exc:  # IGNORE W0718
             logger.warning(f"Failed to aggregate analytics metrics: {exc}")
@@ -270,7 +224,7 @@ class AnalyticsService:
 
         metrics["top_searches"] = [
             {
-                "query": record.get("display") or record["_id"],
+                "query": record.get("display") or record.get("key"),
                 "count": record.get("count", 0),
             }
             for record in top_search_results

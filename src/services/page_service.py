@@ -6,7 +6,6 @@ Contains business logic for page operations.
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from loguru import logger
-from pymongo.errors import OperationFailure
 from ..database import (
     get_pages_collection,
     get_history_collection,
@@ -222,26 +221,24 @@ class PageService:
                 any_existing_page = await pages_collection.find_one({"title": title})
                 if not any_existing_page:
                     # Create both main and talk branches for new pages
-                    async with await db_instance.client.start_session() as s:
-                        async with s.start_transaction():
-                            created_main = await PageService.create_page(
-                                title,
-                                content,
-                                author,
-                                "main",
-                                edit_summary=summary,
-                                edit_permission=edit_permission,
-                                allowed_users=allowed_users or [],
-                            )
-                            created_talk = await PageService.create_page(
-                                title,
-                                "",
-                                author,
-                                "talk",
-                                edit_summary="wikibot: Auto-created talk page",
-                                edit_permission=edit_permission,
-                                allowed_users=allowed_users or [],
-                            )
+                    created_main = await PageService.create_page(
+                        title,
+                        content,
+                        author,
+                        "main",
+                        edit_summary=summary,
+                        edit_permission=edit_permission,
+                        allowed_users=allowed_users or [],
+                    )
+                    created_talk = await PageService.create_page(
+                        title,
+                        "",
+                        author,
+                        "talk",
+                        edit_summary="wikibot: Auto-created talk page",
+                        edit_permission=edit_permission,
+                        allowed_users=allowed_users or [],
+                    )
                     if created_main and created_talk:
                         await log_action(
                             author,
@@ -334,60 +331,36 @@ class PageService:
                 )
                 return []
 
-            pages_collection = get_pages_collection()
-            if pages_collection is None:
-                logger.error("Pages collection not available")
-                return []
+            ranked_rows = await db_instance.fetch(
+                """
+                SELECT title, branch, updated_at,
+                       ts_rank_cd(search_vector, plainto_tsquery('english', $1)) AS rank
+                FROM pages
+                WHERE branch = $2 AND search_vector @@ plainto_tsquery('english', $1)
+                ORDER BY rank DESC, updated_at DESC
+                LIMIT $3
+                """,
+                query,
+                branch,
+                limit,
+            )
+            pages = [dict(row) for row in ranked_rows]
 
-            # Shared helpers
-            collation = {"locale": "en", "strength": 1}  # case + diacritic insensitive
-            projection = {
-                "score": {"$meta": "textScore"},
-                "title": 1,
-                "updated_at": 1,
-                "branch": 1,
-            }  # trim big fields
-
-            try:
-                cursor = (
-                    pages_collection.find(
-                        {"$and": [{"branch": branch}, {"$text": {"$search": query}}]},
-                        projection,
-                    )
-                    .collation(collation)
-                    .sort([("score", {"$meta": "textScore"}), ("updated_at", -1)])
+            if not pages:
+                fallback_rows = await db_instance.fetch(
+                    """
+                    SELECT title, branch, updated_at
+                    FROM pages
+                    WHERE branch = $2
+                      AND (title ILIKE '%' || $1 || '%' OR content ILIKE '%' || $1 || '%')
+                    ORDER BY updated_at DESC
+                    LIMIT $3
+                    """,
+                    query,
+                    branch,
+                    limit,
                 )
-                pages = await cursor.to_list(limit)
-            except OperationFailure as op_err:
-                logger.warning(
-                    f"Text search unavailable, falling back to regex search: {op_err}"
-                )
-                import re
-
-                safe = re.escape(query)
-                cursor = (
-                    pages_collection.find(
-                        {
-                            "$and": [
-                                {"branch": branch},
-                                {
-                                    "$or": [
-                                        {"title": {"$regex": safe, "$options": "i"}},
-                                        {"content": {"$regex": safe, "$options": "i"}},
-                                    ]
-                                },
-                            ]
-                        },
-                        {
-                            "title": 1,
-                            "updated_at": 1,
-                            "branch": 1,
-                        },  # no text score in regex mode
-                    )
-                    .collation(collation)
-                    .sort([("updated_at", -1)])
-                )
-                pages = await cursor.to_list(limit)
+                pages = [dict(row) for row in fallback_rows]
 
             logger.info(
                 f"Search performed: {query!r} on branch {branch!r} - found {len(pages)} results"
@@ -583,9 +556,7 @@ class PageService:
                 )
 
             if users_collection is not None:
-                async for user_doc in users_collection.find(
-                    {f"page_edits.{old_title}": {"$exists": True}}
-                ):
+                async for user_doc in users_collection.find({}):
                     page_edits = user_doc.get("page_edits", {})
                     if not isinstance(page_edits, dict):
                         continue
@@ -593,7 +564,7 @@ class PageService:
                     if edit_count is None:
                         continue
                     await users_collection.update_one(
-                        {"_id": user_doc["_id"]},
+                        {"username": user_doc.get("username")},
                         {
                             "$set": {f"page_edits.{new_title}": edit_count},
                             "$unset": {f"page_edits.{old_title}": ""},

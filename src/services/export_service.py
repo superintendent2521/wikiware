@@ -9,7 +9,6 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, Optional
 
-from bson import ObjectId
 from loguru import logger
 from zipstream.aiozipstream import AioZipStream
 
@@ -81,8 +80,6 @@ class ExportService:
     @staticmethod
     def _serialize_value(value: Any) -> Any:
         """Convert MongoDB-specific/complex values into JSON-serializable ones."""
-        if isinstance(value, ObjectId):
-            return str(value)
         if isinstance(value, datetime):
             if value.tzinfo is None:
                 value = value.replace(tzinfo=timezone.utc)
@@ -105,7 +102,7 @@ class ExportService:
     ) -> AsyncIterator[bytes]:
         """Yield a JSON array representation of the collection without buffering everything."""
         try:
-            cursor = collection.find(limit=cls.MAX_FETCH)
+            cursor = collection.find({}).limit(cls.MAX_FETCH)
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error(f"Failed to create cursor for {label} collection: {exc}")
             raise ExportUnavailableError(

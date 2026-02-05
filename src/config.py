@@ -15,8 +15,11 @@ DEV = os.getenv("DEV", "false").lower() == "true"
 HOST = os.getenv("HOST", "0.0.0.0")
 
 # Database configuration
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "wikiware")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://wikiware:wikiware@localhost:5432/wikiware"
+)
+DB_POOL_MIN_CONNECTIONS = int(os.getenv("DB_POOL_MIN_CONNECTIONS", "1"))
+DB_POOL_MAX_CONNECTIONS = int(os.getenv("DB_POOL_MAX_CONNECTIONS", "10"))
 
 # Application settings
 APP_TITLE = "WikiWare"
@@ -46,7 +49,7 @@ DB_QUERY_LOGGING_ENABLED = False
 REQUEST_LOGGING_ENABLED = False
 
 # Name shown on all pages
-NAME = "Starship Wiki"
+NAME = "Gene Wiki"
 
 # Version shown on all pages
 
