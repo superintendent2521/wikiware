@@ -8,6 +8,10 @@ Environment variables:
   - MONGO_URI (required): connection string for the source MongoDB.
   - MONGO_DB (optional): database name in MongoDB (default: "wikiware").
   - DATABASE_URL or POSTGRES_DSN (required): Postgres DSN.
+  - MONGO_BACKUP_BEFORE_MIGRATE (optional): if true, run mongodump before migration
+    starts (default: "true").
+  - MONGO_BACKUP_DIR (optional): output directory for backup archives.
+  - MONGO_BACKUP_FILE (optional): backup archive filename (inside MONGO_BACKUP_DIR).
 
 The script is idempotent where possible: it uses upserts/ON CONFLICT clauses to
 avoid duplicate inserts and keeps existing rows when appropriate.
@@ -16,9 +20,14 @@ avoid duplicate inserts and keeps existing rows when appropriate.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import shutil
+import subprocess
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from urllib.parse import ParseResult, urlparse, urlunparse
 
 import asyncpg
 from pymongo import MongoClient
@@ -40,6 +49,11 @@ def _as_utc(value: Any) -> Optional[datetime]:
             return dt.astimezone(timezone.utc)
         except Exception:
             return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except Exception:
+            return None
     return None
 
 
@@ -52,6 +66,38 @@ def _as_list(value: Any) -> List[str]:
     return [str(value)]
 
 
+def _as_int(value: Any, default: Optional[int] = None) -> Optional[int]:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_str(value: Any, default: Optional[str] = None) -> Optional[str]:
+    if value is None:
+        return default
+    text = str(value)
+    if text == "":
+        return default
+    return text
+
+
+def _json_compatible(value: Any) -> Any:
+    """
+    Return a JSON-serializable object.
+
+    Mongo values can contain BSON types (ObjectId, Decimal128, etc.) that
+    asyncpg cannot encode to json/jsonb directly.
+    """
+    try:
+        json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        return json.loads(json.dumps(value, default=str))
+
+
 def _collection(db, name: str):
     """Return a collection if it exists; otherwise None."""
     if name in db.list_collection_names():
@@ -59,26 +105,119 @@ def _collection(db, name: str):
     return None
 
 
+def _collection_count(col) -> int:
+    """Return a best-effort count for progress logs."""
+    try:
+        return int(col.count_documents({}))
+    except Exception:
+        return 0
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _uri_with_db(uri: str, db_name: str) -> str:
+    """Force a Mongo URI path to point at the selected database."""
+    parsed = urlparse(uri)
+    forced = ParseResult(
+        scheme=parsed.scheme,
+        netloc=parsed.netloc,
+        path=f"/{db_name}",
+        params=parsed.params,
+        query=parsed.query,
+        fragment=parsed.fragment,
+    )
+    return urlunparse(forced)
+
+
+def _run_mongo_backup(mongo_uri: str, mongo_db_name: str) -> Path:
+    """
+    Create a Mongo archive backup and return its path.
+
+    Raises SystemExit if backup cannot be created.
+    """
+    if shutil.which("mongodump") is None:
+        raise SystemExit(
+            "mongodump was not found on PATH. Install MongoDB Database Tools "
+            "or set MONGO_BACKUP_BEFORE_MIGRATE=0 to skip backup."
+        )
+
+    backup_dir = Path(
+        os.getenv("MONGO_BACKUP_DIR") or Path(__file__).resolve().parent / "backups"
+    )
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_db_name = "".join(
+        ch if (ch.isalnum() or ch in {"-", "_"}) else "_" for ch in mongo_db_name
+    )
+    backup_name = os.getenv("MONGO_BACKUP_FILE")
+    if backup_name:
+        archive_path = backup_dir / backup_name
+    else:
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
+        archive_path = backup_dir / f"{safe_db_name}-{stamp}.archive.gz"
+
+    if archive_path.exists():
+        raise SystemExit(
+            f"Refusing to overwrite existing backup archive: {archive_path}. "
+            "Set MONGO_BACKUP_FILE to a new filename."
+        )
+
+    cmd = [
+        "mongodump",
+        f"--uri={_uri_with_db(mongo_uri, mongo_db_name)}",
+        f"--archive={archive_path}",
+        "--gzip",
+    ]
+    print(f"Creating Mongo backup: {archive_path}")
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(
+            f"Mongo backup failed with exit code {exc.returncode}. "
+            "Aborting migration before writing to Postgres."
+        ) from exc
+
+    print("Mongo backup complete.")
+    return archive_path
+
+
+def _safe_postgres_dsn(dsn: str) -> str:
+    # Hide password while still showing host/db in logs.
+    if "://" not in dsn or "@" not in dsn:
+        return dsn
+    scheme, rest = dsn.split("://", 1)
+    creds, tail = rest.split("@", 1)
+    if ":" in creds:
+        user = creds.split(":", 1)[0]
+        return f"{scheme}://{user}:***@{tail}"
+    return f"{scheme}://{creds}@{tail}"
+
+
 async def migrate_users(conn: asyncpg.Connection, db) -> None:
     col = _collection(db, "users")
     if col is None:
         print("Skipping users: collection not found")
         return
-    users = list(col.find({}))
-    print(f"Migrating users ({len(users)} found)...")
-    for doc in users:
-        username = doc.get("username")
+    count = _collection_count(col)
+    print(f"Migrating users ({count} found)...")
+    for doc in col.find({}):
+        username = _as_str(doc.get("username"))
         if not username:
             continue
-        password_hash = doc.get("password_hash") or doc.get("password") or ""
+        password_hash = _as_str(doc.get("password_hash") or doc.get("password"), "")
         created_at = _as_utc(doc.get("created_at")) or datetime.now(timezone.utc)
         is_active = bool(doc.get("is_active", True))
         is_admin = bool(doc.get("is_admin", False))
         password_changed_at = _as_utc(doc.get("password_changed_at"))
         last_collection_export_at = _as_utc(doc.get("last_collection_export_at"))
-        page_edits = doc.get("page_edits") or {}
-        total_edits = int(doc.get("total_edits", 0) or 0)
-        favorites = doc.get("favorites") or []
+        page_edits = _json_compatible(doc.get("page_edits") or {})
+        total_edits = _as_int(doc.get("total_edits"), 0) or 0
+        favorites = _json_compatible(doc.get("favorites") or [])
         await conn.execute(
             """
             INSERT INTO users (
@@ -115,19 +254,19 @@ async def migrate_pages(conn: asyncpg.Connection, db) -> None:
     if col is None:
         print("Skipping pages: collection not found")
         return
-    pages = list(col.find({}))
-    print(f"Migrating pages ({len(pages)} found)...")
-    for doc in pages:
-        title = doc.get("title")
+    count = _collection_count(col)
+    print(f"Migrating pages ({count} found)...")
+    for doc in col.find({}):
+        title = _as_str(doc.get("title"))
         if not title:
             continue
-        branch = doc.get("branch") or "main"
-        content = doc.get("content") or ""
-        author = doc.get("author") or "Anonymous"
-        edit_summary = doc.get("edit_summary")
+        branch = _as_str(doc.get("branch"), "main")
+        content = _as_str(doc.get("content"), "")
+        author = _as_str(doc.get("author"), "Anonymous")
+        edit_summary = _as_str(doc.get("edit_summary"))
         created_at = _as_utc(doc.get("created_at")) or datetime.now(timezone.utc)
         updated_at = _as_utc(doc.get("updated_at")) or created_at
-        edit_permission = doc.get("edit_permission") or "everybody"
+        edit_permission = _as_str(doc.get("edit_permission"), "everybody")
         allowed_users = _as_list(doc.get("allowed_users"))
         await conn.execute(
             """
@@ -162,18 +301,18 @@ async def migrate_history(conn: asyncpg.Connection, db) -> None:
     if col is None:
         print("Skipping history: collection not found")
         return
-    history_entries = list(col.find({}))
-    print(f"Migrating history ({len(history_entries)} found)...")
-    for doc in history_entries:
-        title = doc.get("title")
-        content = doc.get("content") or ""
+    count = _collection_count(col)
+    print(f"Migrating history ({count} found)...")
+    for doc in col.find({}):
+        title = _as_str(doc.get("title"))
+        content = _as_str(doc.get("content"), "")
         if not title or not content:
             continue
-        author = doc.get("author") or "Anonymous"
-        edited_by = doc.get("edited_by")
-        branch = doc.get("branch") or "main"
+        author = _as_str(doc.get("author"), "Anonymous")
+        edited_by = _as_str(doc.get("edited_by"))
+        branch = _as_str(doc.get("branch"), "main")
         updated_at = _as_utc(doc.get("updated_at")) or datetime.now(timezone.utc)
-        edit_summary = doc.get("edit_summary")
+        edit_summary = _as_str(doc.get("edit_summary"))
         await conn.execute(
             """
             INSERT INTO history (
@@ -197,15 +336,15 @@ async def migrate_branches(conn: asyncpg.Connection, db) -> None:
     if col is None:
         print("Skipping branches: collection not found")
         return
-    branches = list(col.find({}))
-    print(f"Migrating branches ({len(branches)} found)...")
-    for doc in branches:
-        page_title = doc.get("page_title") or doc.get("title")
-        branch_name = doc.get("branch_name")
+    count = _collection_count(col)
+    print(f"Migrating branches ({count} found)...")
+    for doc in col.find({}):
+        page_title = _as_str(doc.get("page_title") or doc.get("title"))
+        branch_name = _as_str(doc.get("branch_name"))
         if not page_title or not branch_name:
             continue
         created_at = _as_utc(doc.get("created_at")) or datetime.now(timezone.utc)
-        created_from = doc.get("created_from")
+        created_from = _as_str(doc.get("created_from"))
         await conn.execute(
             """
             INSERT INTO branches (
@@ -227,11 +366,11 @@ async def migrate_sessions(conn: asyncpg.Connection, db) -> None:
     if col is None:
         print("Skipping sessions: collection not found")
         return
-    sessions = list(col.find({}))
-    print(f"Migrating sessions ({len(sessions)} found)...")
-    for doc in sessions:
-        session_id = doc.get("session_id") or doc.get("_id")
-        user_id = doc.get("user_id") or doc.get("username")
+    count = _collection_count(col)
+    print(f"Migrating sessions ({count} found)...")
+    for doc in col.find({}):
+        session_id = _as_str(doc.get("session_id") or doc.get("_id"))
+        user_id = _as_str(doc.get("user_id") or doc.get("username"))
         if not session_id or not user_id:
             continue
         created_at = _as_utc(doc.get("created_at")) or datetime.now(timezone.utc)
@@ -255,16 +394,16 @@ async def migrate_image_hashes(conn: asyncpg.Connection, db) -> None:
     if col is None:
         print("Skipping image_hashes: collection not found")
         return
-    hashes = list(col.find({}))
-    print(f"Migrating image_hashes ({len(hashes)} found)...")
-    for doc in hashes:
-        filename = doc.get("filename")
-        sha256 = doc.get("sha256")
+    count = _collection_count(col)
+    print(f"Migrating image_hashes ({count} found)...")
+    for doc in col.find({}):
+        filename = _as_str(doc.get("filename"))
+        sha256 = _as_str(doc.get("sha256"))
         if not filename or not sha256:
             continue
-        size = doc.get("size")
+        size = _as_int(doc.get("size"))
         modified = _as_utc(doc.get("modified"))
-        url = doc.get("url")
+        url = _as_str(doc.get("url"))
         await conn.execute(
             """
             INSERT INTO image_hashes (filename, sha256, size, modified, url)
@@ -289,13 +428,14 @@ async def migrate_settings(conn: asyncpg.Connection, db) -> None:
     if col is None:
         print("Skipping settings: collection not found")
         return
-    settings_docs = list(col.find({}))
-    print(f"Migrating settings ({len(settings_docs)} found)...")
-    for doc in settings_docs:
-        key = doc.get("key") or doc.get("_id")
+    count = _collection_count(col)
+    print(f"Migrating settings ({count} found)...")
+    for doc in col.find({}):
+        key = _as_str(doc.get("key") or doc.get("_id"))
         if not key:
             continue
         data = doc.get("data") or {k: v for k, v in doc.items() if k not in {"_id", "key"}}
+        data = _json_compatible(data)
         await conn.execute(
             """
             INSERT INTO settings (key, data)
@@ -315,14 +455,14 @@ async def migrate_system_logs(conn: asyncpg.Connection, db) -> None:
     if col is None:
         print("Skipping system_logs: collection not found")
         return
-    logs = list(col.find({}))
-    print(f"Migrating system_logs ({len(logs)} found)...")
-    for doc in logs:
-        username = doc.get("username")
-        action = doc.get("action") or doc.get("event") or "unknown"
-        message = doc.get("message") or ""
-        category = doc.get("category") or "general"
-        metadata = doc.get("metadata") or {}
+    count = _collection_count(col)
+    print(f"Migrating system_logs ({count} found)...")
+    for doc in col.find({}):
+        username = _as_str(doc.get("username"))
+        action = _as_str(doc.get("action") or doc.get("event"), "unknown")
+        message = _as_str(doc.get("message"), "")
+        category = _as_str(doc.get("category"), "general")
+        metadata = _json_compatible(doc.get("metadata") or {})
         timestamp = _as_utc(doc.get("timestamp")) or datetime.now(timezone.utc)
         await conn.execute(
             """
@@ -344,19 +484,19 @@ async def migrate_analytics(conn: asyncpg.Connection, db) -> None:
     if col is None:
         print("Skipping analytics_events: collection not found")
         return
-    events = list(col.find({}))
-    print(f"Migrating analytics_events ({len(events)} found)...")
-    for doc in events:
-        event_type = doc.get("event_type") or doc.get("type")
+    count = _collection_count(col)
+    print(f"Migrating analytics_events ({count} found)...")
+    for doc in col.find({}):
+        event_type = _as_str(doc.get("event_type") or doc.get("type"))
         if not event_type:
             continue
         timestamp = _as_utc(doc.get("timestamp")) or datetime.now(timezone.utc)
-        page_title = doc.get("page_title")
-        branch = doc.get("branch")
-        referrer = doc.get("referrer")
-        query = doc.get("query")
-        query_normalized = doc.get("query_normalized")
-        results = int(doc.get("results", 0) or 0)
+        page_title = _as_str(doc.get("page_title"))
+        branch = _as_str(doc.get("branch"))
+        referrer = _as_str(doc.get("referrer"))
+        query = _as_str(doc.get("query"))
+        query_normalized = _as_str(doc.get("query_normalized"))
+        results = _as_int(doc.get("results"), 0) or 0
         await conn.execute(
             """
             INSERT INTO analytics_events (
@@ -380,16 +520,22 @@ async def run() -> None:
     mongo_uri = os.getenv("MONGO_URI")
     pg_dsn = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_DSN")
     mongo_db_name = os.getenv("MONGO_DB", "wikiware")
+    backup_before_migrate = _env_flag("MONGO_BACKUP_BEFORE_MIGRATE", default=True)
 
     if not mongo_uri:
         raise SystemExit("MONGO_URI is required (source MongoDB connection string).")
     if not pg_dsn:
         raise SystemExit("DATABASE_URL or POSTGRES_DSN is required (target Postgres DSN).")
 
+    if backup_before_migrate:
+        _run_mongo_backup(mongo_uri, mongo_db_name)
+    else:
+        print("Skipping Mongo backup (MONGO_BACKUP_BEFORE_MIGRATE disabled).")
+
     mongo_client = MongoClient(mongo_uri)
     mongo_db = mongo_client[mongo_db_name]
 
-    print(f"Connecting to Postgres at {pg_dsn} ...")
+    print(f"Connecting to Postgres at {_safe_postgres_dsn(pg_dsn)} ...")
     conn: Optional[asyncpg.Connection] = None
     try:
         conn = await asyncpg.connect(dsn=pg_dsn)
