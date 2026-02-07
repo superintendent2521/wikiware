@@ -19,7 +19,7 @@ from ...services.export_service import (
 
 EXPORT_MEDIA_TYPE = "application/zip"
 EXPORT_PATH = "/exports/collections"
-EXPORT_RETRY_MESSAGE = "You can only export collections once every 24 hours"
+EXPORT_RETRY_MESSAGE = "You can only export collections once every 6 hours"
 EXPORT_UNAVAILABLE_MESSAGE = "Collection export is temporarily unavailable"
 EXPORT_NOT_FOUND_MESSAGE = "Account not found"
 

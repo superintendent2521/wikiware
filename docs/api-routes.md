@@ -29,7 +29,7 @@ Download wiki collections as a ZIP file.
     - Content-Type: `application/zip`
   - **429 Too Many Requests:** Rate limit exceeded
     - Headers: `Retry-After: <seconds>`
-    - Body: `"You can only export collections once every 24 hours"`
+    - Body: `"You can only export collections once every 6 hours"`
   - **503 Service Unavailable:** Export temporarily unavailable
     - Body: `"Collection export is temporarily unavailable"`
   - **404 Not Found:** Account not found

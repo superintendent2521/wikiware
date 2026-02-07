@@ -40,7 +40,7 @@ class ExportUnavailableError(Exception):
 class ExportService:
     """Service for exporting wiki collections for download."""
 
-    EXPORT_INTERVAL = timedelta(hours=24)
+    EXPORT_INTERVAL = timedelta(hours=6)
     MAX_FETCH = 250_000  # safeguard to avoid unbounded cursor to_list calls
     ZIP_CHUNK_SIZE = 64 * 1024
 
