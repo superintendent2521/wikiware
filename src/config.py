@@ -4,6 +4,7 @@ Centralizes all configuration settings and environment variables.
 """
 
 import os
+from urllib.parse import unquote, urlparse
 from dotenv import load_dotenv
 from .env_config import SECRET_KEY, ACCESS_KEY  # Importing sensitive data
 
@@ -16,7 +17,22 @@ HOST = os.getenv("HOST", "0.0.0.0")
 
 # Database configuration
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "wikiware")
+
+
+def _database_name_from_mongodb_url(mongodb_url):
+    """Return the database path from a MongoDB URI, if one is present."""
+    db_path = urlparse(mongodb_url).path.lstrip("/")
+    if not db_path:
+        return None
+    return unquote(db_path.split("/", 1)[0]) or None
+
+
+MONGODB_DB_NAME = (
+    os.getenv("MONGODB_DB_NAME")
+    or os.getenv("MONGODB_DB")
+    or _database_name_from_mongodb_url(MONGODB_URL)
+    or "wikiware"
+)
 
 # Application settings
 APP_TITLE = "WikiWare"

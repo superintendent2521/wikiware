@@ -19,8 +19,8 @@ from . import config
 
 load_dotenv()
 
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "wikiware")
+MONGODB_URL = config.MONGODB_URL
+MONGODB_DB_NAME = config.MONGODB_DB_NAME
 MONGODB_MAX_CONNECTIONS = int(os.getenv("MONGODB_MAX_CONNECTIONS", "100"))
 MONGODB_MIN_CONNECTIONS = int(os.getenv("MONGODB_MIN_CONNECTIONS", "10"))
 MONGODB_MAX_IDLE_TIME_MS = int(os.getenv("MONGODB_MAX_IDLE_TIME_MS", "30000"))

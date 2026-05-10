@@ -26,7 +26,7 @@
                 {% for page in pages %}
                 <div class="page-item">
                     <h4><a href="/page/{{ page.title }}?branch={{ page.branch or 'main' }}">{{ page.title }}</a></h4>
-                    <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author }}{% if page.branch and page.branch != 'main' %} (Branch: {{ page.branch }}){% endif %}</p>
+                    <p>Last updated: {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }} by {{ page.author or 'Anonymous' }}{% if page.branch and page.branch != 'main' %} (Branch: {{ page.branch }}){% endif %}</p>
                     <div class="page-preview">
                         {% if page.content %}
                         {{ page.content[:200] }}...
