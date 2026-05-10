@@ -17,5 +17,5 @@ httpx
 bleach
 aiozipstream
 markdown-pdf
-boto3
+aiobotocore
 pydantic-settings

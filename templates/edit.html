@@ -518,6 +518,33 @@
         let imageLibraryItems = [];
         let imageLibraryLoaded = false;
 
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function readJsonResponse(response, fallbackMessage) {
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.toLowerCase().includes('application/json')) {
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || data.detail || fallbackMessage || `Request failed with status ${response.status}`);
+                }
+                return data;
+            }
+
+            const bodyText = await response.text();
+            const trimmed = bodyText.trim();
+            const message = trimmed && !trimmed.startsWith('<')
+                ? trimmed.slice(0, 200)
+                : (fallbackMessage || `Request failed with status ${response.status}`);
+            throw new Error(message);
+        }
+
         function showSection(section) {
             const target = section === 'library' ? 'library' : 'upload';
             const showLibrary = target === 'library';
@@ -642,16 +669,13 @@
             imageLibraryList.innerHTML = '';
             try {
                 const response = await fetch('/api/images', { credentials: 'same-origin' });
-                if (!response.ok) {
-                    throw new Error('Unable to fetch images.');
-                }
-                const data = await response.json();
+                const data = await readJsonResponse(response, 'Unable to fetch images.');
                 imageLibraryItems = Array.isArray(data.items) ? data.items : [];
                 imageLibraryLoaded = true;
                 renderLibrary();
             } catch (error) {
                 if (imageLibraryStatus) {
-                    imageLibraryStatus.innerHTML = '<div class="alert alert-error">Error loading images: ' + error.message + '</div>';
+                    imageLibraryStatus.innerHTML = '<div class="alert alert-error">Error loading images: ' + escapeHtml(error.message) + '</div>';
                 }
             }
         }
@@ -728,11 +752,11 @@
                     credentials: 'same-origin',
                     body: formData
                 })
-                    .then((response) => response.json())
+                    .then((response) => readJsonResponse(response, 'Image upload failed.'))
                     .then((data) => {
                         if (data.error) {
                             if (uploadStatus) {
-                                uploadStatus.innerHTML = '<div class="alert alert-error">' + data.error + '</div>';
+                                uploadStatus.innerHTML = '<div class="alert alert-error">' + escapeHtml(data.error) + '</div>';
                             }
                             return;
                         }
@@ -742,7 +766,7 @@
                     })
                     .catch((error) => {
                         if (uploadStatus) {
-                            uploadStatus.innerHTML = '<div class="alert alert-error">Error uploading image: ' + error.message + '</div>';
+                            uploadStatus.innerHTML = '<div class="alert alert-error">Error uploading image: ' + escapeHtml(error.message) + '</div>';
                         }
                     });
             });

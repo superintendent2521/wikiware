@@ -10,9 +10,25 @@ from .env_config import SECRET_KEY, ACCESS_KEY  # Importing sensitive data
 
 # Load environment variables
 load_dotenv()
+
+
+def _parse_bool_env(name, default):
+    """Parse an optional boolean environment variable."""
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true/false, 1/0, yes/no, or on/off")
+
+
 # Server configuration
 PORT = int(os.getenv("PORT", "8000"))
-DEV = os.getenv("DEV", "false").lower() == "true"
+DEV = _parse_bool_env("DEV", False)
 HOST = os.getenv("HOST", "0.0.0.0")
 
 # Database configuration
@@ -76,5 +92,6 @@ STATIC_DIR = "static"
 HELP_STATIC_DIR = "templates/help"
 
 # Session cookie settings
-# Use __Host- prefix only when cookies are Secure (i.e., in production/HTTPS).
-SESSION_COOKIE_NAME = "__Host-user_session" if not DEV else "user_session"
+# Set SESSION_COOKIE_SECURE=true when the app is served exclusively over HTTPS.
+SESSION_COOKIE_SECURE = _parse_bool_env("SESSION_COOKIE_SECURE", False)
+SESSION_COOKIE_NAME = "__Host-user_session" if SESSION_COOKIE_SECURE else "user_session"

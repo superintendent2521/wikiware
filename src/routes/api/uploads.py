@@ -136,16 +136,26 @@ async def upload_image(
         # Check for duplicate
         collection = get_image_hashes_collection()
         if collection is not None:
-            existing = await collection.find_one({"sha256": sha256_hash})
+            try:
+                existing = await collection.find_one({"sha256": sha256_hash})
+            except Exception as exc:
+                logger.warning(f"Unable to check duplicate image hash: {exc}")
+                existing = None
+                collection = None
             if existing:
                 logger.info(f"Duplicate image upload detected: {existing['filename']}")
                 duplicate_url = existing.get("url")
                 if not duplicate_url:
                     duplicate_url = build_public_url(existing["filename"])
-                    await collection.update_one(
-                        {"filename": existing["filename"]},
-                        {"$set": {"url": duplicate_url}},
-                    )
+                    try:
+                        await collection.update_one(
+                            {"filename": existing["filename"]},
+                            {"$set": {"url": duplicate_url}},
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"Unable to backfill duplicate image URL for '{existing['filename']}': {exc}"
+                        )
                 return JSONResponse(
                     status_code=200,
                     content={
@@ -210,19 +220,24 @@ async def upload_image(
 
         # Store hash in database
         if collection is not None:
-            await collection.update_one(
-                {"filename": unique_filename},
-                {
-                    "$set": {
-                        "filename": unique_filename,
-                        "sha256": sha256_hash,
-                        "size": stored_image.size,
-                        "modified": stored_image.modified,
-                        "url": stored_image.url,
-                    }
-                },
-                upsert=True,
-            )
+            try:
+                await collection.update_one(
+                    {"filename": unique_filename},
+                    {
+                        "$set": {
+                            "filename": unique_filename,
+                            "sha256": sha256_hash,
+                            "size": stored_image.size,
+                            "modified": stored_image.modified,
+                            "url": stored_image.url,
+                        }
+                    },
+                    upsert=True,
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"Image uploaded but metadata was not recorded for '{unique_filename}': {exc}"
+                )
 
         # Return success response with image URL
         image_url = stored_image.url

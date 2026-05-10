@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -59,7 +60,7 @@ class StoredImage:
     filename: str
     url: str
     size: int
-    modified: int
+    modified: datetime
 
 
 # Global S3 client and lock for thread-safe initialization
@@ -186,7 +187,7 @@ async def upload_image_bytes(
     content_type: str | None = None,
 ) -> StoredImage:
     """Persist an uploaded image to the configured backend."""
-    now = int(time.time())
+    now = datetime.now(timezone.utc)
     if _s3_enabled():
         client = await _get_s3_client()
         extra_args: Dict[str, Any] = {}
@@ -225,7 +226,7 @@ async def upload_image_bytes(
         filename=filename,
         url=f"/static/uploads/{filename}",
         size=stat.st_size,
-        modified=int(stat.st_mtime),
+        modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
     )
 
 

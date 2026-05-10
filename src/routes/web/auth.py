@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
 from loguru import logger
 
-from ...config import DEV, SESSION_COOKIE_NAME
+from ...config import SESSION_COOKIE_NAME, SESSION_COOKIE_SECURE
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...middleware.rate_limiter import rate_limit
@@ -173,12 +173,12 @@ async def register_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-        # Set secure session cookie
+        # Set session cookie
         response = RedirectResponse(url="/", status_code=303)
         response.set_cookie(
             key=SESSION_COOKIE_NAME,
             value=session_id,
-            secure=not DEV,  # Set to False in development mode
+            secure=SESSION_COOKIE_SECURE,
             httponly=True,
             samesite="Lax",
             path="/",
@@ -307,12 +307,12 @@ async def login_user(
             )
             csrf_protect.set_csrf_cookie(signed_token, template)
             return template
-        # Set secure session cookie
+        # Set session cookie
         response = RedirectResponse(url=safe_next, status_code=303)
         response.set_cookie(
             key=SESSION_COOKIE_NAME,
             value=session_id,
-            secure=not DEV,  # Set to False in development mode
+            secure=SESSION_COOKIE_SECURE,
             httponly=True,
             samesite="Lax",
             path="/",
@@ -457,13 +457,15 @@ async def logout_user(
             await UserService.delete_session(session_id)
         # Clear session cookie
         response = RedirectResponse(url="/", status_code=303)
-        response.delete_cookie(
-            key=SESSION_COOKIE_NAME,
-            secure=not DEV,  # Set to False in development mode
-            httponly=True,
-            samesite="Lax",
-            path="/",
-        )
+        cookie_names = {SESSION_COOKIE_NAME, "__Host-user_session", "user_session"}
+        for cookie_name in cookie_names:
+            response.delete_cookie(
+                key=cookie_name,
+                secure=SESSION_COOKIE_SECURE or cookie_name.startswith("__Host-"),
+                httponly=True,
+                samesite="Lax",
+                path="/",
+            )
         logger.info("User logged out")
         return response
     except Exception as e:

@@ -4,6 +4,7 @@ Calculates SHA256 sums for images and stores them in the database.
 """
 
 import hashlib
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from loguru import logger
@@ -13,10 +14,10 @@ from ..services.storage_service import StorageError, download_image_bytes
 from .images import _list_images
 
 
-def calculate_sha256(filename: str) -> str:
+async def calculate_sha256(filename: str) -> str:
     """Calculate SHA256 hash for an uploaded image."""
     try:
-        data = download_image_bytes(filename)
+        data = await download_image_bytes(filename)
     except StorageError as exc:
         logger.warning(f"Failed to retrieve image {filename} for hashing: {exc}")
         return ""
@@ -41,12 +42,16 @@ async def update_image_hashes():
         logger.error("Image hashes collection not available")
         return
 
-    images = _list_images()
+    images = await _list_images()
     for image in images:
         filename = image["filename"]
-        sha256 = calculate_sha256(filename)
+        sha256 = await calculate_sha256(filename)
         if not sha256:
             continue
+
+        modified = image["modified"]
+        if isinstance(modified, (int, float)):
+            modified = datetime.fromtimestamp(modified, tz=timezone.utc)
 
         # Upsert the hash
         await collection.update_one(
@@ -56,7 +61,7 @@ async def update_image_hashes():
                     "filename": filename,
                     "sha256": sha256,
                     "size": image["size"],
-                    "modified": image["modified"],
+                    "modified": modified,
                     "url": image.get("url"),
                 }
             },
