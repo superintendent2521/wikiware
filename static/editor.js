@@ -4,6 +4,8 @@
 (function () {
   const IMAGE_CAPTION_PLACEHOLDER_TEXT = 'Add caption...';
   const ZERO_WIDTH_SPACE = '\u200B';
+  const IMAGE_MIN_WIDTH = 120;
+  const IMAGE_MAX_WIDTH = 1200;
 
   function qs(sel, root = document) { return root.querySelector(sel); }
   function qsa(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
@@ -54,6 +56,49 @@
     }
   }
 
+  function normalizeImageWidth(value, maxWidth = IMAGE_MAX_WIDTH) {
+    const numericValue = typeof value === 'number'
+      ? value
+      : parseInt((String(value || '').trim().match(/^-?\d+/) || [null])[0], 10);
+    const parsed = Math.round(numericValue);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return Math.max(IMAGE_MIN_WIDTH, Math.min(maxWidth, parsed));
+  }
+
+  function getPointerClientX(event) {
+    const touch = event && event.touches && event.touches[0]
+      ? event.touches[0]
+      : event && event.changedTouches && event.changedTouches[0]
+        ? event.changedTouches[0]
+        : null;
+    const x = touch ? touch.clientX : event && event.clientX;
+    return Number.isFinite(x) ? x : null;
+  }
+
+  function getImageWidthValue(figure, img) {
+    if (figure) {
+      const dataWidth = normalizeImageWidth(figure.getAttribute('data-image-width'));
+      if (dataWidth) return dataWidth;
+      const styleWidth = normalizeImageWidth(figure.style && figure.style.width);
+      if (styleWidth) return styleWidth;
+    }
+    if (img) {
+      return normalizeImageWidth(img.getAttribute('width'));
+    }
+    return null;
+  }
+
+  function applyImageWidth(figure, width, maxWidth) {
+    if (!figure) return null;
+    const nextWidth = normalizeImageWidth(width, maxWidth);
+    if (!nextWidth) return null;
+    figure.style.width = nextWidth + 'px';
+    figure.setAttribute('data-image-width', String(nextWidth));
+    const img = figure.querySelector('img');
+    if (img) img.setAttribute('width', String(nextWidth));
+    return nextWidth;
+  }
+
   let lastSelectionRange = null;
   let lastSelectionEditor = null;
 
@@ -79,12 +124,16 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
-    function buildFigureMarkup(src, altText, captionText) {
+    function buildFigureMarkup(src, altText, captionText, width) {
       const srcAttr = escapeAttrQuotesOnly(src.trim());
       const altAttr = escapeAttrQuotesOnly(altText.trim());
       const captionHtml = captionText;
+      const imageWidth = normalizeImageWidth(width);
+      const widthAttrs = imageWidth ? ` style="width: ${imageWidth}px;" data-image-width="${imageWidth}"` : '';
+      const imgWidthAttr = imageWidth ? ` width="${imageWidth}"` : '';
       const captionTag = `<figcaption contenteditable="true" data-placeholder="${IMAGE_CAPTION_PLACEHOLDER_TEXT}">${captionHtml}</figcaption>`;
-      return `<figure class="wiki-image" contenteditable="false"><img alt="${altAttr}" src="${srcAttr}">${captionTag}</figure>${ZERO_WIDTH_SPACE}`;
+      const handle = '<span class="image-resize-handle" contenteditable="false" aria-hidden="true"></span>';
+      return `<figure class="wiki-image" contenteditable="false"${widthAttrs}><img alt="${altAttr}" src="${srcAttr}"${imgWidthAttr}>${captionTag}${handle}</figure>${ZERO_WIDTH_SPACE}`;
     }
 
     function parseImageTarget(body) {
@@ -190,15 +239,17 @@
       // code `code`
       text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
       // images ![alt](url "caption")
-      text = text.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, (_, altPart, targetPart) => {
+      text = text.replace(/!\[([^\]]*)\]\(([^\)]+)\)(?:\s*\{\s*width\s*=\s*(\d{2,4})\s*\})?/g, (_, altPart, targetPart, widthPart) => {
         const altRaw = (altPart || '').trim();
         const parsed = parseImageTarget(targetPart);
         const srcRaw = (parsed.src || '').trim();
         const captionRaw = (parsed.title || '').trim();
+        const imageWidth = normalizeImageWidth(widthPart);
         const altAttr = escapeAttrQuotesOnly(altRaw);
         const srcAttr = escapeAttrQuotesOnly(srcRaw);
         const titleAttr = captionRaw ? ` title="${escapeAttrQuotesOnly(captionRaw)}"` : '';
-        return `<img alt="${altAttr}" src="${srcAttr}"${titleAttr}>`;
+        const widthAttr = imageWidth ? ` width="${imageWidth}"` : '';
+        return `<img alt="${altAttr}" src="${srcAttr}"${titleAttr}${widthAttr}>`;
       });
       // links [text](url)
       text = text.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
@@ -253,15 +304,16 @@
         continue;
       }
 
-      const imageOnlyMatch = line.match(/^\s*!\[([^\]]*)\]\(([^\)]+)\)\s*$/);
+      const imageOnlyMatch = line.match(/^\s*!\[([^\]]*)\]\(([^\)]+)\)(?:\s*\{\s*width\s*=\s*(\d{2,4})\s*\})?\s*$/);
       if (imageOnlyMatch) {
         const altBlock = (imageOnlyMatch[1] || '').trim();
         const parsedTarget = parseImageTarget(imageOnlyMatch[2] || '');
+        const widthBlock = normalizeImageWidth(imageOnlyMatch[3]);
         const srcBlock = escapeHtml((parsedTarget.src || '').trim());
         const captionBlock = escapeHtml((parsedTarget.title || '').trim());
         const altBlockEscaped = escapeHtml(altBlock);
         closeLists();
-        html += buildFigureMarkup(srcBlock, altBlockEscaped, captionBlock);
+        html += buildFigureMarkup(srcBlock, altBlockEscaped, captionBlock, widthBlock);
         i++;
         continue;
       }
@@ -325,6 +377,7 @@
         const normalizeInline = value => value.replace(/\s+/g, ' ').trim();
         const alt = normalizeInline(altRaw).replace(/\\/g, '\\\\').replace(/[\[\]]/g, '\\$&');
         const caption = normalizeInline(captionText);
+        const width = getImageWidthValue(node, img);
         let markdown = `![${alt}](${srcRaw}`;
         if (caption) {
           const escapedCaption = caption
@@ -333,6 +386,9 @@
           markdown += ` "${escapedCaption}"`;
         }
         markdown += ')';
+        if (width) {
+          markdown += `{width=${width}}`;
+        }
         return `${markdown}\n\n`;
       }
 
@@ -369,6 +425,7 @@
           const altRaw = (node.getAttribute('alt') || '').replace(/\u200B/g, '');
           const src = (node.getAttribute('src') || '').trim();
           const titleAttr = (node.getAttribute('title') || '').trim();
+          const width = getImageWidthValue(null, node);
           const altText = altRaw.replace(/\\/g, '\\\\').replace(/[\[\]]/g, '\\$&');
           let markdownImage = `![${altText}](${src}`;
           if (titleAttr) {
@@ -378,6 +435,9 @@
             markdownImage += ` "${escapedTitle}"`;
           }
           markdownImage += ')';
+          if (width) {
+            markdownImage += `{width=${width}}`;
+          }
           return markdownImage;
         }
         case 'UL': {
@@ -928,6 +988,65 @@
         return true;
       }
 
+      function getEditorImageMaxWidth() {
+        if (!editor) return IMAGE_MAX_WIDTH;
+        const rect = editor.getBoundingClientRect();
+        const editorWidth = Math.floor(rect.width || IMAGE_MAX_WIDTH);
+        return Math.max(IMAGE_MIN_WIDTH, Math.min(IMAGE_MAX_WIDTH, editorWidth - 24));
+      }
+
+      function beginImageResize(ev) {
+        if (isRawMode || ev.button > 0) return;
+        const handle = ev.target && ev.target.closest ? ev.target.closest('.image-resize-handle') : null;
+        if (!handle || !editor.contains(handle)) return;
+        const figure = handle.closest('figure.wiki-image');
+        if (!figure) return;
+        const startX = getPointerClientX(ev);
+        if (startX === null) return;
+
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        const maxWidth = getEditorImageMaxWidth();
+        const startRect = figure.getBoundingClientRect();
+        const startWidth = Math.max(IMAGE_MIN_WIDTH, Math.min(maxWidth, Math.round(startRect.width || IMAGE_MIN_WIDTH)));
+        const activePointerId = ev.pointerId;
+        let didResize = false;
+        figure.classList.add('is-resizing');
+        editor.classList.add('is-resizing-image');
+
+        if (typeof handle.setPointerCapture === 'function' && ev.pointerId !== undefined) {
+          try { handle.setPointerCapture(ev.pointerId); } catch (_) { /* no-op */ }
+        }
+
+        function move(pointerEvent) {
+          if (activePointerId !== undefined && pointerEvent.pointerId !== undefined && pointerEvent.pointerId !== activePointerId) return;
+          const currentX = getPointerClientX(pointerEvent);
+          if (currentX === null) return;
+          const delta = startX - currentX;
+          if (!didResize && Math.abs(delta) < 3) return;
+          didResize = true;
+          applyImageWidth(figure, startWidth + delta, maxWidth);
+        }
+
+        function finish() {
+          figure.classList.remove('is-resizing');
+          editor.classList.remove('is-resizing-image');
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', finish);
+          document.removeEventListener('pointercancel', finish);
+          if (didResize) {
+            syncTextareaFromEditor();
+            dispatchEditorInput();
+          }
+          captureSelection();
+        }
+
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', finish);
+        document.addEventListener('pointercancel', finish);
+      }
+
       // Render initial content
       try {
         editor.innerHTML = mdToHtml(opts.initialMarkdown || textarea.value || '');
@@ -1053,6 +1172,7 @@
           ev.preventDefault();
         }
       });
+      editor.addEventListener('pointerdown', beginImageResize);
 
       // Sync on submit: serialize editor HTML to Markdown
       if (form) {
@@ -1149,6 +1269,12 @@
       }
       figure.appendChild(captionEl);
 
+      const resizeHandle = document.createElement('span');
+      resizeHandle.className = 'image-resize-handle';
+      resizeHandle.setAttribute('contenteditable', 'false');
+      resizeHandle.setAttribute('aria-hidden', 'true');
+      figure.appendChild(resizeHandle);
+
       insertNodeAtSelection(figure);
 
       let rangeForCaret = null;
@@ -1188,4 +1314,3 @@
 
   window.WikiEditor = WikiEditor;
 })();
-

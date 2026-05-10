@@ -644,7 +644,8 @@ main {
     float: right;
     margin: 0 0 var(--space-md) var(--space-lg);
     shape-outside: margin-box;
-    max-width: min(100%, 320px);
+    width: min(100%, 320px);
+    max-width: 100%;
     background: var(--primary-white);
     border: 1px solid var(--light-gray);
     border-radius: var(--border-radius-sm);

@@ -5,6 +5,7 @@ Uses Bleach to remove dangerous tags/attributes and prevent XSS.
 
 from typing import Iterable
 import bleach
+from bleach.css_sanitizer import CSSSanitizer
 
 
 # Allow a conservative set of HTML tags typically produced by Markdown
@@ -54,7 +55,7 @@ ALLOWED_ATTRIBUTES = {
         "data-source-author",
     ],
     "img": ["src", "alt", "title", "width", "height"],
-    "figure": ["class"],
+    "figure": ["class", "style"],
     "figcaption": ["class"],
     "span": ["class", "title", "data-timestamp", "data-source"],
     "th": ["colspan", "rowspan"],
@@ -66,6 +67,7 @@ for heading in ("h1", "h2", "h3", "h4", "h5", "h6"):
     ALLOWED_ATTRIBUTES[heading] = ["id"]
 
 ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+CSS_SANITIZER = CSSSanitizer(allowed_css_properties=["width"])
 
 
 def sanitize_html(html: str) -> str:
@@ -75,5 +77,6 @@ def sanitize_html(html: str) -> str:
         tags=ALLOWED_TAGS,
         attributes=ALLOWED_ATTRIBUTES,
         protocols=ALLOWED_PROTOCOLS,
+        css_sanitizer=CSS_SANITIZER,
         strip=True,
     )

@@ -16,6 +16,9 @@ from markdown.extensions.tables import TableExtension
 
 
 _SOURCE_PARAM_KEY_PATTERN = re.compile(r"^\s*([A-Za-z0-9_-]+)\s*=")
+_IMAGE_WIDTH_PATTERN = re.compile(r"^\s*\{\s*width\s*=\s*(\d{2,4})\s*\}\s*$", re.I)
+_IMAGE_MIN_WIDTH = 120
+_IMAGE_MAX_WIDTH = 1200
 
 
 def _parse_source_params(params_str):
@@ -72,6 +75,31 @@ def _parse_source_params(params_str):
         params[key] = value
 
     return params
+
+
+def _normalize_image_width(value):
+    """Return a bounded pixel width for persisted image resize metadata."""
+    try:
+        width = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+    if width <= 0:
+        return None
+
+    return max(_IMAGE_MIN_WIDTH, min(_IMAGE_MAX_WIDTH, width))
+
+
+def _parse_image_width_tail(tail):
+    """Parse the optional image width suffix: ![alt](src){width=320}."""
+    if not tail:
+        return None, ""
+
+    match = _IMAGE_WIDTH_PATTERN.match(tail)
+    if not match:
+        return None, tail
+
+    return _normalize_image_width(match.group(1)), ""
 
 
 class InternalLinkProcessor(InlineProcessor):
@@ -159,7 +187,8 @@ class ImageFigureProcessor(Treeprocessor):
                 if len(element_children) != 1:
                     continue
                 node = element_children[0]
-                if (node.tail or "").strip():
+                image_width, cleaned_tail = _parse_image_width_tail(node.tail or "")
+                if image_width is None and (node.tail or "").strip():
                     continue
                 wrapper = None
                 image = None
@@ -176,16 +205,22 @@ class ImageFigureProcessor(Treeprocessor):
                     image = node[0]
                 else:
                     continue
-                if image is None or (image.tail or "").strip():
+                if image is None:
+                    continue
+                image_tail = cleaned_tail if image is node else (image.tail or "")
+                if image_tail.strip():
                     continue
                 figure = Element("figure")
                 figure.set("class", "wiki-image")
+                if image_width:
+                    figure.set("style", f"width: {image_width}px;")
+                    image.set("width", str(image_width))
                 if wrapper is not None:
-                    wrapper.tail = ""
+                    wrapper.tail = cleaned_tail
                     image.tail = ""
                     figure.append(wrapper)
                 else:
-                    image.tail = ""
+                    image.tail = cleaned_tail
                     figure.append(image)
                 caption_text = (image.get("title") or "").strip()
                 if "title" in image.attrib:
@@ -228,6 +263,11 @@ class ImageFigureProcessor(Treeprocessor):
 
             if image is None:
                 continue
+
+            existing_width = _normalize_image_width(image.get("width"))
+            if existing_width:
+                figure.set("style", f"width: {existing_width}px;")
+                image.set("width", str(existing_width))
 
             existing_caption = ""
             if caption_el is not None:

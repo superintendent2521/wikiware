@@ -120,7 +120,9 @@
   float: right;
   margin: 0 0 var(--space-md, 16px) var(--space-lg, 24px);
   shape-outside: margin-box;
-  max-width: min(100%, 320px);
+  position: relative;
+  width: min(100%, 320px);
+  max-width: 100%;
   background: #f8f9fa;
   border: 1px solid var(--border-color, #c9c9c9);
   border-radius: 6px;
@@ -155,6 +157,37 @@
   outline-offset: -2px;
 }
 
+.visual-editor .image-resize-handle {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nesw-resize;
+  touch-action: none;
+  background:
+    linear-gradient(135deg, transparent 0 46%, rgba(55, 65, 81, 0.7) 47% 53%, transparent 54%),
+    linear-gradient(135deg, transparent 0 64%, rgba(55, 65, 81, 0.7) 65% 71%, transparent 72%);
+  background-color: rgba(255, 255, 255, 0.82);
+  border-top: 1px solid rgba(55, 65, 81, 0.28);
+  border-right: 1px solid rgba(55, 65, 81, 0.28);
+  border-top-right-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  z-index: 2;
+}
+
+.visual-editor figure.wiki-image:hover .image-resize-handle,
+.visual-editor figure.wiki-image:focus-within .image-resize-handle,
+.visual-editor figure.wiki-image.is-resizing .image-resize-handle {
+  opacity: 1;
+}
+
+.visual-editor.is-resizing-image {
+  user-select: none;
+  cursor: nesw-resize;
+}
+
 [data-theme="dark"] .visual-editor figure.wiki-image {
   background: #1f1f1f;
   border-color: #404040;
@@ -169,6 +202,14 @@
 
 [data-theme="dark"] .visual-editor figure.wiki-image figcaption:empty::before {
   color: #9ca3af;
+}
+
+[data-theme="dark"] .visual-editor .image-resize-handle {
+  background:
+    linear-gradient(135deg, transparent 0 46%, rgba(226, 232, 240, 0.82) 47% 53%, transparent 54%),
+    linear-gradient(135deg, transparent 0 64%, rgba(226, 232, 240, 0.82) 65% 71%, transparent 72%);
+  background-color: rgba(17, 24, 39, 0.88);
+  border-color: rgba(226, 232, 240, 0.3);
 }
 
 .visual-editor::after {
@@ -499,4 +540,3 @@
 [data-theme="dark"] .form-hint {
   color: #9ca3af;
 }
-
