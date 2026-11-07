@@ -1,0 +1,13 @@
+.env
+.env.*
+.git
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+backups
+logs
+static/uploads
+test-results.xml
+htmlcov
+coverage.xml

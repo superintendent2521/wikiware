@@ -6,7 +6,8 @@ Provides API endpoints for statistics.
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
-from ...database import db_instance, get_users_collection
+from ...database import db_instance
+from ...services.user_service import UserService
 
 router = APIRouter()
 
@@ -26,12 +27,7 @@ async def get_user_stats(username: str):
         if not db_instance.is_connected:
             raise HTTPException(status_code=503, detail="Database not available")
 
-        # Get stats for the specific user
-        users_collection = get_users_collection()
-        user_stats = await users_collection.find_one(
-            {"username": username},
-            projection={"_id": 0, "total_edits": 1, "page_edits": 1},
-        )
+        user_stats = await UserService.get_user_by_username(username)
 
         if not user_stats:
             raise HTTPException(status_code=404, detail="User not found")

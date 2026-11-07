@@ -3,16 +3,17 @@ Custom Markdown extensions for WikiWare.
 Adds support for [[Page Title]] internal linking syntax and table rendering with color support.
 """
 
-from urllib.parse import quote
 import re
-import html as _html
 from xml.etree.ElementTree import Element
 from datetime import datetime, timezone
+from urllib.parse import quote, urlsplit
 from markdown.extensions import Extension
 from markdown.inlinepatterns import InlineProcessor
 from markdown.util import AtomicString
 from markdown.treeprocessors import Treeprocessor
 from markdown.extensions.tables import TableExtension
+
+from .link_processor import parse_internal_link_target
 
 
 _SOURCE_PARAM_KEY_PATTERN = re.compile(r"^\s*([A-Za-z0-9_-]+)\s*=")
@@ -111,26 +112,14 @@ class InternalLinkProcessor(InlineProcessor):
     def handleMatch(self, m, data):
         # Extract the full match from [[...]]
         full_match = m.group(1).strip()
-
-        # Check if it contains a colon for branch specification
-        if ":" in full_match:
-            parts = full_match.split(":", 1)
-            title = parts[0].strip()
-            branch = parts[1].strip()
-            encoded_title = quote(title, safe="")
-            encoded_branch = quote(branch, safe="")
-            link_text = _html.escape(title)
-            link = f'<a href="/page/{encoded_title}?branch={encoded_branch}">{link_text}</a>'
-        else:
-            # Default to main branch if no branch specified
-            title = full_match
-            encoded_title = quote(title, safe="")
-            link_text = _html.escape(title)
-            link = f'<a href="/page/{encoded_title}">{link_text}</a>'
-
-        logger = __import__("loguru").logger
-        logger.debug(f"Internal link processed: {full_match} -> {link}")
-        return AtomicString(link), m.start(0), m.end(0)
+        title, branch = parse_internal_link_target(full_match)
+        link = Element("a")
+        href = f"/page/{quote(title, safe='')}"
+        if branch is not None:
+            href += f"?branch={quote(branch, safe='')}"
+        link.set("href", href)
+        link.text = title
+        return link, m.start(0), m.end(0)
 
 
 class InternalLinkExtension(Extension):
@@ -315,7 +304,9 @@ class ColorTagProcessor(InlineProcessor):
         }
         css_class = color_classes.get(color_name, "")
         # Return only the span, and consume the entire match so the raw code doesn't appear
-        return AtomicString(f'<span class="{css_class}"></span>'), m.start(0), m.end(0)
+        span = Element("span")
+        span.set("class", css_class)
+        return span, m.start(0), m.end(0)
 
 
 class UnixTimestampProcessor(InlineProcessor):
@@ -343,7 +334,7 @@ class UnixTimestampProcessor(InlineProcessor):
             span.text = formatted_time
             return span, m.start(0), m.end(0)
 
-        except (ValueError, OSError):
+        except (ValueError, OSError, OverflowError):
             span = Element("span")
             span.set("class", "unix-timestamp-error")
             span.set("data-source", "error")
@@ -376,11 +367,17 @@ class SourceCollectorProcessor(InlineProcessor):
         title = params.get("title", url or "Untitled Source")
         author = params.get("author", "")
 
-        if not url:
+        try:
+            parsed_url = urlsplit(url)
+            valid_url = parsed_url.scheme.lower() in {"http", "https"} and bool(parsed_url.netloc)
+            valid_url = valid_url and not any(ord(char) < 32 for char in url)
+        except ValueError:
+            valid_url = False
+        if not valid_url:
             # Invalid, replace with error element so markup isn't escaped
             error_span = Element("span")
             error_span.set("class", "source-error")
-            error_span.text = "[Invalid source: missing URL]"
+            error_span.text = "[Invalid source: use an HTTP or HTTPS URL]"
             return error_span, m.start(0), m.end(0)
 
         # Dedupe by URL

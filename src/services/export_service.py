@@ -9,19 +9,13 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, Optional
 
-from bson import ObjectId
 from loguru import logger
+from sqlalchemy import text
 from zipstream.aiozipstream import AioZipStream
 
-from ..database import (
-    db_instance,
-    get_branches_collection,
-    get_history_collection,
-    get_pages_collection,
-    get_users_collection,
-    get_image_hashes_collection,
-)
+from ..database import db_instance
 from ..services.user_service import UserService
+from ..utils.sql import execute, execute_returning
 
 
 class ExportRateLimitError(Exception):
@@ -42,7 +36,6 @@ class ExportService:
     """Service for exporting wiki collections for download."""
 
     EXPORT_INTERVAL = timedelta(hours=24)
-    MAX_FETCH = 250_000  # safeguard to avoid unbounded cursor to_list calls
     ZIP_CHUNK_SIZE = 64 * 1024
 
     @staticmethod
@@ -69,20 +62,16 @@ class ExportService:
     @classmethod
     async def _update_last_export(cls, username: str) -> None:
         """Persist the timestamp of the most recent export for the user."""
-        users_collection = get_users_collection()
-        if users_collection is None:
-            raise ExportUnavailableError("Users collection unavailable")
         now_utc = datetime.now(timezone.utc)
-        await users_collection.update_one(
-            {"username": username},
-            {"$set": {"last_collection_export_at": now_utc}},
+        await execute(
+            "UPDATE users SET last_collection_export_at = :timestamp "
+            "WHERE username = :username",
+            {"timestamp": now_utc, "username": username},
         )
 
     @staticmethod
     def _serialize_value(value: Any) -> Any:
-        """Convert MongoDB-specific/complex values into JSON-serializable ones."""
-        if isinstance(value, ObjectId):
-            return str(value)
+        """Convert database values into JSON-serializable ones."""
         if isinstance(value, datetime):
             if value.tzinfo is None:
                 value = value.replace(tzinfo=timezone.utc)
@@ -100,51 +89,49 @@ class ExportService:
         return f"wikiware-collections-{timestamp}.zip"
 
     @classmethod
-    async def _stream_collection_json(
-        cls, collection, label: str
-    ) -> AsyncIterator[bytes]:
-        """Yield a JSON array representation of the collection without buffering everything."""
+    async def _reserve_export(cls, username: str) -> datetime:
+        """Claim the cooldown atomically so simultaneous requests cannot bypass it."""
+        now = datetime.now(timezone.utc)
         try:
-            cursor = collection.find(limit=cls.MAX_FETCH)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error(f"Failed to create cursor for {label} collection: {exc}")
-            raise ExportUnavailableError(
-                f"Failed to stream {label} collection"
-            ) from exc
+            row = await execute_returning(
+                "UPDATE users SET last_collection_export_at = :now "
+                "WHERE username = :username AND (last_collection_export_at IS NULL "
+                "OR last_collection_export_at <= :cutoff) RETURNING id",
+                {"username": username, "now": now, "cutoff": now - cls.EXPORT_INTERVAL},
+            )
+            if row is None:
+                user = await cls._ensure_user(username)
+                last = user.get("last_collection_export_at")
+                if last is None:
+                    raise ExportUnavailableError("Unable to reserve export")
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=timezone.utc)
+                raise ExportRateLimitError(last + cls.EXPORT_INTERVAL)
+            return now
+        except (ExportRateLimitError, ExportUnavailableError):
+            raise
+        except Exception as exc:
+            raise ExportUnavailableError("Unable to reserve export") from exc
 
+    @classmethod
+    async def _stream_collection_json(cls, connection, statement: str, label: str) -> AsyncIterator[bytes]:
+        """Stream every row from the archive's shared repeatable-read snapshot."""
         first = True
         count = 0
         yield b"["
         try:
-            async for document in cursor:
-                serialized = {
-                    key: cls._serialize_value(value) for key, value in document.items()
-                }
-                encoded = json.dumps(
-                    serialized,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ).encode("utf-8")
-                if first:
+            async with connection.stream(text(statement)) as result:
+                async for document in result.mappings():
+                    serialized = {key: cls._serialize_value(value) for key, value in document.items()}
+                    encoded = json.dumps(serialized, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                    yield encoded if first else b"," + encoded
                     first = False
-                    yield encoded
-                else:
-                    yield b"," + encoded
-                count += 1
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error(f"Failed while streaming {label} collection: {exc}")
-            raise ExportUnavailableError(
-                f"Failed to stream {label} collection"
-            ) from exc
-        else:
-            if count == cls.MAX_FETCH:
-                logger.warning(
-                    f"Reached MAX_FETCH limit ({cls.MAX_FETCH}) for {label} collection. Export may be incomplete."  # pragma: no cover - logging only
-                )
-            yield b"]"
-            logger.info(
-                f"Streamed {count} documents from {label} collection"  # pragma: no cover - logging only
-            )
+                    count += 1
+        except Exception as exc:
+            logger.error("Failed while streaming {}: {}", label, exc)
+            raise ExportUnavailableError(f"Failed to stream {label}") from exc
+        yield b"]"
+        logger.info("Streamed {} rows from {}", count, label)
 
     @classmethod
     async def generate_export_archive(
@@ -163,62 +150,84 @@ class ExportService:
             next_allowed = last_export + cls.EXPORT_INTERVAL
             raise ExportRateLimitError(next_allowed)
 
-        pages_collection = get_pages_collection()
-        history_collection = get_history_collection()
-        branches_collection = get_branches_collection()
-        image_collection = get_image_hashes_collection()  # its just sha256s
-        missing_collections = [
-            name
-            for name, coll in (
-                ("pages", pages_collection),
-                ("history", history_collection),
-                ("branches", branches_collection),
-                ("images", image_collection),
-            )
-            if coll is None
-        ]
-        if missing_collections:
-            raise ExportUnavailableError(
-                f"{', '.join(missing_collections)} collection(s) are unavailable"
-            )
-
-        archive_name = filename or cls.build_export_filename()
-        sources = [
-            {
-                "stream": cls._stream_collection_json(pages_collection, "pages"),
-                "name": "pages.json",
-                "compression": "deflate",
-            },
-            {
-                "stream": cls._stream_collection_json(history_collection, "history"),
-                "name": "history.json",
-                "compression": "deflate",
-            },
-            {
-                "stream": cls._stream_collection_json(image_collection, "picture_shas"),
-                "name": "image.json",
-                "compression": "deflate",
-            },
-            {
-                "stream": cls._stream_collection_json(branches_collection, "branches"),
-                "name": "branches.json",
-                "compression": "deflate",
-            },
-        ]
-
-        archive = AioZipStream(sources, chunksize=cls.ZIP_CHUNK_SIZE)
+        reservation = await cls._reserve_export(username)
         stream_completed = False
-
         try:
-            async for chunk in archive.stream():
-                yield chunk
+            async with db_instance.engine.connect() as connection:
+                connection = await connection.execution_options(isolation_level="REPEATABLE READ")
+                async with connection.begin():
+                    await connection.execute(text("SET TRANSACTION READ ONLY"))
+                    sources = [
+                        {
+                            "stream": cls._stream_collection_json(
+                                connection,
+                                "SELECT p.title, b.name AS branch, b.content, b.author_name AS author, "
+                                "b.edit_summary, b.edit_permission, b.created_at, b.updated_at, "
+                                "COALESCE((SELECT jsonb_agg(u.username ORDER BY u.username) "
+                                "FROM branch_editors e JOIN users u ON u.id = e.user_id "
+                                "WHERE e.page_branch_id = b.id), '[]'::jsonb) AS allowed_users "
+                                "FROM page_branches b JOIN pages p ON p.id = b.page_id ORDER BY b.id",
+                                "pages",
+                            ),
+                            "name": "pages.json",
+                            "compression": "deflate",
+                        },
+                        {
+                            "stream": cls._stream_collection_json(
+                                connection,
+                                "SELECT p.title, b.name AS branch, r.revision_number, r.content, "
+                                "r.author_name AS author, r.edited_by, r.edit_summary, r.created_at "
+                                "FROM revisions r JOIN page_branches b ON b.id = r.page_branch_id "
+                                "JOIN pages p ON p.id = b.page_id ORDER BY r.id",
+                                "history",
+                            ),
+                            "name": "history.json",
+                            "compression": "deflate",
+                        },
+                        {
+                            "stream": cls._stream_collection_json(
+                                connection,
+                                "SELECT filename, sha256, size, last_modified AS modified, url "
+                                "FROM image_hashes ORDER BY id",
+                                "picture_shas",
+                            ),
+                            "name": "image.json",
+                            "compression": "deflate",
+                        },
+                        {
+                            "stream": cls._stream_collection_json(
+                                connection,
+                                "SELECT p.title AS page_title, b.name AS branch_name, b.created_from, "
+                                "b.content, b.author_name AS author, b.created_at, b.updated_at "
+                                "FROM page_branches b JOIN pages p ON p.id = b.page_id ORDER BY b.id",
+                                "branches",
+                            ),
+                            "name": "branches.json",
+                            "compression": "deflate",
+                        },
+                    ]
+
+                    archive = AioZipStream(sources, chunksize=cls.ZIP_CHUNK_SIZE)
+                    async for chunk in archive.stream():
+                        yield chunk
             stream_completed = True
+        except ExportUnavailableError:
+            raise
+        except Exception as exc:
+            raise ExportUnavailableError("Failed to create a consistent export") from exc
         finally:
-            if stream_completed:
-                await cls._update_last_export(username)
-                logger.info(
-                    f"Collections export streamed for user {username} with archive {archive_name}"  # pragma: no cover - logging only
-                )
+            if not stream_completed:
+                try:
+                    await execute(
+                        "UPDATE users SET last_collection_export_at = :previous "
+                        "WHERE username = :username AND last_collection_export_at = :reservation",
+                        {"username": username, "previous": user.get("last_collection_export_at"), "reservation": reservation},
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to release interrupted export reservation: {}", exc)
+            else:
+                logger.info("Collections export streamed for user {}", username)
+
 
 
 __all__ = ["ExportService", "ExportRateLimitError", "ExportUnavailableError"]

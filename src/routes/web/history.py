@@ -4,25 +4,28 @@ Handles page version history and restoration.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from difflib import HtmlDiff
 from typing import Any, Dict, List, Optional
 
-import markdown
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
+from fastapi_csrf_protect.exceptions import CsrfProtectError
 from loguru import logger
 
-from ...database import db_instance, get_history_collection, get_pages_collection
+from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...middleware.rate_limiter import rate_limit
 from ...services.branch_service import BranchService
-from ...utils.link_processor import process_internal_links
-from ...utils.sanitizer import sanitize_html
+from ...services.page_service import PageService
+from ...services.page_errors import PageServiceError, PageUnavailableError
+from ...services.render_service import render_markdown, render_sources_html
+from ...services.page_permissions import get_page_edit_denial
+from ...services.settings_service import SettingsService
+from ...utils.error_utils import render_error_page
 from ...utils.template_env import get_templates
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
-from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExtension
 
 router = APIRouter()
 templates = get_templates()
@@ -39,14 +42,7 @@ class HistoryViewDependencies:
     csrf_token: str
     signed_token: str
     db_online: bool
-    pages_collection: Any
-    history_collection: Any
     branches: List[Any] = field(default_factory=list)
-
-
-def _get_history_collections():
-    """Return the current pages/history collections without repeating lookups."""
-    return get_pages_collection(), get_history_collection()
 
 
 async def _prepare_history_view_dependencies(
@@ -59,11 +55,6 @@ async def _prepare_history_view_dependencies(
     user = await AuthMiddleware.get_current_user(request)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     db_online = db_instance.is_connected
-
-    pages_collection = None
-    history_collection = None
-    if db_online:
-        pages_collection, history_collection = _get_history_collections()
 
     branches: List[Any] = []
     if include_branches and db_online:
@@ -80,8 +71,6 @@ async def _prepare_history_view_dependencies(
         csrf_token=csrf_token,
         signed_token=signed_token,
         db_online=db_online,
-        pages_collection=pages_collection,
-        history_collection=history_collection,
         branches=branches,
     )
 
@@ -122,39 +111,19 @@ async def _fetch_versions_for_history(
     title: str,
     branch: str,
     *,
-    limit: int = 100,
-    pages_collection=None,
-    history_collection=None,
+    limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Fetch current page and historical versions ordered newest first."""
 
-    if pages_collection is None:
-        pages_collection = get_pages_collection()
-    if history_collection is None:
-        history_collection = get_history_collection()
-
-    versions: List[Dict[str, Any]] = []
-
     try:
-        if pages_collection is not None:
-            current = await pages_collection.find_one(
-                {"title": title, "branch": branch}
-            )
-            if current:
-                versions.append(current)
-
-        remaining = max(0, limit - len(versions))
-
-        if remaining > 0 and history_collection is not None:
-            history_cursor = (
-                history_collection.find({"title": title, "branch": branch})
-                .sort("updated_at", -1)
-                .limit(remaining)
-            )
-            history_versions = await history_cursor.to_list(remaining)
-            versions.extend(history_versions)
-
-        return versions
+        current = await PageService.get_page(title, branch)
+        history = await PageService.get_history(title, branch, limit=limit)
+        if current is not None:
+            current["revision_number"] = (history[0]["revision_number"] + 1) if history else 1
+        versions = [current] if current else []
+        return versions + (history if limit is None else history[: max(0, limit - len(versions))])
+    except PageServiceError:
+        raise
     except Exception as db_error:
         logger.error(
             f"Database error while fetching version list for {title} on branch {branch}: {str(db_error)}"
@@ -166,37 +135,19 @@ async def _get_version_by_index(
     title: str,
     branch: str,
     version_index: int,
-    *,
-    pages_collection=None,
-    history_collection=None,
 ) -> Optional[Dict[str, Any]]:
     """Fetch a single version document by index (0=current, 1+ history)."""
 
     if version_index < 0:
         return None
 
-    if pages_collection is None:
-        pages_collection = get_pages_collection()
-    if history_collection is None:
-        history_collection = get_history_collection()
-
     try:
         if version_index == 0:
-            if pages_collection is None:
-                return None
-            return await pages_collection.find_one({"title": title, "branch": branch})
-
-        if history_collection is None:
-            return None
-
-        cursor = (
-            history_collection.find({"title": title, "branch": branch})
-            .sort("updated_at", -1)
-            .skip(version_index - 1)
-            .limit(1)
-        )
-        results = await cursor.to_list(1)
-        return results[0] if results else None
+            return await PageService.get_page(title, branch)
+        history = await PageService.get_history(title, branch, limit=None)
+        return history[version_index - 1] if version_index <= len(history) else None
+    except PageServiceError:
+        raise
     except Exception as db_error:
         logger.error(
             f"Database error while fetching version {version_index} for {title} on branch {branch}: {str(db_error)}"
@@ -225,7 +176,8 @@ def _build_version_entries(versions: List[Dict[str, Any]]) -> List[Dict[str, Any
         entries.append(
             {
                 "index": idx,
-                "display_number": max(1, total_versions - idx),
+                "display_number": doc.get("revision_number", max(1, total_versions - idx)),
+                "revision_id": doc.get("id") if idx > 0 else None,
                 "author": doc.get("author", "Anonymous"),
                 "updated_at_display": updated_at_display,
                 "edit_summary": edit_summary,
@@ -271,30 +223,17 @@ async def page_history(
             )
 
         if not deps.db_online:
-            logger.warning(
-                f"Database not connected - viewing history: {title} on branch: {branch}"
-            )
-            context = {
-                "request": request,
-                "title": title,
-                "versions": [],
-                "offline": True,
-                "user": deps.user,
-                "csrf_token": deps.csrf_token,
-            }
-            return _render_template_with_csrf(
-                "history.html", context, csrf_protect, deps.signed_token
-            )
+            raise PageUnavailableError()
 
         try:
             versions_raw = await _fetch_versions_for_history(
                 title,
                 branch,
-                limit=100,
-                pages_collection=deps.pages_collection,
-                history_collection=deps.history_collection,
+                limit=None,
             )
             versions = _build_version_entries(versions_raw)
+        except PageServiceError:
+            raise
         except Exception as db_error:
             logger.error(
                 f"Database error while fetching history for {title} on branch {branch}: {str(db_error)}"
@@ -333,26 +272,13 @@ async def page_history(
         return _render_template_with_csrf(
             "history.html", context, csrf_protect, deps.signed_token
         )
-    except Exception as e:
-        logger.error(f"Error viewing history {title} on branch {branch}: {str(e)}")
-        csrf_token_e = deps.csrf_token if deps else ""
-        signed_token_e = deps.signed_token if deps else ""
-        if not csrf_token_e or not signed_token_e:
-            try:
-                csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
-            except Exception:
-                csrf_token_e, signed_token_e = "", ""
-        context = {
-            "request": request,
-            "title": title,
-            "versions": [],
-            "error": "An error occurred while loading history",
-            "user": deps.user if deps else None,
-            "csrf_token": csrf_token_e,
-        }
-        return _render_template_with_csrf(
-            "history.html", context, csrf_protect, signed_token_e
-        )
+    except PageServiceError:
+        raise
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("History view failed: {}", exc)
+        return render_error_page(request, title="History Error", message="History could not be displayed.", status_code=500)
 
 
 @router.get(
@@ -367,6 +293,8 @@ async def compare_versions(
     branch: str = "main",
     from_version: int = 1,
     to_version: int = 0,
+    from_revision: int | None = None,
+    to_revision: int | None = None,
     csrf_protect: CsrfProtect = Depends(),
 ):
     """Compare two versions of a page and render a side-by-side diff."""
@@ -383,50 +311,17 @@ async def compare_versions(
             return RedirectResponse(url=redirect_url, status_code=303)
 
         if not deps.db_online:
-            logger.warning(
-                f"Database not connected - comparing versions: {title} on branch: {branch}"
-            )
-            context = {
-                "request": request,
-                "title": title,
-                "branch": branch,
-                "versions": [],
-                "compare_error": "Database not available",
-                "user": deps.user,
-                "csrf_token": deps.csrf_token,
-            }
-            return _render_template_with_csrf(
-                "compare.html", context, csrf_protect, deps.signed_token
-            )
-
-        pages_collection = deps.pages_collection
-        history_collection = deps.history_collection
-        if pages_collection is None and history_collection is None:
-            logger.error(
-                f"Database collections not available - comparing versions: {title} on branch: {branch}"
-            )
-            context = {
-                "request": request,
-                "title": title,
-                "branch": branch,
-                "versions": [],
-                "compare_error": "Database not available",
-                "user": deps.user,
-                "csrf_token": deps.csrf_token,
-            }
-            return _render_template_with_csrf(
-                "compare.html", context, csrf_protect, deps.signed_token
-            )
+            raise PageUnavailableError()
 
         try:
             versions_raw = await _fetch_versions_for_history(
                 title,
                 branch,
-                limit=100,
-                pages_collection=pages_collection,
-                history_collection=history_collection,
+                limit=None,
             )
             version_entries = _build_version_entries(versions_raw)
+        except PageServiceError:
+            raise
         except Exception as db_error:
             logger.error(
                 f"Database error while preparing comparison for {title} on branch {branch}: {str(db_error)}"
@@ -450,6 +345,10 @@ async def compare_versions(
         to_meta: Optional[Dict[str, Any]] = None
 
         version_lookup = {entry["index"]: entry for entry in version_entries}
+        if from_revision is not None:
+            from_version = next((entry["index"] for entry in version_entries if (entry["revision_id"] or 0) == from_revision), -1)
+        if to_revision is not None:
+            to_version = next((entry["index"] for entry in version_entries if (entry["revision_id"] or 0) == to_revision), -1)
 
         if len(version_entries) < 2:
             compare_error = "Not enough versions to compare."
@@ -459,20 +358,10 @@ async def compare_versions(
             compare_error = "Selected versions could not be found."
         else:
             try:
-                from_page = await _get_version_by_index(
-                    title,
-                    branch,
-                    from_version,
-                    pages_collection=pages_collection,
-                    history_collection=history_collection,
-                )
-                to_page = await _get_version_by_index(
-                    title,
-                    branch,
-                    to_version,
-                    pages_collection=pages_collection,
-                    history_collection=history_collection,
-                )
+                from_page = version_lookup[from_version]["document"]
+                to_page = version_lookup[to_version]["document"]
+            except PageServiceError:
+                raise
             except Exception as db_error:
                 logger.error(
                     f"Database error while fetching comparison versions for {title} on branch {branch}: {str(db_error)}"
@@ -515,29 +404,13 @@ async def compare_versions(
         return _render_template_with_csrf(
             "compare.html", context, csrf_protect, deps.signed_token
         )
-    except Exception as e:
-        logger.error(
-            f"Error comparing versions for {title} on branch {branch}: {str(e)}"
-        )
-        csrf_token_e = deps.csrf_token if deps else ""
-        signed_token_e = deps.signed_token if deps else ""
-        if not csrf_token_e or not signed_token_e:
-            try:
-                csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
-            except Exception:
-                csrf_token_e, signed_token_e = "", ""
-        context = {
-            "request": request,
-            "title": title,
-            "branch": branch,
-            "versions": [],
-            "compare_error": "An error occurred while preparing the comparison.",
-            "user": deps.user if deps else None,
-            "csrf_token": csrf_token_e,
-        }
-        return _render_template_with_csrf(
-            "compare.html", context, csrf_protect, signed_token_e
-        )
+    except PageServiceError:
+        raise
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("History view failed: {}", exc)
+        return render_error_page(request, title="History Error", message="History could not be displayed.", status_code=500)
 
 
 @router.get(
@@ -551,6 +424,7 @@ async def view_version(
     title: str,
     version_index: int,
     branch: str = "main",
+    revision_id: int | None = None,
     csrf_protect: CsrfProtect = Depends(),
 ):
     """View a specific version of a page."""
@@ -593,48 +467,16 @@ async def view_version(
             )
 
         if not deps.db_online:
-            logger.warning(
-                f"Database not connected - viewing version: {title} v{version_index} on branch: {branch}"
-            )
-            context = {
-                "request": request,
-                "title": title,
-                "content": "",
-                "offline": True,
-                "toc_items": [],
-                "user": deps.user,
-                "csrf_token": deps.csrf_token,
-            }
-            return _render_template_with_csrf(
-                "page.html", context, csrf_protect, deps.signed_token
-            )
-
-        pages_collection = deps.pages_collection
-        history_collection = deps.history_collection
-        if pages_collection is None or history_collection is None:
-            logger.error(
-                f"Database collections not available - viewing version: {title} v{version_index} on branch: {branch}"
-            )
-            context = {
-                "request": request,
-                "title": title,
-                "content": "",
-                "error": "Database not available",
-                "user": deps.user,
-                "csrf_token": deps.csrf_token,
-            }
-            return _render_template_with_csrf(
-                "edit.html", context, csrf_protect, deps.signed_token
-            )
+            raise PageUnavailableError()
 
         try:
-            page = await _get_version_by_index(
-                title,
-                branch,
-                version_index,
-                pages_collection=pages_collection,
-                history_collection=history_collection,
+            page = (
+                await PageService.get_revision(title, branch, revision_id)
+                if revision_id is not None
+                else await _get_version_by_index(title, branch, version_index)
             )
+        except PageServiceError:
+            raise
         except Exception as db_error:
             logger.error(
                 f"Database error while fetching version {version_index} for {title} on branch {branch}: {str(db_error)}"
@@ -652,41 +494,21 @@ async def view_version(
             )
 
         if not page:
-            logger.info(
-                f"Version not found - viewing edit page: {title} v{version_index} on branch: {branch}"
-            )
-            context = {
-                "request": request,
-                "title": title,
-                "content": "",
-                "offline": False,
-                "user": deps.user,
-                "csrf_token": deps.csrf_token,
-            }
-            return _render_template_with_csrf(
-                "edit.html", context, csrf_protect, deps.signed_token
-            )
+            raise HTTPException(status_code=404, detail="Revision not found")
 
         try:
-            processed_content = await process_internal_links(page["content"])
-            md = markdown.Markdown(
-                extensions=[TableExtensionWrapper(), ImageFigureExtension()]
-            )
-            page["html_content"] = sanitize_html(md.convert(processed_content))
+            rendered, _, sources = await render_markdown(page["content"])
+            page["html_content"] = rendered + render_sources_html(sources)
         except Exception as md_error:
             logger.error(
                 f"Error rendering markdown for version {version_index} of {title} on branch {branch}: {str(md_error)}"
             )
-            page["html_content"] = page["content"]
+            raise
 
         try:
-            total_history = 0
-            if history_collection is not None:
-                total_history = await history_collection.count_documents(
-                    {"title": title, "branch": branch}
-                )
+            total_history = len(await PageService.get_history(title, branch, limit=None))
             total_versions = 1 + total_history
-            display_version_num = max(1, total_versions - int(version_index))
+            display_version_num = page.get("revision_number", max(1, total_versions - int(version_index)))
         except Exception:
             display_version_num = int(version_index)
 
@@ -696,6 +518,7 @@ async def view_version(
             "page": page,
             "version_num": display_version_num,
             "version_index": version_index,
+            "revision_id": page.get("id") if version_index > 0 else None,
             "branch": branch,
             "offline": not deps.db_online,
             "branches": deps.branches,
@@ -705,28 +528,13 @@ async def view_version(
         return _render_template_with_csrf(
             "version.html", context, csrf_protect, deps.signed_token
         )
-    except Exception as e:
-        logger.error(
-            f"Error viewing version {title} v{version_index} on branch {branch}: {str(e)}"
-        )
-        csrf_token_e = deps.csrf_token if deps else ""
-        signed_token_e = deps.signed_token if deps else ""
-        if not csrf_token_e or not signed_token_e:
-            try:
-                csrf_token_e, signed_token_e = csrf_protect.generate_csrf_tokens()
-            except Exception:
-                csrf_token_e, signed_token_e = "", ""
-        context = {
-            "request": request,
-            "title": title,
-            "content": "",
-            "error": "An error occurred while loading version",
-            "user": deps.user if deps else None,
-            "csrf_token": csrf_token_e,
-        }
-        return _render_template_with_csrf(
-            "edit.html", context, csrf_protect, signed_token_e
-        )
+    except PageServiceError:
+        raise
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("History view failed: {}", exc)
+        return render_error_page(request, title="History Error", message="History could not be displayed.", status_code=500)
 
 
 @router.post("/restore/{title}/{version_index}")
@@ -735,6 +543,7 @@ async def restore_version(
     title: str,
     version_index: int,
     branch: str = Form("main"),
+    revision_id: int = Form(...),
     csrf_protect: CsrfProtect = Depends(),
 ):
     """Restore a page to a previous version."""
@@ -774,17 +583,6 @@ async def restore_version(
             )
             return RedirectResponse(url=redirect_url, status_code=303)
 
-        pages_collection, history_collection = _get_history_collections()
-
-        if pages_collection is None or history_collection is None:
-            logger.error(
-                f"Database collections not available - restoring version: {title} v{version_index} on branch: {branch}"
-            )
-            redirect_url = _build_page_redirect_url(
-                request, title, branch, error="database_not_available"
-            )
-            return RedirectResponse(url=redirect_url, status_code=303)
-
         if version_index == 0:
             logger.info(
                 f"Attempt to restore current version (no action): {title} v{version_index} on branch: {branch}"
@@ -792,14 +590,26 @@ async def restore_version(
             redirect_url = _build_page_redirect_url(request, title, branch)
             return RedirectResponse(url=redirect_url, status_code=303)
 
-        try:
-            page = await _get_version_by_index(
-                title,
-                branch,
-                version_index,
-                pages_collection=pages_collection,
-                history_collection=history_collection,
+        current_page = await PageService.get_page(title, branch)
+        if current_page is None:
+            raise HTTPException(status_code=404, detail="Page not found")
+        feature_flags = getattr(request.state, "feature_flags", None)
+        if feature_flags is None:
+            feature_flags = await SettingsService.get_feature_flags()
+        denial = await get_page_edit_denial(
+            user, title, current_page,
+            editing_enabled=feature_flags.page_editing_enabled,
+        )
+        if denial:
+            return render_error_page(
+                request, user=user, title="Access Denied", message=denial,
+                status_code=403, branch=branch,
             )
+
+        try:
+            page = await PageService.get_revision(title, branch, revision_id)
+        except PageServiceError:
+            raise
         except Exception as db_error:
             logger.error(
                 f"Database error while fetching version {version_index} for restore {title} on branch {branch}: {str(db_error)}"
@@ -819,65 +629,14 @@ async def restore_version(
             return RedirectResponse(url=redirect_url, status_code=303)
 
         try:
-            # Save current version to history before restoring
-            display_version_number: Optional[int] = None
-
-            total_history_versions = 0
-            if history_collection is not None:
-                total_history_versions = await history_collection.count_documents(
-                    {"title": title, "branch": branch}
-                )
-
-            current_page = await pages_collection.find_one(
-                {"title": title, "branch": branch}
+            restored = await PageService.restore_version(
+                title, branch, version_index, user["username"],
+                revision_id=revision_id, actor=user,
             )
-            total_versions_before_restore = total_history_versions + (
-                1 if current_page else 0
-            )
-            if (
-                total_versions_before_restore > 0
-                and version_index < total_versions_before_restore
-            ):
-                display_version_number = max(
-                    1, total_versions_before_restore - int(version_index)
-                )
-
-            if current_page:
-                history_item = {
-                    "title": title,
-                    "content": current_page["content"],
-                    "author": current_page.get("author", "Anonymous"),
-                    "edited_by": user["username"],
-                    "branch": branch,
-                    "updated_at": current_page["updated_at"],
-                    "edit_summary": current_page.get("edit_summary", ""),
-                }
-                await history_collection.insert_one(history_item)
-
-            original_summary = str(page.get("edit_summary") or "").strip()
-            if display_version_number is not None:
-                version_label = f"Version {display_version_number}"
-            else:
-                version_label = f"Version {max(1, int(version_index))}"
-            if original_summary:
-                restore_summary = f"Reverted to {version_label} (original summary: {original_summary})"
-            else:
-                restore_summary = f"Reverted to {version_label}"
-            if len(restore_summary) > 250:
-                restore_summary = restore_summary[:250]
-
-            # Restore the version
-            await pages_collection.update_one(
-                {"title": title, "branch": branch},
-                {
-                    "$set": {
-                        "content": page["content"],
-                        "author": page.get("author", "Anonymous"),
-                        "edit_summary": restore_summary,
-                        "updated_at": datetime.now(timezone.utc),
-                    }
-                },
-            )
+            if not restored:
+                raise HTTPException(status_code=404, detail="Revision not found")
+        except (PageServiceError, HTTPException):
+            raise
         except Exception as db_error:
             logger.error(
                 f"Database error while restoring version {version_index} of {title} on branch {branch}: {str(db_error)}"
@@ -890,6 +649,20 @@ async def restore_version(
         logger.info(f"Version restored: {title} v{version_index} on branch: {branch}")
         redirect_url = _build_page_redirect_url(request, title, branch, restored="true")
         return RedirectResponse(url=redirect_url, status_code=303)
+    except CsrfProtectError as exc:
+        return render_error_page(
+            request, title="Invalid CSRF Token", message=exc.message,
+            status_code=exc.status_code, branch=branch,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return RedirectResponse(url="/login", status_code=303)
+        raise
+    except PageServiceError as exc:
+        return render_error_page(
+            request, title="Page operation failed", message=str(exc),
+            status_code=exc.status_code, branch=branch,
+        )
     except Exception as e:
         logger.error(
             f"Error restoring version {title} v{version_index} on branch {branch}: {str(e)}"

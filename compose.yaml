@@ -1,0 +1,41 @@
+services:
+  app:
+    build: .
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@database:5432/wikiware
+      DEV: "true"
+      HOST: 0.0.0.0
+      PORT: 8000
+      WIKI_NAME: ${WIKI_NAME:-Starship Wiki}
+      CSRF_SECRET_KEY: ${CSRF_SECRET_KEY:-}
+      SESSION_COOKIE_SECURE: "false"
+      CSRF_COOKIE_SECURE: "false"
+      UPLOAD_DIR: /app/static/uploads
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - wikiware-uploads:/app/static/uploads
+    restart: unless-stopped
+
+  database:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: wikiware
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wikiware"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  wikiware-uploads:

@@ -3,14 +3,14 @@ Image library routes for WikiWare.
 Allows authenticated users to browse and search uploaded images.
 """
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi_csrf_protect import CsrfProtect
-import asyncio
 
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...utils.template_env import get_templates
+from ...services.storage_service import StorageError
 from ...utils.images import _list_images
 
 router = APIRouter()
@@ -29,8 +29,10 @@ async def images_library(
     # Require authentication (any logged-in user)
     user = await AuthMiddleware.require_auth(request)
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-    loop = asyncio.get_running_loop()
-    items = await loop.run_in_executor(None, _list_images)
+    try:
+        items = await _list_images()
+    except StorageError as exc:
+        raise HTTPException(status_code=503, detail="Image storage is unavailable.") from exc
 
     if q:
         q_lower = q.lower()

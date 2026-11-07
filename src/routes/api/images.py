@@ -3,7 +3,7 @@ Image API routes for WikiWare.
 Provides API endpoints for image operations.
 """
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from ...middleware.auth_middleware import AuthMiddleware
@@ -14,6 +14,8 @@ from ...services.storage_service import (
 )
 from ...utils.images import _list_images
 from ...utils.logs import log_action
+from ...utils.csrf import require_csrf
+from ...utils.sql import execute
 
 router = APIRouter()
 
@@ -26,7 +28,7 @@ async def list_images_api(request: Request):
     return JSONResponse(content={"items": items})
 
 
-@router.delete("/images/{filename}")
+@router.delete("/images/{filename}", dependencies=[Depends(require_csrf)])
 async def delete_image(
     filename: str,
     request: Request,
@@ -58,6 +60,7 @@ async def delete_image(
 
     try:
         await storage_delete_image(filename)
+        await execute("DELETE FROM image_hashes WHERE filename = :filename", {"filename": filename})
     except StorageError as exc:
         raise HTTPException(status_code=500, detail="Failed to delete image") from exc
 

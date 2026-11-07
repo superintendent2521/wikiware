@@ -1,278 +1,140 @@
-# WikiWare Developer Guide
+# WikiWare developer guide
 
-This document provides comprehensive technical documentation for developers working on WikiWare. It covers the architecture, core components, and implementation details necessary to understand, extend, and maintain the system.
+## Application structure
 
-## Architecture Overview
+index.py starts Uvicorn with shared configuration. src/server.py registers
+FastAPI routers, security/settings middleware, exception handlers, and database
+and storage startup/shutdown.
 
-WikiWare follows a clean separation of concerns architecture with three primary layers:
+- src/routes/web handles HTML forms and Jinja views.
+- src/routes/api handles browser widgets, previews, media actions, and exports.
+- src/services owns content rendering, persistence, and editing rules.
+- src/schema.py describes PostgreSQL tables; Alembic owns deployed schema changes.
+- static/editor.js edits Markdown directly and requests server previews.
+- static/drafts.js manages recovery copies by account, page, and branch.
 
-1. **Services** - Business logic that interacts with the database
-2. **Middleware** - Cross-cutting concerns like authentication and security
-3. **Utils** - Reusable helper functions and utilities
+Configuration comes from environment variables, with an optional repository
+.env file. See .env.example and the root README for setup. Python 3.13/3.14
+and PostgreSQL 17 are the configured CI targets.
 
-The system is built on FastAPI with a MongoDB backend. All components are designed to be modular and testable.
+## Page identity, history, and writes
 
-## Core Components
+A pages row owns a unique title. page_branches rows own each branch's current
+content and protection. revisions archives prior branch states. Branches copy
+an individual page's content, protection, and complete revision history; they
+are not Git repositories or whole-wiki snapshots.
 
-### Middleware Layer
+PageService.get_page(title, branch='main') returns a mapping, or None only for
+absence. Each page includes version_token, formed from its branch ID and update
+timestamp. A nonexistent branch starts with token "new".
 
-The middleware layer handles authentication, session management, and security headers.
+PageService.update_page(..., *, expected_version, actor) locks the branch,
+checks its version, reloads the account, global editing switch, personal-page
+ownership, and protection inside the transaction, archives prior content, and
+updates content and edit counts atomically. Admins may change protection;
+other writers preserve the current database policy. Automatic talk-page creation
+does not count as another user edit.
 
-#### `auth_middleware.py`
+PageService.restore_version(title, branch, index, author, *, revision_id, actor)
+selects the target by stable ID within the branch, authorizes it inside the
+transaction, archives current content, and records the restoring user. The index
+argument remains for legacy URLs; the revision ID chooses the target.
 
-- **`get_current_user(request: Request)`**: Retrieves authenticated user from session cookie
-  - Checks for session cookie in order: `SESSION_COOKIE_NAME`, `__Host-user_session`, `user_session`
-  - Returns user data (username, is_admin) or None if unauthenticated
-  - Does not raise exceptions - returns None for unauthenticated users
-  - Logs warnings for validation errors
+PageService.get_revision(title, branch, revision_id) returns one stable revision.
+New history links and restore forms carry that ID. Legacy index-only view URLs
+remain accepted. New comparison forms send stable from_revision and to_revision
+values, with zero meaning current content.
 
-- **`require_auth(request: Request)`**: Enforces authentication on routes
-  - Uses `get_current_user()` internally
-  - Returns user data if authenticated
-  - Raises HTTPException 401 if authentication fails
-  - Used as a dependency in route handlers
+BranchService.create_branch(..., *, actor) locks and authorizes the source
+branch and copies its history and allowed editors in one transaction.
 
-- **`is_admin(request: Request)`**: Checks if user has admin privileges
-  - Uses `get_current_user()` internally
-  - Returns True if user is authenticated and has is_admin=True
-  - Returns False if user is unauthenticated or not an admin
-  - Does not raise exceptions
+## Error and HTTP contracts
 
-#### `security_headers.py`
+src/services/page_errors.py defines failures that must not become empty content:
 
-- Adds security headers to all responses:
-  - `X-Content-Type-Options: nosniff`
-  - `X-Frame-Options: DENY`
-  - `X-XSS-Protection: 1; mode=block`
-  - `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+| Failure | HTTP status |
+| --- | --- |
+| PageUnavailableError | 503 |
+| PageConflictError | 409 |
+| PagePermissionError | 403 |
 
-### Services Layer
+Web handlers propagate these or render the appropriate error. API paths return
+JSON. Both save routes require a CSRF token, edit summary, and expected_version.
+With Accept: application/json, successful persistence returns a redirect_url
+field; errors return a non-success status and an error string. Ordinary form
+posts redirect on success. Failed ordinary submissions render submitted text
+for recovery.
 
-Services encapsulate business logic and database operations.
+AuthMiddleware.get_current_user caches its result only for the current request
+and exposes username, admin status, and total edit count. Password hashing and
+verification run outside the event loop. User creation commits its returning
+insert; use execute_returning for returning writes, not the fetch_one read
+helper. Sessions issued before a password change are rejected at next lookup.
 
-#### `PageService`
-- `get_page(title: str, branch: str = "main")`: Retrieve page by title and branch
-- `create_page(title: str, content: str, author: str = "Anonymous", branch: str = "main")`: Create new page
-- `update_page(title: str, content: str, author: str = "Anonymous", branch: str = "main")`: Update or create page
-- `get_pages_by_branch(branch: str = "main", limit: int = 100)`: Get all pages in branch
-- `search_pages(query: str, branch: str = "main", limit: int = 100)`: Search pages by content
+## Content dialect
 
-#### `BranchService`
-- `get_available_branches()`: Get all branches in system
-- `get_branches_for_page(title: str)`: Get branches containing specific page
-- `create_branch(title: str, branch_name: str, source_branch: str = "main")`: Create new branch from source
-- `set_branch(branch: str)`: Set session branch preference
+The async render_markdown(content) function in src/services/render_service.py
+returns (sanitized_html, toc_items, sources). Pages, history, personal pages,
+previews, and PDF export use this interface.
 
-#### `UserService`
-- `hash_password(password: str)`: Hash password using Argon2id
-- `verify_password(plain_password: str, hashed_password: str)`: Verify password hash
-- `get_user_by_username(username: str)`: Get user by username
-- `create_user(user_data: UserRegistration)`: Create new user account
-- `authenticate_user(username: str, password: str, client_ip: str = "unknown", user_agent: str = "unknown")`: Authenticate user
-- `create_session(user_id: str)`: Create session for user
-- `get_session(session_id: str)`: Validate and retrieve session
-- `delete_session(session_id: str)`: Delete session
-- `get_user_by_session(session_id: str)`: Get user by session ID
+The pipeline supports headings, fenced code, lists, tables, wiki links,
+citations, image figures with captions and widths, colors, explicit Unix
+timestamps, and public statistics placeholders. Wiki syntax inside code samples
+stays literal. Source URLs require HTTP/HTTPS. No authored Jinja code executes.
 
+render_sources_html(sources) renders the citation list when the caller does not
+use the main page template's source section. Normal content without statistics
+placeholders does not query counters; public totals do not load every user's
+page-edit breakdown.
 
-### Utils Layer
+POST /api/preview accepts form content and CSRF token, requires authentication,
+and returns rendered HTML plus TOC and sources. The browser treats Markdown as
+authoritative: previewing and saving never serialize HTML back into Markdown.
+A visible required summary field also permits ordinary form submissions.
 
-Utility functions provide reusable helpers across the application.
+## Draft recovery and storage
 
-#### `link_processor.py`
-- `process_internal_links(content: str)`: Convert `[[Page Title]]` and `[[Page:Branch]]` to HTML links
-  - Renders template variables first
-  - Converts links to `/page/{title}?branch={branch}` format
-  - URL-encodes spaces in titles and branch names
+Drafts use a versioned local-storage key scoped by user, title, and branch.
+Submitting keeps a recovery copy. The editor's wiki:saved event clears it only
+when stored and current text both match the confirmed saved text. Other tabs'
+newer drafts survive. Storage failures leave editing and saving available.
+Failed ordinary form posts also include recoverable text.
 
-#### `logs.py`
-- `get_paginated_logs(page: int = 1, limit: int = 50, bypass: bool = False, action_type: Optional[str] = None)`: Get paginated logs
-  - Combines edit history and branch creation events
-  - Returns structured JSON with pagination metadata
-  - Limits limit to 50 for performance unless bypass=True. Pass `bypass=True` to return all matching entries when needed (use sparingly to avoid heavy queries).
+Storage supports local files and S3. Uploaded images have MIME/signature and
+size checks and SHA-256 deduplication. The library awaits storage operations.
+Image deletion removes corresponding hash metadata. Storage connections close
+at shutdown.
 
-#### `markdown_extensions.py`
-- `InternalLinkExtension`: Markdown extension for `[[Page Title]]` syntax
-- `ColorTagProcessor`: Processes `{{ global.color.{color} }}` to CSS classes
-- `TableExtensionWrapper`: Wrapper that enables both table rendering and color tags
+## Search, exports, and logs
 
-#### `template_processor.py`
-- `render_template_content(content: str, request: dict = None)`: Render Jinja2 template variables
-  - Supported variables: `{{ global.edits }}`, `{{ global.pages }}`, `{{ global.characters }}`, `{{ global.images }}`, `{{ global.last_updated }}`, `{{ global.color.{color} }}`
-  - Fetches global statistics from database
-  - Returns original content if database is disconnected
+Search treats percent and underscore literally, ranks exact/prefix title
+matches before body matches, and paginates 50 results at a time. It retains
+substring search; add a database search index after measuring real workloads.
 
-#### `validation.py`
-- `is_valid_title(title: str)`: Validate page title (no "..", no "/", no empty)
-- `is_valid_branch_name(branch_name: str)`: Validate branch name (no "..", no "/", no "\", not reserved)
-- `sanitize_filename(filename: str)`: Sanitize uploaded filenames (replace dangerous chars with underscores)
+Collection export streams every selected row through one repeatable-read,
+read-only transaction. Cooldown reservation is atomic; interrupted archives
+release their own reservation without clearing a newer one. ZIPs contain content,
+history, branch, and image metadata only. Use PostgreSQL and media backups for
+full recovery.
 
-#### `imagehash.py`
-- `calculate_sha256(file_path: Path)`: Calculate SHA256 hash of a file
-- `get_all_image_hashes()`: Retrieve all image hashes from the database
-- `update_image_hashes()`: Calculate SHA256 hashes for all images and store in database
+PDF export uses the shared sanitized renderer, runs generation outside the event
+loop with per-process serialization, and embeds only bounded files fetched from
+the wiki's own storage. Authored URLs cannot ask the PDF engine to read arbitrary
+files or fetch remote images.
 
-#### `images.py`
-- `_list_images()`: Return a list of image file metadata from the uploads directory
+Live server logs require an active administrator and matching browser origin.
+The queue and client count are bounded; sends have timeouts, permissions are
+rechecked, and sinks and sockets close at shutdown.
 
-#### `sanitizer.py`
-- `sanitize_html(html: str)`: Sanitize HTML produced from Markdown to prevent XSS using Bleach
+## Tests and migrations
 
-#### `template_env.py`
-- `get_templates()`: Return the shared Jinja2Templates instance with global config
+See [the maintained test suites](../src/tests/README.md). Integration tests require
+an explicitly configured test database and create isolated random schemas.
+The old live-server smoke script was replaced with isolated tests.
 
-# Log Streaming Service
+The Mongo importer is retained until real-data cutover is verified. Keep legacy
+backups and validate actual content and media alongside counts. Application
+development does not require MongoDB.
 
-This module provides **real-time log streaming** from [Loguru](https://github.com/Delgan/loguru) to connected WebSocket clients.  
-It exposes a WebSocket endpoint (`/ws/logs`) and integrates into a FastAPI application lifecycle with proper startup/shutdown handling.  
-
-The service is designed to be initialized **once per application** via `setup_log_streaming()`.
-
----
-
-## Features
-
-- **WebSocket endpoint** (`/ws/logs`) for clients to receive log messages in real time.
-- **Background dispatcher** that forwards Loguru messages to all active WebSocket clients.
-- **Optional file sink** for persistent logging to rotating files.
-- **Thread-safe async queue** (`asyncio.Queue`) for moving log messages from Loguru sinks to the dispatcher loop.
-- **Graceful shutdown** of dispatcher task on application termination.
-- **Simple public handle** (`stream_log.loguru`) to access Loguru logging functions.
-
----
-
-
-
-
-
-## Development Workflow
-
-### Setting Up
-1. Install dependencies: `pip install -r requirements.txt`
-2. Start MongoDB: `mongod` (ensure it's running on default port)
-3. Run server: `python index.py`
-4. Access at: http://localhost:8000
-
-### Adding New Features
-1. **Implement service**: Add business logic in `src/services/`
-2. **Create utility**: Add helper functions in `src/utils/` if needed
-3. **Update middleware**: Add authentication/security if required
-4. **Update documentation**: Add to `docs/` directory
-
-### Testing
-- Run tests: `python -m pytest tests/`
-- Test manually via browser and API clients
-- Verify authentication flows work correctly
-- Test edge cases (invalid titles, branch names, etc.)
-
-## Security Considerations
-
-- All user input is validated and sanitized
-- Passwords are hashed using Argon2id
-- Session cookies use `HttpOnly`, `Secure`, and `SameSite=Lax`
-- File uploads are validated by magic bytes and filename sanitization
-- All routes requiring authentication use `require_auth` dependency
-- Admin routes require `is_admin` check
-- XSS protection headers are enforced
-- CSRF protection is enabled for forms
-
-## Database Schema
-
-### Pages Collection
-```json
-{
-  "_id": "ObjectId",
-  "title": "string",
-  "content": "string",
-  "author": "string",
-  "branch": "string",
-  "created_at": "ISODate",
-  "updated_at": "ISODate"
-}
-```
-
-### Users Collection
-```json
-{
-  "_id": "ObjectId",
-  "username": "string",
-  "password_hash": "string",
-  "is_admin": "boolean",
-  "created_at": "ISODate",
-  "last_login": "ISODate"
-}
-```
-
-### Sessions Collection
-```json
-{
-  "_id": "ObjectId",
-  "user_id": "ObjectId",
-  "session_id": "string",
-  "created_at": "ISODate",
-  "expires_at": "ISODate",
-  "ip_address": "string",
-  "user_agent": "string"
-}
-```
-
-### History Collection
-```json
-{
-  "_id": "ObjectId",
-  "title": "string",
-  "content": "string",
-  "author": "string",
-  "branch": "string",
-  "timestamp": "ISODate",
-  "version": "integer"
-}
-```
-
-### Branches Collection
-```json
-{
-  "_id": "ObjectId",
-  "page_title": "string",
-  "branch_name": "string",
-  "created_from": "string",
-  "created_at": "ISODate"
-}
-```
-
-### Image Hashes Collection
-```json
-{
-  "_id": "ObjectId",
-  "filename": "string",
-  "sha256": "string",
-  "size": "integer",
-  "modified": "integer"
-}
-```
-
-## Troubleshooting
-
-### Common Issues
-- **"Session expired"**: Clear browser cookies or restart server
-- **"Authentication required"**: Ensure you're logged in
-- **"Page not found"**: Check title spelling and branch name
-- **"Invalid branch name"**: Branch names can't contain special characters
-- **"File upload failed"**: Check file type and size (max 10MB)
-
-### Debugging Tips
-- Check server logs in `logs/` directory
-- Use browser developer tools to inspect network requests
-- Verify MongoDB is running and accessible
-- Test individual components in isolation using Python REPL
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Update documentation in `docs/`
-5. Run tests
-6. Submit a pull request
-
-All contributions must include updated documentation and pass all tests.
+Other legacy reference documents may describe pre-migration interfaces;
+this guide and the source define the current contracts.

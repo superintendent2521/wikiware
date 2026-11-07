@@ -4,7 +4,7 @@ API routes for managing user favorites.
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 
 from ...database import db_instance
@@ -13,6 +13,7 @@ from ...services.analytics_service import AnalyticsService
 from ...services.page_service import PageService
 from ...services.user_service import UserService
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
+from ...utils.csrf import require_csrf
 
 router = APIRouter()
 
@@ -55,7 +56,7 @@ async def list_favorites(request: Request) -> Dict[str, Any]:
     return await _favorites_response(user["username"])
 
 
-@router.post("/favorites/{title}")
+@router.post("/favorites/{title}", dependencies=[Depends(require_csrf)])
 async def add_favorite(
     title: str,
     request: Request,
@@ -111,7 +112,7 @@ async def add_favorite(
     return response
 
 
-@router.delete("/favorites/{title}")
+@router.delete("/favorites/{title}", dependencies=[Depends(require_csrf)])
 async def remove_favorite(
     title: str,
     request: Request,

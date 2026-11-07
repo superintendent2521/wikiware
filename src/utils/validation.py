@@ -5,15 +5,17 @@ Contains common validation functions used across the application.
 
 import re
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 _TITLE_PATTERN = re.compile(r"^[A-Za-z0-9 _\-]+$")
 _BRANCH_PARAM_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+_DANGEROUS_FILENAME_CHARS = re.compile(r'[\/\\:*?"<>|\x00-\x1f]')
+_RESERVED_BRANCH_NAMES = {"main", "master", "head", "origin"}
 
 
 def is_valid_title(title: str) -> bool:
     """Validate title to prevent path traversal or other unsafe patterns."""
-    if not title or not title.strip():
+    if not title or not title.strip() or len(title) > 255:
         return False
 
     # Disallow traversal and path-like prefixes
@@ -29,30 +31,35 @@ def is_valid_title(title: str) -> bool:
 
 def is_valid_branch_name(branch_name: str) -> bool:
     """Validate branch name to ensure it's safe and follows naming conventions."""
-    if not branch_name or not branch_name.strip():
+    if not branch_name or len(branch_name) > 100:
         return False
 
-    # Check for path traversal attempts
-    if ".." in branch_name or "/" in branch_name or "\\" in branch_name:
+    normalized_branch = branch_name.strip()
+    if not normalized_branch:
         return False
 
-    # Check for reserved names
-    reserved_names = ["main", "master", "head", "origin"]
-    if branch_name.lower() in reserved_names:
+    if branch_name != normalized_branch:
         return False
 
-    return True
+    if normalized_branch.lower() in _RESERVED_BRANCH_NAMES:
+        return False
+
+    return bool(_BRANCH_PARAM_PATTERN.fullmatch(normalized_branch))
 
 
 def is_safe_branch_parameter(branch: Optional[str]) -> bool:
     """Return True if the branch value is safe to echo in URLs."""
-    if not branch:
+    if not branch or len(branch) > 100:
         return False
     return bool(_BRANCH_PARAM_PATTERN.fullmatch(branch))
 
 
 def sanitize_redirect_path(target: Optional[str], default: str = "/") -> str:
     """Ensure redirect targets stay within the current application."""
+    if not target:
+        return default
+
+    target = target.strip()
     if not target:
         return default
 
@@ -65,7 +72,8 @@ def sanitize_redirect_path(target: Optional[str], default: str = "/") -> str:
     if not path.startswith("/"):
         path = "/" + path.lstrip("/")
 
-    if ".." in path.split("/"):
+    decoded_segments = unquote(path).split("/")
+    if any(segment == ".." for segment in decoded_segments):
         return default
 
     query = f"?{parsed.query}" if parsed.query else ""
@@ -74,11 +82,6 @@ def sanitize_redirect_path(target: Optional[str], default: str = "/") -> str:
 
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename to prevent security issues."""
-    # Remove path separators and other dangerous characters
-    dangerous_chars = ["/", "\\", ":", "*", "?", '"', "<", ">", "|"]
-    sanitized = filename
-
-    for char in dangerous_chars:
-        sanitized = sanitized.replace(char, "_")
-
-    return sanitized
+    sanitized = _DANGEROUS_FILENAME_CHARS.sub("_", filename).strip()
+    sanitized = re.sub(r"_+", "_", sanitized)
+    return sanitized.strip(".")

@@ -2,62 +2,30 @@
 
 import io
 import re
-from datetime import datetime, timezone
+import asyncio
+import html
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Dict, List, Set, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, validator
 from loguru import logger
 from markdown_pdf import MarkdownPdf, Section
-from ...utils.link_processor import process_internal_links
+from starlette.concurrency import run_in_threadpool
+from ...middleware.auth_middleware import AuthMiddleware
+from ...middleware.rate_limiter import rate_limit
+from ...services.render_service import render_markdown, render_sources_html
+from ...services.storage_service import StorageError, download_image_bytes
+from ...utils.csrf import require_csrf
 
-
-_UNIX_TOKEN_RE = re.compile(r"\{\{\s*global\.unix(?::(\d+))?\s*\}}")
-_GLOBAL_TOKEN_RE = re.compile(r"\{\{\s*global\.[^}}]+\}\}")
 
 MAX_LINKED_PAGES = 5
 _WIKI_LINK_RE = re.compile(r"\[\[([^\]]+?)\]\]")
 _ANCHOR_SANITIZE_RE = re.compile(r"[^a-z0-9]+")
-
-
-def _render_unix_tokens(content: str) -> str:
-    """Render {{ global.unix:TIMESTAMP }} tokens to readable spans."""
-    if not content:
-        return content
-
-    def _replace(match):
-        timestamp_str = match.group(1)
-        if not timestamp_str:
-            return (
-                '<span class="unix-timestamp-error" data-source="error" '
-                'title="Timestamp missing for {{ global.unix }}">Invalid timestamp</span>'
-            )
-        try:
-            ts = int(timestamp_str)
-            dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
-            formatted = dt_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
-            return (
-                f'<span class="unix-timestamp" '
-                f'title="Unix timestamp: {ts}" data-timestamp="{ts}" '
-                f'data-source="provided">{formatted}</span>'
-            )
-        except (ValueError, OSError):
-            return (
-                f'<span class="unix-timestamp-error" '
-                f'title="Invalid timestamp: {timestamp_str}" data-timestamp="{timestamp_str}" '
-                f'data-source="error">Invalid timestamp</span>'
-            )
-
-    return _UNIX_TOKEN_RE.sub(_replace, content)
-
-
-def _strip_unrendered_tokens(content: str) -> str:
-    """Remove unresolved {{ global.* }} tokens that would otherwise leak."""
-    if not content:
-        return content
-    return _GLOBAL_TOKEN_RE.sub("", content)
+_PDF_LIMIT = asyncio.Semaphore(1)
 
 
 def _normalize_key(title: str, branch: str) -> Tuple[str, str]:
@@ -88,7 +56,7 @@ def _extract_wiki_links(content: str, current_branch: str) -> List[Tuple[str, st
     if not matches:
         return []
     links: List[Tuple[str, str]] = []
-    default_branch = (current_branch or "main").strip() or "main"
+    default_branch = "main"
     for raw in matches:
         body = raw.strip()
         if not body:
@@ -181,9 +149,8 @@ async def _collect_linked_pages(
 
         page_branch = page.get("branch") or current_branch
         raw_content = page.get("content", "") or ""
-        unix_rendered = _render_unix_tokens(raw_content)
-        processed = await process_internal_links(unix_rendered)
-        processed = _strip_unrendered_tokens(processed)
+        processed, _, sources = await render_markdown(raw_content)
+        processed += render_sources_html(sources)
         collected.append(
             {
                 "title": page.get("title", title),
@@ -270,87 +237,102 @@ class PDFRequest(BaseModel):
         return max(1, min(MAX_LINKED_PAGES, depth_int))
 
 
-@router.post("/pdf/page")
+async def _pdf_images(content: str) -> tuple[str, dict[str, bytes]]:
+    """Only embed images from our storage, never paths or URLs authored by users."""
+    assets = {}
+    stored_names = {}
+    replacements = {}
+    total_bytes = 0
+    for tag in dict.fromkeys(re.findall(r"<img\b[^>]*>", content)):
+        match = re.search(r'\bsrc="([^"]*)"', tag)
+        replacement = "<span>[Image unavailable in PDF]</span>"
+        filename = None
+        if match:
+            source = html.unescape(match.group(1))
+            try:
+                parsed = urlsplit(source)
+            except ValueError:
+                parsed = None
+            if parsed is not None and not parsed.scheme and not parsed.netloc:
+                for prefix in ("/media/uploads/", "/static/uploads/"):
+                    if parsed.path.startswith(prefix):
+                        filename = unquote(parsed.path[len(prefix):])
+                        break
+        if filename and not any(char in filename for char in ("/", "\\", "..")) and not any(ord(char) < 32 or ord(char) == 127 for char in filename):
+            suffix = Path(filename).suffix.lower()
+            key = stored_names.get(filename)
+            if key is None and suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp"} and len(assets) < 32:
+                try:
+                    data = await download_image_bytes(filename)
+                except StorageError:
+                    data = b""
+                if data and len(data) <= 8 * 1024 * 1024 and total_bytes + len(data) <= 32 * 1024 * 1024:
+                    key = f"image-{len(assets)}{suffix}"
+                    assets[key] = data
+                    stored_names[filename] = key
+                    total_bytes += len(data)
+            if key is not None:
+                replacement = tag[:match.start(1)] + key + tag[match.end(1):]
+        replacements[tag] = replacement
+    return re.sub(r"<img\b[^>]*>", lambda match: replacements[match.group(0)], content), assets
+
+
+def _build_pdf(content: str, assets: dict[str, bytes], title: str) -> bytes:
+    with TemporaryDirectory(prefix="wikiware-pdf-") as directory:
+        for filename, data in assets.items():
+            (Path(directory) / filename).write_bytes(data)
+        pdf = MarkdownPdf(mode="commonmark")
+        pdf.m_d.options["html"] = True
+        pdf.meta = {**pdf.meta, "title": title}
+        pdf.add_section(Section(content, root=directory), user_css=PDF_CSS)
+        # PyMuPDF requires the first level to be one and no skipped levels.
+        previous_level = 0
+        normalized = []
+        for level, text, page, top in pdf.toc:
+            level = min(max(1, level), previous_level + 1)
+            normalized.append((level, text, page, top))
+            previous_level = level
+        pdf.toc = normalized
+        output = io.BytesIO()
+        pdf.save(output)
+        return output.getvalue()
+
+
+@router.post("/pdf/page", dependencies=[
+    Depends(require_csrf),
+    Depends(rate_limit("pdf-export", use_user_identity=True)),
+])
 async def generate_page_pdf(request: Request, pdf_req: PDFRequest):
-    """Generate PDF for an authenticated user's requested page."""
-
-    # user = await AuthMiddleware.require_auth(request)
-    # username = user["username"]
-    # logger.info(f"Generating PDF for page '{pdf_req.title}' (branch: {pdf_req.branch}) by user {username}")
-    pages = await _collect_linked_pages(
-        pdf_req.title, pdf_req.branch, max_pages=pdf_req.depth
-    )
-    if not pages:
-        raise HTTPException(status_code=404, detail="Page not found")
-
-    anchors = _build_anchor_lookup(pages)
-    included_titles: List[str] = []
-    assembled_blocks: List[str] = []
-
-    for index, bundle in enumerate(pages):
-        key = _normalize_key(bundle["title"], bundle["branch"])
-        anchor_data = anchors.get(key)
-        if not anchor_data:
-            continue
-
-        friendly_title = bundle["title"]
-        if bundle["branch"] and bundle["branch"] != "main":
-            friendly_title = f"{friendly_title} ({bundle['branch']})"
-
-        content = _rewrite_internal_links(bundle["content"], anchors)
-        content = _strip_unrendered_tokens(content)
-        stripped = content.lstrip()
-
-        segments = [f'<a id="{anchor_data["anchor"]}"></a>']
-        if not stripped.startswith("#"):
-            segments.append(f"# {friendly_title}")
-        elif bundle["branch"] and bundle["branch"] != "main":
-            segments.append(f"*Branch: {bundle['branch']}*")
-        segments.append(content)
-
-        block = "\n\n".join(part for part in segments if part)
-        if index > 0:
-            block = '<div style="page-break-before: always;"></div>\n\n' + block
-        assembled_blocks.append(block)
-        included_titles.append(friendly_title)
-
-    combined_markdown = "\n\n".join(assembled_blocks)
-    logger.info(
-        "Generating PDF for page {} (branch: {}) including {}",
-        pdf_req.title,
-        pdf_req.branch,
-        included_titles,
-    )
-
-    try:
-
-        pdf = MarkdownPdf(mode="gfm-like")
-        pdf.meta["title"] = pdf_req.title
-        pdf.meta["subject"] = f"Includes {len(included_titles)} page(s)"
-        section = Section(combined_markdown)
-        pdf.add_section(section, user_css=PDF_CSS)
-        if pdf.toc:
-            # Normalize heading levels so PyMuPDF accepts the generated TOC.
-            first_with_level = next((item[0] for item in pdf.toc if item[0] > 0), None)
-            if first_with_level and first_with_level != 1:
-                shift = first_with_level - 1
-                pdf.toc = [
-                    (max(1, level - shift), title, page, top)
-                    for level, title, page, top in pdf.toc
-                ]
-
-        out = io.BytesIO()
-        pdf.save(out)
-        pdf_bytes = out.getvalue()
-    except Exception as e:
-        logger.error(f"Error generating PDF for {pdf_req.title}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to generate PDF")
-
-    pdf_io = io.BytesIO(pdf_bytes)
-    filename_root = pdf_req.title.replace(" ", "_") or "export"
-    if len(included_titles) > 1:
-        filename_root += "_bundle"
-    filename = f"{filename_root}.pdf"
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-
-    return StreamingResponse(pdf_io, media_type="application/pdf", headers=headers)
+    """Render a bounded PDF bundle with the shared wiki dialect."""
+    await AuthMiddleware.require_auth(request)
+    async with _PDF_LIMIT:
+        bundles = await _collect_linked_pages(
+            pdf_req.title, pdf_req.branch, max_pages=pdf_req.depth
+        )
+        if not bundles:
+            raise HTTPException(status_code=404, detail="Page not found")
+        anchors = _build_anchor_lookup(bundles)
+        blocks = []
+        for index, bundle in enumerate(bundles):
+            anchor = anchors[_normalize_key(bundle["title"], bundle["branch"])]["anchor"]
+            content = _rewrite_internal_links(bundle["content"], anchors)
+            # Keep per-article headings and citation IDs unique within a bundle.
+            content = re.sub(r'\bid="([^"]+)"', lambda match: f'id="{anchor}-{match[1]}"', content)
+            content = re.sub(r'href="#([^"]+)"', lambda match: (
+                match[0] if match[1] in {value["anchor"] for value in anchors.values()}
+                else f'href="#{anchor}-{match[1]}"'
+            ), content)
+            title = bundle["title"]
+            if bundle["branch"] != "main":
+                title += f' ({bundle["branch"]})'
+            page_break = '<div style="page-break-before: always;"></div>' if index else ""
+            blocks.append(f'{page_break}<h1 id="{anchor}">{html.escape(title)}</h1>\n{content}')
+        content, assets = await _pdf_images("\n\n".join(blocks))
+        try:
+            pdf_bytes = await run_in_threadpool(_build_pdf, content, assets, pdf_req.title)
+        except Exception as exc:
+            logger.exception("PDF generation failed: {}", exc)
+            raise HTTPException(status_code=500, detail="Failed to generate PDF") from exc
+    filename = quote(pdf_req.title + ".pdf", safe="")
+    headers = {"Content-Disposition": f"attachment; filename=wikiware.pdf; filename*=UTF-8''{filename}"}
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers=headers)

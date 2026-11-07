@@ -48,7 +48,6 @@ document.addEventListener('DOMContentLoaded', function () {
   ];
   const draftKey = storageKeyParts.join(':');
   const initialMarkdown = contentTextarea.value || '';
-  const initialNormalized = initialMarkdown.trim();
   let saveTimer = null;
 
   function setHasDraft(flag) {
@@ -85,16 +84,16 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function readDraft() {
-    const raw = storage.getItem(draftKey);
-    if (!raw) return null;
     try {
+      const raw = storage.getItem(draftKey);
+      if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed.markdown !== 'string') {
         return null;
       }
       return parsed;
     } catch (_) {
-      storage.removeItem(draftKey);
+      updateStatus('Unable to read local drafts. Your current text is unchanged.');
       return null;
     }
   }
@@ -107,8 +106,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function updateRestoreBanner(draft) {
     if (!restoreBanner) return;
-    const normalized = draft && typeof draft.markdown === 'string' ? draft.markdown.trim() : '';
-    const shouldShow = !!(normalized && normalized !== initialNormalized);
+    const shouldShow = !!(draft && typeof draft.markdown === 'string' && draft.markdown !== initialMarkdown);
     if (!shouldShow) {
       restoreBanner.hidden = true;
       return;
@@ -128,6 +126,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function saveDraft(manual = false) {
+    if (saveTimer) clearTimeout(saveTimer);
     saveTimer = null;
     const markdown = getCurrentMarkdown();
     const payload = {
@@ -159,7 +158,12 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function removeDraft(showMessage) {
-    storage.removeItem(draftKey);
+    try {
+      storage.removeItem(draftKey);
+    } catch (_) {
+      updateStatus('Unable to clear the local draft.');
+      return;
+    }
     setHasDraft(false);
     if (showMessage) {
       updateStatus('Local draft cleared.');
@@ -223,11 +227,23 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
       flushPendingSave();
-      removeDraft(false);
+      saveDraft(false);
+    });
+    editForm.addEventListener('wiki:save-start', () => saveDraft(false));
+    editForm.addEventListener('wiki:saved', (event) => {
+      const saved = event.detail && event.detail.markdown;
+      const draft = readDraft();
+      // Another tab may have saved a newer recovery copy under the same key.
+      if (typeof saved === 'string' && getCurrentMarkdown() === saved && draft && draft.markdown === saved) {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = null;
+        removeDraft(false);
+      }
     });
   }
 
   window.addEventListener('beforeunload', () => {
     flushPendingSave();
   });
+  window.addEventListener('pagehide', flushPendingSave);
 });

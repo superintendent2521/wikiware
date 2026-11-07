@@ -34,9 +34,14 @@ async def _empty_stream() -> AsyncIterator[bytes]:
 async def _stream_with_first_chunk(
     first_chunk: bytes, remainder: AsyncIterator[bytes]
 ) -> AsyncIterator[bytes]:
-    yield first_chunk
-    async for chunk in remainder:
-        yield chunk
+    try:
+        yield first_chunk
+        async for chunk in remainder:
+            yield chunk
+    finally:
+        close = getattr(remainder, "aclose", None)
+        if close is not None:
+            await close()
 
 
 def _retry_after_seconds(next_allowed: datetime) -> int:

@@ -3,23 +3,23 @@ Page routes for WikiWare.
 Handles user-specific page viewing, editing, and saving operations.
 """
 
-import markdown
-
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi_csrf_protect import CsrfProtect
+from fastapi_csrf_protect.exceptions import CsrfProtectError
 from loguru import logger
 
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.page_service import PageService
+from ...services.page_errors import PageServiceError, PageUnavailableError
+from ...services.page_permissions import get_page_edit_denial, normalize_allowed_users
 from ...services.user_service import UserService
 from ...services.settings_service import FeatureFlags, SettingsService
-from ...utils.link_processor import process_internal_links
-from ...utils.sanitizer import sanitize_html
+from ...services.render_service import render_markdown, render_sources_html
 from ...utils.template_env import get_templates
 from ...utils.validation import is_safe_branch_parameter, is_valid_title
-from ...utils.markdown_extensions import TableExtensionWrapper, ImageFigureExtension
+from ...utils.editor_response import save_succeeded, save_failed
 
 router = APIRouter()
 
@@ -177,23 +177,20 @@ async def user_page(
         }
 
     # Process internal links and render as Markdown
-    processed_content = await process_internal_links(page["content"])
-    md = markdown.Markdown(extensions=[TableExtensionWrapper(), ImageFigureExtension()])
-    page["html_content"] = sanitize_html(md.convert(processed_content))
+    rendered, _, sources = await render_markdown(page["content"])
+    page["html_content"] = rendered + render_sources_html(sources)
 
     # Check if current user is the owner of this page
     is_owner = current_user and current_user["username"] == username
 
     # Get user statistics
     user_stats = None
-    users_collection = db_instance.get_collection("users")
-    if users_collection is not None:
-        user_doc = await users_collection.find_one({"username": username})
-        if user_doc:
-            user_stats = {
-                "total_edits": user_doc.get("total_edits", 0),
-                "page_edits": user_doc.get("page_edits", {}),
-            }
+    user_doc = await UserService.get_user_by_username(username)
+    if user_doc:
+        user_stats = {
+            "total_edits": user_doc.get("total_edits", 0),
+            "page_edits": user_doc.get("page_edits", {}),
+        }
 
     template = templates.TemplateResponse(
         "user.html",
@@ -264,6 +261,16 @@ async def edit_user_page(
     # Get existing content
     content = ""
     page = await PageService.get_page(username, branch)
+    denial = await get_page_edit_denial(
+        user, username, page, editing_enabled=feature_flags.page_editing_enabled
+    )
+    if denial:
+        template = _render_error_page(
+            request, user, csrf_token, branch=branch, message=denial,
+            title="Access Denied",
+        )
+        csrf_protect.set_csrf_cookie(signed_token, template)
+        return template
     if page:
         content = page["content"]
 
@@ -279,6 +286,7 @@ async def edit_user_page(
             "csrf_token": csrf_token,
             "is_user_page": True,
             "feature_flags": feature_flags,
+            "expected_version": page["version_token"] if page else "new",
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, template)
@@ -289,30 +297,23 @@ async def edit_user_page(
 async def save_user_page(
     request: Request,
     username: str,
-    content: str = Form(...),
+    content: str = Form(""),
     branch: str = Form("main"),
     edit_summary: str = Form(...),
+    expected_version: str = Form(...),
     csrf_protect: CsrfProtect = Depends(),
 ):
     """Save user page changes."""
     try:
+        await csrf_protect.validate_csrf(request)
         user = await AuthMiddleware.require_auth(request)
 
         feature_flags = await _get_feature_flags(request)
         if not feature_flags.page_editing_enabled and not user.get("is_admin", False):
-            csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-            template = _render_error_page(
-                request,
-                user,
-                csrf_token,
-                branch=branch,
-                message="Page editing is currently disabled by an administrator.",
-            )
-            csrf_protect.set_csrf_cookie(signed_token, template)
-            return template
+            return save_failed(request, "Page editing is currently disabled by an administrator.", 403, content)
 
         if not db_instance.is_connected:
-            return {"error": "Database not available"}
+            raise PageUnavailableError()
 
         # Only allow editing own page
         if user["username"] != username:
@@ -335,18 +336,35 @@ async def save_user_page(
         # Use the authenticated user as the author
         author = user["username"]
 
+        page = await PageService.get_page(username, branch)
+        denial = await get_page_edit_denial(
+            user, username, page, editing_enabled=feature_flags.page_editing_enabled
+        )
+        if denial:
+            raise HTTPException(status_code=403, detail=denial)
+
         # Save the page
         success = await PageService.update_page(
-            username, content, author, branch, edit_summary=edit_summary
+            username, content, author, branch, edit_summary=edit_summary,
+            edit_permission=page.get("edit_permission", "everybody") if page else "everybody",
+            allowed_users=normalize_allowed_users(page.get("allowed_users")) if page else [],
+            expected_version=expected_version,
+            actor=user,
         )
 
         if success:
             redirect_url = _build_user_page_redirect_url(request, username, branch)
-            return RedirectResponse(url=redirect_url, status_code=303)
+            return save_succeeded(request, redirect_url)
         else:
-            return {"error": "Failed to save user page"}
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=303)
+            raise PageUnavailableError()
+    except PageServiceError as exc:
+        return save_failed(request, str(exc), exc.status_code, content)
+    except CsrfProtectError as exc:
+        return save_failed(request, exc.message, exc.status_code, content)
+    except HTTPException as exc:
+        if exc.status_code == 401 and "application/json" not in request.headers.get("accept", ""):
+            return RedirectResponse(url="/login", status_code=303)
+        return save_failed(request, str(exc.detail), exc.status_code, content)
     except Exception as e:
         logger.error(f"Error saving user page {username} on branch {branch}: {str(e)}")
-        return {"error": "Failed to save user page, try again later."}
+        return save_failed(request, "The page could not be saved. Please try again.", 503, content)

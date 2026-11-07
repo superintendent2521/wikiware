@@ -13,6 +13,7 @@ from loguru import logger
 import asyncio
 
 from ..database import db_instance
+from ..utils.sql import execute, fetch_all
 
 
 def _utcnow() -> datetime:
@@ -23,15 +24,6 @@ def _utcnow() -> datetime:
 class AnalyticsService:
     """Service responsible for recording and aggregating analytics events."""
 
-    _COLLECTION_NAME = "analytics_events"
-
-    @staticmethod
-    def _get_collection():
-        """Return the analytics events collection if connected."""
-        if not db_instance.is_connected:
-            return None
-        return db_instance.get_collection(AnalyticsService._COLLECTION_NAME)
-
     @staticmethod
     async def record_page_view(
         request: Request,
@@ -41,18 +33,15 @@ class AnalyticsService:
         """Persist a page-view analytics event."""
         if request.method == "HEAD":
             return
-        collection = AnalyticsService._get_collection()
-        if collection is None:
+        if not db_instance.is_connected:
             return
         try:
-            event = {
-                "event_type": "page_view",
-                "timestamp": _utcnow(),
-                "page_title": page_title,
-                "branch": branch,
-                "referrer": request.headers.get("referer"),
-            }
-            await collection.insert_one(event)
+            await execute(
+                "INSERT INTO analytics_events (event_type, timestamp, page_title, branch, referrer) "
+                "VALUES (:event_type, :timestamp, :page_title, :branch, :referrer)",
+                {"event_type": "page_view", "timestamp": _utcnow(), "page_title": page_title,
+                 "branch": branch, "referrer": request.headers.get("referer")},
+            )
         except Exception as exc:  # IGNORE W0718
             logger.warning(f"Failed to record page view for {page_title}: {exc}")
 
@@ -65,20 +54,16 @@ class AnalyticsService:
         """Persist a search analytics event."""
         if not query:
             return
-        collection = AnalyticsService._get_collection()
-        if collection is None:
+        if not db_instance.is_connected:
             return
         try:
             normalized_query = " ".join(query.lower().split())
-            event = {
-                "event_type": "search",
-                "timestamp": _utcnow(),
-                "query": query,
-                "query_normalized": normalized_query,
-                "branch": branch,
-                "results": result_count,
-            }
-            await collection.insert_one(event)
+            await execute(
+                "INSERT INTO analytics_events (event_type, timestamp, query, query_normalized, branch, results) "
+                "VALUES (:event_type, :timestamp, :query, :query_normalized, :branch, :results)",
+                {"event_type": "search", "timestamp": _utcnow(), "query": query,
+                 "query_normalized": normalized_query, "branch": branch, "results": result_count},
+            )
         except Exception as exc:  # IGNORE W0718
             logger.warning(f"Failed to record search query {query!r}: {exc}")
 
@@ -88,17 +73,14 @@ class AnalyticsService:
         branch: str,
     ) -> None:
         """Persist a favorite-added analytics event."""
-        collection = AnalyticsService._get_collection()
-        if collection is None:
+        if not db_instance.is_connected:
             return
         try:
-            event = {
-                "event_type": "favorite_added",
-                "timestamp": _utcnow(),
-                "page_title": page_title,
-                "branch": branch,
-            }
-            await collection.insert_one(event)
+            await execute(
+                "INSERT INTO analytics_events (event_type, timestamp, page_title, branch) "
+                "VALUES ('favorite_added', :timestamp, :page_title, :branch)",
+                {"timestamp": _utcnow(), "page_title": page_title, "branch": branch},
+            )
         except Exception as exc:  # IGNORE W0718
             logger.warning(
                 f"Failed to record favorite for {page_title!r} on {branch}: {exc}"
@@ -110,17 +92,14 @@ class AnalyticsService:
         branch: str,
     ) -> None:
         """Persist a favorite-removed analytics event."""
-        collection = AnalyticsService._get_collection()
-        if collection is None:
+        if not db_instance.is_connected:
             return
         try:
-            event = {
-                "event_type": "favorite_removed",
-                "timestamp": _utcnow(),
-                "page_title": page_title,
-                "branch": branch,
-            }
-            await collection.insert_one(event)
+            await execute(
+                "INSERT INTO analytics_events (event_type, timestamp, page_title, branch) "
+                "VALUES ('favorite_removed', :timestamp, :page_title, :branch)",
+                {"timestamp": _utcnow(), "page_title": page_title, "branch": branch},
+            )
         except Exception as exc:  # IGNORE W0718
             logger.warning(
                 f"Failed to record favorite removal for {page_title!r} on {branch}: {exc}"
@@ -134,8 +113,7 @@ class AnalyticsService:
         Provides totals for today, the trailing 7-day window, per-day series,
         and recent popular searches.
         """
-        collection = AnalyticsService._get_collection()
-        if collection is None:
+        if not db_instance.is_connected:
             return AnalyticsService._empty_metrics()
 
         now = _utcnow()
@@ -143,91 +121,18 @@ class AnalyticsService:
         window_start = today_start - timedelta(days=6)
 
         metrics = AnalyticsService._empty_metrics()
-        # Populate per-day data for page views and searches
-        page_pipeline = [
-            {
-                "$match": {
-                    "event_type": "page_view",
-                    "timestamp": {"$gte": window_start},
-                }
-            },
-            {
-                "$group": {
-                    "_id": {
-                        "date": {
-                            "$dateToString": {
-                                "format": "%Y-%m-%d",
-                                "date": "$timestamp",
-                            }
-                        }
-                    },
-                    "count": {"$sum": 1},
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "date": "$_id.date",
-                    "count": 1,
-                }
-            },
-            {"$sort": {"date": 1}},
-        ]
-
-        search_pipeline = [
-            {
-                "$match": {
-                    "event_type": "search",
-                    "timestamp": {"$gte": window_start},
-                }
-            },
-            {
-                "$group": {
-                    "_id": {
-                        "date": {
-                            "$dateToString": {
-                                "format": "%Y-%m-%d",
-                                "date": "$timestamp",
-                            }
-                        }
-                    },
-                    "count": {"$sum": 1},
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "date": "$_id.date",
-                    "count": 1,
-                }
-            },
-            {"$sort": {"date": 1}},
-        ]
-
-        top_search_pipeline = [
-            {
-                "$match": {
-                    "event_type": "search",
-                    "timestamp": {"$gte": now - timedelta(days=30)},
-                }
-            },
-            {
-                "$group": {
-                    "_id": "$query_normalized",
-                    "display": {"$first": "$query"},
-                    "count": {"$sum": 1},
-                    "last_used": {"$max": "$timestamp"},
-                }
-            },
-            {"$sort": {"count": -1, "last_used": -1}},
-            {"$limit": 5},
-        ]
-
         try:
             page_results, search_results, top_search_results = await asyncio.gather(
-                collection.aggregate(page_pipeline).to_list(None),
-                collection.aggregate(search_pipeline).to_list(None),
-                collection.aggregate(top_search_pipeline).to_list(None),
+                fetch_all("SELECT timestamp::date AS date, COUNT(*) AS count FROM analytics_events "
+                          "WHERE event_type = 'page_view' AND timestamp >= :start "
+                          "GROUP BY timestamp::date ORDER BY date", {"start": window_start}),
+                fetch_all("SELECT timestamp::date AS date, COUNT(*) AS count FROM analytics_events "
+                          "WHERE event_type = 'search' AND timestamp >= :start "
+                          "GROUP BY timestamp::date ORDER BY date", {"start": window_start}),
+                fetch_all("SELECT query_normalized AS normalized, MAX(query) AS display, COUNT(*) AS count "
+                          "FROM analytics_events WHERE event_type = 'search' AND timestamp >= :start "
+                          "GROUP BY query_normalized ORDER BY count DESC, MAX(timestamp) DESC LIMIT 5",
+                          {"start": now - timedelta(days=30)}),
             )
         except Exception as exc:  # IGNORE W0718
             logger.warning(f"Failed to aggregate analytics metrics: {exc}")
@@ -246,12 +151,12 @@ class AnalyticsService:
             }
 
         for record in page_results:
-            day = record["date"]
+            day = record["date"].isoformat() if hasattr(record["date"], "isoformat") else str(record["date"])
             if day in daily_index:
                 daily_index[day]["page_views"] = record.get("count", 0)
 
         for record in search_results:
-            day = record["date"]
+            day = record["date"].isoformat() if hasattr(record["date"], "isoformat") else str(record["date"])
             if day in daily_index:
                 daily_index[day]["searches"] = record.get("count", 0)
 
@@ -270,7 +175,7 @@ class AnalyticsService:
 
         metrics["top_searches"] = [
             {
-                "query": record.get("display") or record["_id"],
+                "query": record.get("display") or record.get("normalized"),
                 "count": record.get("count", 0),
             }
             for record in top_search_results

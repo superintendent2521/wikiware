@@ -1,174 +1,146 @@
-"""
-Branch service layer for WikiWare.
-Contains business logic for branch operations.
-"""
+"""Branch operations backed by PostgreSQL foreign keys."""
 
-from typing import List
 from datetime import datetime, timezone
+from typing import Any, List
+
 from loguru import logger
-from ..database import (
-    get_pages_collection,
-    get_history_collection,
-    get_branches_collection,
-    db_instance,
-)
+from sqlalchemy import insert, literal, select
+from sqlalchemy.exc import IntegrityError
+
+from ..database import db_instance
+from ..schema import branch_editors, page_branches, pages, revisions
+from .page_service import _authorize_edit
+from .page_errors import PageServiceError, PageUnavailableError, PageConflictError
+
+
+def _engine() -> Any:
+    return getattr(db_instance, "engine", None)
+
+
+def _ready() -> bool:
+    return bool(getattr(db_instance, "is_connected", False) and _engine())
+
+
+def _name_column() -> Any:
+    return page_branches.c.name
+
+
+def _branch_values(values: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in values.items() if key in page_branches.c}
 
 
 class BranchService:
-    """Service class for branch-related operations."""
+    """Service class for page branches."""
 
     @staticmethod
     async def get_available_branches() -> List[str]:
-        """
-        Get all available branches across the wiki.
-
-        Returns:
-            List of branch names
-        """
+        if not _ready():
+            return ["main"]
         try:
-            if not db_instance.is_connected:
-                logger.warning("Database not connected - cannot get available branches")
-                return ["main"]
-
-            branches_collection = get_branches_collection()
-            if branches_collection is None:
-                logger.warning("Branches collection not available")
-                return ["main"]
-
-            branch_docs = await branches_collection.find().to_list(100)
-            branches = list(set(["main"] + [doc["branch_name"] for doc in branch_docs]))
-            return branches
-        except Exception as e:
-            logger.error(f"Error getting available branches: {str(e)}")
+            async with _engine().connect() as conn:
+                result = await conn.execute(select(_name_column()).distinct().order_by(_name_column()))
+                return list(dict.fromkeys(["main"] + [row[0] for row in result]))
+        except Exception as exc:
+            logger.error(f"Error getting available branches: {exc}")
             return ["main"]
 
     @staticmethod
     async def get_branches_for_page(title: str) -> List[str]:
-        """
-        Get all branches for a specific page.
-
-        Args:
-            title: Page title
-
-        Returns:
-            List of branch names for the page
-        """
+        if not _ready():
+            return ["main"]
         try:
-            if not db_instance.is_connected:
-                logger.warning(
-                    f"Database not connected - cannot get branches for page: {title}"
-                )
-                return ["main"]
-
-            branches_collection = get_branches_collection()
-            pages_collection = get_pages_collection()
-
-            branches = ["main"]
-
-            if branches_collection is not None:
-                # Get branches from branches collection
-                branch_docs = await branches_collection.find(
-                    {"page_title": title}
-                ).to_list(100)
-                branches.extend([doc["branch_name"] for doc in branch_docs])
-
-            # Also check pages collection for any branches
-            if pages_collection is not None:
-                page_docs = await pages_collection.find({"title": title}).to_list(100)
-                page_branches = [doc["branch"] for doc in page_docs if "branch" in doc]
-                branches.extend(page_branches)
-
-            # Remove duplicates and return
-            return list(set(branches))
-        except Exception as e:
-            logger.error(f"Error getting branches for page {title}: {str(e)}")
+            statement = (
+                select(_name_column())
+                .join(pages, page_branches.c.page_id == pages.c.id)
+                .where(pages.c.title == title)
+                .order_by(_name_column())
+            )
+            async with _engine().connect() as conn:
+                result = await conn.execute(statement)
+                return list(dict.fromkeys(["main"] + [row[0] for row in result]))
+        except Exception as exc:
+            logger.error(f"Error getting branches for page {title}: {exc}")
             return ["main"]
 
     @staticmethod
     async def create_branch(
-        title: str, branch_name: str, source_branch: str = "main"
+        title: str, branch_name: str, source_branch: str = "main", *, actor: dict
     ) -> bool:
-        """
-        Create a new branch for a page.
-
-        Args:
-            title: Page title
-            branch_name: New branch name
-            source_branch: Source branch to copy from
-
-        Returns:
-            True if successful, False otherwise
-        """
+        if not _ready():
+            raise PageUnavailableError()
         try:
-            if not db_instance.is_connected:
-                logger.error(
-                    f"Database not connected - cannot create branch: {branch_name} for page: {title}"
+            async with _engine().begin() as conn:
+                source_query = (
+                    select(page_branches)
+                    .join(pages, page_branches.c.page_id == pages.c.id)
+                    .where(pages.c.title == title, _name_column() == source_branch)
+                    .with_for_update(of=page_branches)
                 )
-                return False
+                source = (await conn.execute(source_query)).mappings().first()
+                if source is None:
+                    logger.error(f"Source page not found: {title} on branch: {source_branch}")
+                    return False
+                await _authorize_edit(conn, title, source, actor)
 
-            pages_collection = get_pages_collection()
-            branches_collection = get_branches_collection()
-            history_collection = get_history_collection()
-
-            if pages_collection is None or branches_collection is None:
-                logger.error("Required collections not available")
-                return False
-
-            # Check if branch already exists
-            existing_branch = await branches_collection.find_one(
-                {"page_title": title, "branch_name": branch_name}
-            )
-            if existing_branch:
-                logger.warning(
-                    f"Branch already exists: {branch_name} for page: {title}"
+                exists = await conn.execute(
+                    select(page_branches.c.id).where(
+                        page_branches.c.page_id == source["page_id"],
+                        _name_column() == branch_name,
+                    )
                 )
-                return False
+                if exists.first() is not None:
+                    return False
 
-            # Get source page
-            source_page = await pages_collection.find_one(
-                {"title": title, "branch": source_branch}
-            )
-            if not source_page:
-                logger.error(
-                    f"Source page not found: {title} on branch: {source_branch}"
+                now = datetime.now(timezone.utc)
+                values = _branch_values(
+                    {
+                        "page_id": source["page_id"],
+                        "name": branch_name,
+                        "branch_name": branch_name,
+                        "content": source["content"],
+                        "author": source.get("author", source.get("author_name", "Anonymous")),
+                        "author_name": source.get("author", source.get("author_name", "Anonymous")),
+                        "edit_summary": source.get("edit_summary", ""),
+                        "created_at": now,
+                        "updated_at": now,
+                        "edit_permission": source.get("edit_permission", "everybody"),
+                        "allowed_users": source.get("allowed_users", []),
+                        "created_from": source_branch,
+                        "source_branch": source_branch,
+                    }
                 )
-                return False
+                branch_id = (await conn.execute(insert(page_branches).values(**values).returning(page_branches.c.id))).scalar_one()
 
-            # Create branch entry
-            branch_data = {
-                "page_title": title,
-                "branch_name": branch_name,
-                "created_at": datetime.now(timezone.utc),
-                "created_from": source_branch,
-            }
-            await branches_collection.insert_one(branch_data)
+                await conn.execute(
+                    insert(branch_editors).from_select(
+                        ["page_branch_id", "user_id"],
+                        select(literal(branch_id), branch_editors.c.user_id).where(
+                            branch_editors.c.page_branch_id == source["id"]
+                        ),
+                    )
+                )
 
-            # Copy page to new branch
-            new_page = source_page.copy()
-            # Remove MongoDB _id field
-            new_page.pop("_id", None)
-            new_page["branch"] = branch_name
-            new_page["created_at"] = datetime.now(timezone.utc)
-            new_page["updated_at"] = datetime.now(timezone.utc)
-            await pages_collection.insert_one(new_page)
-
-            # Copy history to new branch
-            if history_collection is not None:
-                source_history = await history_collection.find(
-                    {"title": title, "branch": source_branch}
-                ).to_list(100)
-                for history_item in source_history:
-                    new_history_item = history_item.copy()
-                    new_history_item.pop("_id", None)
-                    new_history_item["branch"] = branch_name
-                    await history_collection.insert_one(new_history_item)
-
-            logger.info(
-                f"Branch created: {branch_name} for page: {title} from branch: {source_branch}"
-            )
+                # INSERT ... SELECT copies every revision, with no arbitrary 100-row ceiling.
+                revision_keys = [
+                    key for key in ("revision_number", "content", "author", "author_name", "edited_by", "updated_at", "edit_summary", "created_at")
+                    if key in revisions.c
+                ]
+                if "page_branch_id" in revisions.c:
+                    revision_values = {"page_branch_id": literal(branch_id)}
+                    revision_values.update({key: getattr(revisions.c, key) for key in revision_keys})
+                    await conn.execute(
+                        insert(revisions).from_select(
+                            list(revision_values),
+                            select(*revision_values.values())
+                            .where(revisions.c.page_branch_id == source["id"]),
+                        )
+                    )
+            logger.info(f"Branch created: {branch_name} for page: {title} from branch: {source_branch}")
             return True
-        except Exception as e:
-            logger.error(
-                f"Error creating branch {branch_name} for page {title}: {str(e)}"
-            )
-            return False
+        except PageServiceError:
+            raise
+        except IntegrityError as exc:
+            raise PageConflictError("That branch already exists.") from exc
+        except Exception as exc:
+            logger.error(f"Error creating branch {branch_name} for page {title}: {exc}")
+            raise PageUnavailableError() from exc

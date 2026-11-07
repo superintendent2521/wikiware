@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-WikiWare MongoDB Backup & Restore (menu-driven, URI-with-DB only)
+Legacy WikiWare MongoDB Backup & Restore (menu-driven, URI-with-DB only)
+
+This remains available only for safeguarding the source database during the
+PostgreSQL cutover. New PostgreSQL installations should use pg_dump/pg_restore.
 
 - Navigate with 1-5 and numeric inputs (no CLI flags).
 - Uses mongodump/mongorestore; always embeds DB in --uri to avoid --db conflicts.

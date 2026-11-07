@@ -5,14 +5,18 @@ Handles branch management operations.
 
 from urllib.parse import parse_qsl, urlencode, urlparse
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi_csrf_protect import CsrfProtect
+from fastapi_csrf_protect.exceptions import CsrfProtectError
 from loguru import logger
 
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.branch_service import BranchService
+from ...services.page_service import PageService
+from ...services.page_errors import PageServiceError
+from ...services.page_permissions import get_page_edit_denial
 from ...services.settings_service import SettingsService
 from ...utils.template_env import get_templates
 from ...utils.validation import (
@@ -124,14 +128,32 @@ async def create_branch(
         if not is_valid_branch_name(branch_name):
             return {"error": "Invalid branch name"}
 
+        if not is_safe_branch_parameter(source_branch):
+            raise HTTPException(status_code=400, detail="Invalid source branch")
+        source_page = await PageService.get_page(title, source_branch)
+        if source_page is None:
+            raise HTTPException(status_code=404, detail="Source page not found")
+        denial = await get_page_edit_denial(
+            user, title, source_page,
+            editing_enabled=feature_flags.page_editing_enabled,
+        )
+        if denial:
+            return JSONResponse(status_code=403, content={"error": denial})
+
         # Create the branch
-        success = await BranchService.create_branch(title, branch_name, source_branch)
+        success = await BranchService.create_branch(title, branch_name, source_branch, actor=user)
 
         if success:
             redirect_url = _build_page_redirect_url(request, title, branch_name)
             return RedirectResponse(url=redirect_url, status_code=303)
         else:
             return {"error": "Failed to create branch"}
+    except PageServiceError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"error": str(exc)})
+    except CsrfProtectError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"error": exc.message})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating branch {branch_name} for page {title}: {str(e)}")
         return {"error": "Failed to create branch"}

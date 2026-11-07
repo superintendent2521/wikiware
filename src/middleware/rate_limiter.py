@@ -75,12 +75,7 @@ _rate_limiter = RateLimiter(DEFAULT_REQUESTS_PER_WINDOW, WINDOW_SECONDS)
 
 
 def _client_identifier(request: Request) -> str:
-    """Return a stable identifier for the caller based on IP headers."""
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        candidate = xff.split(",")[0].strip()
-        if candidate:
-            return candidate
+    """Use the peer address normalized by the server's trusted proxy handling."""
     if request.client and request.client.host:
         return request.client.host
     return "unknown"

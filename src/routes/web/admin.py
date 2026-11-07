@@ -7,10 +7,11 @@ from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi_csrf_protect import CsrfProtect
 
-from ...database import db_instance, get_users_collection
+from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.analytics_service import AnalyticsService
 from ...services.settings_service import SettingsService
+from ...services.user_service import UserService
 from ...stats import get_stats
 from ...utils.logs import get_paginated_logs
 from ...utils.template_env import get_templates
@@ -36,14 +37,7 @@ async def admin_panel(
             status_code=403,
         )
     # Fetch all users for admin view
-    users_collection = get_users_collection()
-    if users_collection is None:
-        users = []
-    else:
-        users_cursor = users_collection.find(
-            {}, {"username": 1, "is_admin": 1, "is_active": 1, "created_at": 1}
-        )
-        users = await users_cursor.to_list(length=None)
+    users = await UserService.list_users()
     # Get statistics
     stats = await get_stats()
     analytics = await AnalyticsService.get_admin_dashboard_metrics()

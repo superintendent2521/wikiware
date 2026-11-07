@@ -4,8 +4,33 @@ Provides a function to convert [[Page Title]] and [[Page:Branch]] syntax to HTML
 """
 
 import html as _html
+from typing import Tuple
 from urllib.parse import quote
+
 from .template_processor import render_template_content
+
+
+def parse_internal_link_target(link_body: str) -> Tuple[str, str | None]:
+    """Return the title and optional branch from a [[...]] link body."""
+    link_target = link_body.strip()
+    if ":" not in link_target:
+        return link_target, None
+
+    title, branch = link_target.split(":", 1)
+    return title.strip(), branch.strip()
+
+
+def build_internal_link_html(link_body: str) -> str:
+    """Build the HTML anchor for a wiki-style internal link body."""
+    title, branch = parse_internal_link_target(link_body)
+    encoded_title = quote(title, safe="")
+    safe_text = _html.escape(title)
+
+    if branch is None:
+        return f'<a href="/page/{encoded_title}">{safe_text}</a>'
+
+    encoded_branch = quote(branch, safe="")
+    return f'<a href="/page/{encoded_title}?branch={encoded_branch}">{safe_text}</a>'
 
 
 async def process_internal_links(content: str) -> str:
@@ -27,23 +52,6 @@ async def process_internal_links(content: str) -> str:
     # First, render any Jinja2 template variables (e.g., {{ global.edits }})
     content = await render_template_content(content)
 
-    def build_link(link_body: str) -> str:
-        full_match = link_body.strip()
-
-        if ":" in full_match:
-            parts = full_match.split(":", 1)
-            title = parts[0].strip()
-            branch = parts[1].strip()
-            encoded_title = quote(title, safe="")
-            encoded_branch = quote(branch, safe="")
-            safe_text = _html.escape(title)
-            return f'<a href="/page/{encoded_title}?branch={encoded_branch}">{safe_text}</a>'
-        else:
-            title = full_match
-            encoded_title = quote(title, safe="")
-            safe_text = _html.escape(title)
-            return f'<a href="/page/{encoded_title}">{safe_text}</a>'
-
     # Manual parser avoids regex backtracking DoS on crafted input
     pieces = []
     index = 0
@@ -62,13 +70,7 @@ async def process_internal_links(content: str) -> str:
             break
 
         link_text = content[start + 2 : end]
-        pieces.append(build_link(link_text))
+        pieces.append(build_internal_link_html(link_text))
         index = end + 2
-    else:
-        pieces.append(content[index:])
 
-    if not pieces:
-        return content
-
-    result = "".join(pieces)
-    return result
+    return "".join(pieces)

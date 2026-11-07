@@ -133,6 +133,8 @@
                 <label for="imageCaptionInput">Caption (optional)</label>
                 <input type="text" id="imageCaptionInput" class="form-control" placeholder="This text appears under the image once inserted.">
                 <small class="form-hint">Leave blank if you do not want a caption.</small>
+                <label for="imageWidthInput">Width in pixels (optional)</label>
+                <input type="number" id="imageWidthInput" class="form-control" min="120" max="1200" placeholder="Automatic width">
             </div>
         </div>
     </div>
@@ -254,9 +256,9 @@
 
     <div class="edit-form-container">
         <form id="editForm" action="{{ edit_action }}" method="post" data-draft-title="{{ title }}" data-draft-branch="{{ branch_value }}" data-draft-user="{{ user.username if user else 'anonymous' }}">
-            <input type="hidden" name="edit_summary" id="editSummaryHidden">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="branch" value="{{ branch_value }}">
+            <input type="hidden" name="expected_version" value="{{ expected_version|default('new') }}">
             <div class="form-group">
                 <label>Author:</label>
                 <input type="text" value="{{ user.username }}" readonly>
@@ -280,7 +282,7 @@
             </div>
 
             <div class="form-group">
-                <label for="content">Content (Visual editor with Markdown save):</label>
+                <label for="content">Content (Markdown)</label>
                 <div class="editor-toolbar" id="wiki-editor-toolbar">
                     <button type="button" data-cmd="formatBlock" data-value="P" class="btn btn-secondary btn-small" title="Normal Text"><i class="fas fa-paragraph"></i> Normal</button>
                     <button type="button" data-cmd="formatBlock" data-value="H1" class="btn btn-secondary btn-small" title="Heading 1"><i class="fas fa-heading"></i> H1</button>
@@ -289,7 +291,7 @@
                     <span class="sep"></span>
                     <button type="button" data-cmd="bold" class="btn btn-secondary btn-small" title="Bold"><i class="fas fa-bold"></i></button>
                     <button type="button" data-cmd="italic" class="btn btn-secondary btn-small" title="Italic"><i class="fas fa-italic"></i></button>
-                    <button type="button" data-cmd="underline" class="btn btn-secondary btn-small" title="Underline"><i class="fas fa-underline"></i></button>
+                    <button type="button" data-cmd="code" class="btn btn-secondary btn-small" title="Inline code"><i class="fas fa-code"></i></button>
                     <span class="sep"></span>
                     <button type="button" data-cmd="insertUnorderedList" class="btn btn-secondary btn-small" title="Bulleted List"><i class="fas fa-list-ul"></i></button>
                     <button type="button" data-cmd="insertOrderedList" class="btn btn-secondary btn-small" title="Numbered List"><i class="fas fa-list-ol"></i></button>
@@ -298,12 +300,6 @@
                     <button type="button" id="insertUnixTimeBtn" class="btn btn-secondary btn-small" title="Insert Unix timestamp"><i class="fas fa-clock"></i> Unix Time</button>
                     <span class="sep"></span>
                     <button type="button" id="insertTableBtn" class="btn btn-secondary btn-small" title="Insert Table"><i class="fas fa-table"></i> Table</button>
-                    <div class="table-tools">
-                        <button type="button" id="addRowBtn" class="btn btn-secondary btn-small" title="Add Row">+ Row</button>
-                        <button type="button" id="addColBtn" class="btn btn-secondary btn-small" title="Add Column">+ Col</button>
-                        <button type="button" id="delRowBtn" class="btn btn-secondary btn-small" title="Delete Row">- Row</button>
-                        <button type="button" id="delColBtn" class="btn btn-secondary btn-small" title="Delete Column">- Col</button>
-                    </div>
                     <span class="sep"></span>
                     <button type="button" id="insertImageBtn" class="btn btn-secondary btn-small" title="Insert Image">
                         <i class="fas fa-image"></i> Image
@@ -312,32 +308,19 @@
                         <i class="fas fa-bookmark"></i> Source
                     </button>
                     <span class="sep"></span>
-                    <button type="button" id="toggleRawBtn" class="btn btn-secondary btn-small" title="Toggle raw Markdown view">
-                        <i class="fas fa-code"></i> Raw Markdown
+                    <button type="button" id="toggleRawBtn" class="btn btn-secondary btn-small" title="Preview the page">
+                        <i class="fas fa-eye"></i> Preview
                     </button>
                 </div>
 
-                <div id="visual-editor" class="visual-editor" contenteditable="true"></div>
-                <textarea id="content" name="content" rows="20" class="raw-editor" style="display:none;">{{ content }}</textarea>
+                <div id="visual-editor" class="visual-editor page-content" hidden></div>
+                <textarea id="content" name="content" rows="20" class="raw-editor">{{ content }}</textarea>
+                <p id="editorStatus" class="form-helper" role="status" aria-live="polite"></p>
             </div>
 
-            <div id="editSummaryInline" class="edit-summary-inline" hidden aria-hidden="true">
-                <div class="summary-header">
-                    <h3 class="modal-title">Edit Summary</h3>
-                    <button type="button" id="editSummaryClose" class="summary-close" aria-label="Close summary panel">&times;</button>
-                </div>
-                <div class="form-group">
-                    <div class="summary-label-row">
-                        <label for="editSummaryInput">Summarize your changes<span aria-hidden="true">*</span></label>
-                        <small class="form-helper">This summary appears on the history page.</small>
-                    </div>
-                    <textarea id="editSummaryInput" class="form-control" rows="3" maxlength="250" placeholder="Briefly describe what changed"></textarea>
-                </div>
-                <div id="editSummaryStatus" class="summary-status" role="status"></div>
-                <div class="summary-actions">
-                    <button type="button" id="editSummarySave" class="btn btn-primary">Save Summary</button>
-                    <button type="button" id="editSummaryCancel" class="btn btn-secondary">Cancel</button>
-                </div>
+            <div class="form-group">
+                <label for="editSummaryHidden">Edit summary</label>
+                <input type="text" id="editSummaryHidden" name="edit_summary" class="form-control" maxlength="250" required placeholder="Briefly describe your changes">
             </div>
 
             <div class="form-actions">
@@ -391,110 +374,6 @@
             });
         }
 
-        const editForm = document.getElementById('editForm');
-        const editSummaryPanel = document.getElementById('editSummaryInline');
-        const editSummaryInput = document.getElementById('editSummaryInput');
-        const editSummaryHidden = document.getElementById('editSummaryHidden');
-        const editSummaryCancel = document.getElementById('editSummaryCancel');
-        const editSummaryStatus = document.getElementById('editSummaryStatus');
-        const editSummarySave = document.getElementById('editSummarySave');
-        const editSummaryCloseBtn = document.getElementById('editSummaryClose');
-        let summaryConfirmed = false;
-
-        function resetSummaryStatus() {
-            if (editSummaryStatus) {
-                editSummaryStatus.innerHTML = '';
-            }
-        }
-
-        function hideSummaryPanel() {
-            if (!editSummaryPanel) return;
-            editSummaryPanel.hidden = true;
-            editSummaryPanel.setAttribute('aria-hidden', 'true');
-            resetSummaryStatus();
-        }
-
-        function showSummaryPanel() {
-            if (!editSummaryPanel) return;
-            resetSummaryStatus();
-            const existing = editSummaryHidden ? editSummaryHidden.value : '';
-            if (editSummaryInput) {
-                editSummaryInput.value = existing || '';
-            }
-            editSummaryPanel.hidden = false;
-            editSummaryPanel.setAttribute('aria-hidden', 'false');
-            requestAnimationFrame(() => {
-                if (editSummaryInput) {
-                    try {
-                        editSummaryInput.focus({ preventScroll: true });
-                    } catch (_) {
-                        editSummaryInput.focus();
-                    }
-                }
-                if (editSummaryPanel && typeof editSummaryPanel.scrollIntoView === 'function') {
-                    editSummaryPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }
-            });
-        }
-
-        function confirmSummary() {
-            const summaryValue = editSummaryInput ? editSummaryInput.value.trim() : '';
-            if (!summaryValue) {
-                if (editSummaryStatus) {
-                    editSummaryStatus.innerHTML = '<div class="alert alert-error">Please add a brief summary.</div>';
-                }
-                if (editSummaryInput) {
-                    editSummaryInput.focus();
-                }
-                return;
-            }
-            if (editSummaryHidden) {
-                editSummaryHidden.value = summaryValue;
-            }
-            summaryConfirmed = true;
-            hideSummaryPanel();
-            if (editForm) {
-                if (typeof editForm.requestSubmit === 'function') {
-                    editForm.requestSubmit();
-                } else {
-                    editForm.submit();
-                }
-            }
-        }
-
-        if (editSummarySave) {
-            editSummarySave.addEventListener('click', confirmSummary);
-        }
-
-        if (editSummaryCancel) {
-            editSummaryCancel.addEventListener('click', () => {
-                summaryConfirmed = false;
-                hideSummaryPanel();
-            });
-        }
-
-        if (editSummaryCloseBtn) {
-            editSummaryCloseBtn.addEventListener('click', () => {
-                summaryConfirmed = false;
-                hideSummaryPanel();
-            });
-        }
-
-        if (editForm) {
-            editForm.addEventListener('submit', (event) => {
-                if (event.defaultPrevented) {
-                    summaryConfirmed = false;
-                    return;
-                }
-                if (summaryConfirmed) {
-                    summaryConfirmed = false;
-                    return;
-                }
-                event.preventDefault();
-                showSummaryPanel();
-            });
-        }
-
         // Image modal elements
         const modal = document.getElementById('imageUploadModal');
         const insertImageBtn = document.getElementById('insertImageBtn');
@@ -514,6 +393,7 @@
         const imageLibraryList = document.getElementById('imageLibraryList');
         const imageLibraryStatus = document.getElementById('imageLibraryStatus');
         const imageCaptionInput = document.getElementById('imageCaptionInput');
+        const imageWidthInput = document.getElementById('imageWidthInput');
 
         let imageLibraryItems = [];
         let imageLibraryLoaded = false;
@@ -604,7 +484,7 @@
                     window.WikiEditor.restoreSelection();
                 }
                 if (typeof window.WikiEditor.insertImage === 'function') {
-                    window.WikiEditor.insertImage({ src, alt: filename || '', caption });
+                    window.WikiEditor.insertImage({ src, alt: filename || '', caption, width: imageWidthInput ? imageWidthInput.value : '' });
                     if (imageCaptionInput) imageCaptionInput.value = '';
                     return;
                 }

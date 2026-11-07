@@ -32,17 +32,17 @@
             <input type="hidden" name="branch" value="{{ branch or 'main' }}">
             <div class="compare-select-group">
                 <label for="compare-from">Compare</label>
-                <select id="compare-from" name="from_version">
+                <select id="compare-from" name="from_revision">
                     {% for version in versions %}
-                        <option value="{{ version.index }}" {% if from_version == version.index %}selected{% endif %}>
+                        <option value="{{ version.revision_id or 0 }}" {% if from_version == version.index %}selected{% endif %}>
                             Version {{ version.display_number }} — {{ version.author }} ({{ version.updated_at_display }}) - {{ version.edit_summary or 'No summary' }}
                         </option>
                     {% endfor %}
                 </select>
                 <span class="compare-separator">to</span>
-                <select id="compare-to" name="to_version">
+                <select id="compare-to" name="to_revision">
                     {% for version in versions %}
-                        <option value="{{ version.index }}" {% if to_version == version.index %}selected{% endif %}>
+                        <option value="{{ version.revision_id or 0 }}" {% if to_version == version.index %}selected{% endif %}>
                             Version {{ version.display_number }} — {{ version.author }} ({{ version.updated_at_display }}) - {{ version.edit_summary or 'No summary' }}
                         </option>
                     {% endfor %}
@@ -64,6 +64,7 @@
             <form action="/restore/{{ title }}/{{ from_meta.index }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="branch" value="{{ branch or 'main' }}">
+                <input type="hidden" name="revision_id" value="{{ from_meta.revision_id }}">
                 <button type="submit" class="btn btn-small btn-warning"
                         onclick="return confirm('Restore version {{ from_meta.display_number }}?')"><i class="fas fa-undo"></i> Restore This Version</button>
             </form>
@@ -80,6 +81,7 @@
             <form action="/restore/{{ title }}/{{ to_meta.index }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="branch" value="{{ branch or 'main' }}">
+                <input type="hidden" name="revision_id" value="{{ to_meta.revision_id }}">
                 <button type="submit" class="btn btn-small btn-warning"
                         onclick="return confirm('Restore version {{ to_meta.display_number }}?')"><i class="fas fa-undo"></i> Restore This Version</button>
             </form>

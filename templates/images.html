@@ -132,8 +132,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     method: 'DELETE',
                     credentials: 'include',
                     headers: {
-                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                        'Content-Type': 'application/json',
                     },
+                    body: JSON.stringify({ csrf_token: {{ csrf_token|tojson }} }),
                 })
                 .then(response => {
                     if (response.ok) {

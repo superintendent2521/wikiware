@@ -11,7 +11,6 @@ from ...utils.validation import is_safe_branch_parameter, is_valid_title
 from ..web.history import (
     _build_version_entries,
     _fetch_versions_for_history,
-    _get_history_collections,
 )
 
 router = APIRouter()
@@ -25,6 +24,9 @@ def _format_version_entry(
     encoded_branch = quote(branch, safe="")
     branch_query = f"?branch={encoded_branch}" if branch != "main" else ""
     view_url = f"/history/{encoded_title}/{entry['index']}{branch_query}"
+    if entry.get("revision_id") is not None:
+        separator = "&" if branch_query else "?"
+        view_url += f"{separator}revision_id={entry['revision_id']}"
     history_url = f"/history/{encoded_title}{branch_query}"
     compare_url = (
         f"/history/{encoded_title}/compare{branch_query}"
@@ -37,6 +39,7 @@ def _format_version_entry(
     )
     return {
         "index": entry["index"],
+        "revision_id": entry.get("revision_id"),
         "display_number": entry["display_number"],
         "author": entry["author"],
         "updated_at": entry["updated_at_display"],
@@ -61,20 +64,13 @@ async def get_history_versions(title: str, branch: str = "main", limit: int = 10
     if not db_instance.is_connected:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    try:
-        pages_collection, history_collection = _get_history_collections()
-        history_limit = max(1, min(50, int(limit or 10)))
-    except Exception as exc:
-        logger.error(f"Failed preparing history collections: {exc}")
-        raise HTTPException(status_code=500, detail="Failed to prepare history data")
+    history_limit = max(1, min(50, int(limit or 10)))
 
     try:
         versions_raw = await _fetch_versions_for_history(
             title,
             normalized_branch,
             limit=history_limit,
-            pages_collection=pages_collection,
-            history_collection=history_collection,
         )
         entries = _build_version_entries(versions_raw)
     except Exception as exc:

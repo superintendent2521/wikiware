@@ -40,8 +40,17 @@
                 {% endfor %}
             </div>
             {% else %}
-
+                <p>No matching pages found.</p>
+            {% endif %}
+            <nav class="page-actions" aria-label="Search result pages">
+                {% if page_number > 1 %}
+                <a class="btn btn-secondary" href="{{ request.url_for('search').include_query_params(q=query, branch=branch, show_all=show_all|string|lower, page=page_number-1) }}">Previous</a>
                 {% endif %}
+                <span>Page {{ page_number }}</span>
+                {% if has_next %}
+                <a class="btn btn-secondary" href="{{ request.url_for('search').include_query_params(q=query, branch=branch, show_all=show_all|string|lower, page=page_number+1) }}">Next</a>
+                {% endif %}
+            </nav>
         </div>
 
         {% elif not show_all %}

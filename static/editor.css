@@ -49,7 +49,7 @@
 
 /* Raw Markdown textarea */
 .raw-editor {
-  display: none;
+  display: block;
   width: 100%;
   min-height: 320px;
   border: 1px solid var(--border-color, #c9c9c9);

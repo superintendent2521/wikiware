@@ -10,3 +10,11 @@ example-page.pdf
 cloudflared.log
 backups/*
 src/env_config.py
+.env
+.venv/
+.ruff_cache/
+node_modules/
+.coverage
+coverage.xml
+htmlcov/
+test-results.xml

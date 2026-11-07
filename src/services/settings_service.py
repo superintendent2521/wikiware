@@ -4,6 +4,7 @@ Service for managing site-wide settings such as the global announcement banner.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -11,6 +12,7 @@ from typing import Optional
 from loguru import logger
 
 from ..database import db_instance
+from ..utils.sql import execute, fetch_one
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,11 @@ _DEFAULT_BANNER = Banner(
     duration_hours=None,
 )
 _ALLOWED_LEVELS = {"info", "success", "warning", "danger"}
+
+
+def _json(value: dict) -> str:
+    """Serialize a settings payload for PostgreSQL JSONB parameters."""
+    return json.dumps(value)
 
 
 @dataclass(frozen=True)
@@ -117,11 +124,10 @@ class SettingsService:
         if not force_refresh and cls._cache_is_fresh(cls._banner_cache_fetched_at):
             return cls._banner_cache
 
-        settings_collection = db_instance.get_collection("settings")
-        if settings_collection is None:
-            return cls._banner_cache
-
-        doc = await settings_collection.find_one({"_id": "global_banner"})
+        row = await fetch_one(
+            "SELECT value FROM settings WHERE key = :key", {"key": "global_banner"}
+        )
+        doc = row.get("value") if row else None
         if not doc:
             cls._banner_cache = _DEFAULT_BANNER
             cls._banner_cache_fetched_at = datetime.now(timezone.utc)
@@ -141,9 +147,11 @@ class SettingsService:
 
         if expires_at and is_active and datetime.now(timezone.utc) >= expires_at:
             logger.info("Global banner expired; marking as inactive")
-            await settings_collection.update_one(
-                {"_id": "global_banner"},
-                {"$set": {"is_active": False, "duration_hours": None}},
+            await execute(
+                "UPDATE settings SET value = jsonb_set(jsonb_set(value, "
+                "'{is_active}', 'false'::jsonb), '{duration_hours}', 'null'::jsonb) "
+                "WHERE key = :key",
+                {"key": "global_banner"},
             )
             is_active = False
             duration_hours = None
@@ -174,11 +182,6 @@ class SettingsService:
         """Persist new banner settings and refresh the cache."""
         if not db_instance.is_connected:
             logger.error("Cannot update banner while database is offline")
-            return False
-
-        settings_collection = db_instance.get_collection("settings")
-        if settings_collection is None:
-            logger.error("Settings collection is unavailable")
             return False
 
         normalized_level = cls._normalize_level(level)
@@ -214,10 +217,10 @@ class SettingsService:
             "duration_hours": duration_hours_value,
         }
 
-        await settings_collection.update_one(
-            {"_id": "global_banner"},
-            {"$set": payload},
-            upsert=True,
+        await execute(
+            "INSERT INTO settings (key, value) VALUES (:key, CAST(:value AS JSONB)) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            {"key": "global_banner", "value": _json(payload)},
         )
 
         cls._banner_cache = Banner(
@@ -252,11 +255,10 @@ class SettingsService:
         ):
             return cls._feature_flags_cache
 
-        settings_collection = db_instance.get_collection("settings")
-        if settings_collection is None:
-            return cls._feature_flags_cache
-
-        doc = await settings_collection.find_one({"_id": "feature_flags"})
+        row = await fetch_one(
+            "SELECT value FROM settings WHERE key = :key", {"key": "feature_flags"}
+        )
+        doc = row.get("value") if row else None
         if not doc:
             cls._feature_flags_cache = _DEFAULT_FEATURE_FLAGS
             cls._feature_flags_cache_fetched_at = datetime.now(timezone.utc)
@@ -284,21 +286,16 @@ class SettingsService:
             logger.error("Cannot update feature flags while database is offline")
             return False
 
-        settings_collection = db_instance.get_collection("settings")
-        if settings_collection is None:
-            logger.error("Settings collection is unavailable")
-            return False
-
         payload = {
             "page_editing_enabled": page_editing_enabled,
             "account_creation_enabled": account_creation_enabled,
             "image_upload_enabled": image_upload_enabled,
         }
 
-        await settings_collection.update_one(
-            {"_id": "feature_flags"},
-            {"$set": payload},
-            upsert=True,
+        await execute(
+            "INSERT INTO settings (key, value) VALUES (:key, CAST(:value AS JSONB)) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            {"key": "feature_flags", "value": _json(payload)},
         )
 
         cls._feature_flags_cache = FeatureFlags(**payload)

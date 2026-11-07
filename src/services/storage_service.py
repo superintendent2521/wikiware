@@ -97,6 +97,12 @@ async def _reset_s3_client() -> None:
             logger.warning(f"Failed to close S3 client cleanly: {exc}")
 
 
+async def close_storage() -> None:
+    """Release object-storage connections during application shutdown."""
+    async with _S3_LOCK:
+        await _reset_s3_client()
+
+
 async def _handle_client_attribute_error(operation: str, exc: AttributeError) -> None:
     """Translate attribute errors into storage errors and reset the client."""
     await _reset_s3_client()
@@ -213,8 +219,8 @@ async def upload_image_bytes(
             modified=now,
         )
 
-    upload_path = _ensure_local_dir()
-    file_path = upload_path / filename
+    _ensure_local_dir()
+    file_path = _safe_local_image_path(filename)
     try:
         async with aiofiles.open(file_path, "wb") as file_obj:
             await file_obj.write(data)

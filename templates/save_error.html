@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Page not saved - {{ config.NAME }}{% endblock %}
+{% block content %}
+<div class="container">
+    <h2>Page not saved</h2>
+    <div class="alert alert-error" role="alert">{{ message }}</div>
+    <p>Your submitted text is below. Copy it before opening the editor again.</p>
+    <label for="unsaved-content">Your changes</label>
+    <textarea id="unsaved-content" class="raw-editor" rows="24" readonly>{{ content }}</textarea>
+</div>
+{% endblock %}

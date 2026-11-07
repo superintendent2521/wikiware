@@ -1,62 +1,71 @@
-# WikiWare Integration Tests
+# WikiWare tests
 
-This directory contains integration tests for WikiWare that interact with a running dev server.
+Install development dependencies with `pip install -r requirements-dev.txt`.
+The maintained suites run in-process and do not require a running wiki or S3.
+The former live-server smoke script has been replaced; tests no longer create
+users and pages in a development installation.
 
-## Test Coverage
+Run `pytest` from the repository root. PostgreSQL tests skip unless
+`WIKIWARE_TEST_DATABASE_URL` is explicitly set. Run `pytest -m "not integration"`
+for only isolated HTTP, configuration, rendering, and schema checks.
 
-The tests cover the following user workflows:
+## PostgreSQL integration
 
-1. **Server Availability Check** - Verifies the dev server is running
-2. **Account Creation** - Creates a new user account via the registration form
-3. **User Login** - Logs in as a created user
-4. **Page Creation** - Creates a new wiki page
-5. **Page Viewing** - Views an existing wiki page
+Use a dedicated database whose name contains `test`, for example
+`postgresql+asyncpg://postgres:postgres@localhost:5432/wikiware_test`.
+Set `WIKIWARE_TEST_DATABASE_URL` to that URL before running `pytest -m integration`.
+The fixture rejects other database names. Each test creates its own random
+`wikiware_test_...` schema, sets that schema as its connection search path, and
+drops only that schema during cleanup. It never falls back to `DATABASE_URL`.
 
-## Running the Tests
+These suites verify:
 
-### Prerequisites
+- registered accounts persist, passwords authenticate, and sessions expire or
+  become invalid after logout;
+- password changes persist and favorites follow renames and deletions;
+- revision snapshots and edit counts commit together;
+- stale and simultaneous saves cannot overwrite a newer edit;
+- database policy is rechecked rather than trusting caller roles;
+- failed transactions roll back content and history;
+- restores identify a stable revision and reject revisions from other branches;
+- branch creation retains more than 100 revisions;
+- page deletion cascades to dependent branches and revisions;
+- the Mongo importer preserves content, history order, permissions, favorites,
+  sessions, image metadata, and settings;
+- nonempty targets are refused and import failures roll back the whole import.
+- exports unzip successfully, share a consistent snapshot while writes happen,
+  reserve cooldowns atomically, and release interrupted reservations safely.
+- search treats LIKE wildcard characters literally, ranks exact/prefix titles,
+  scopes results by branch, and pages deterministically when timestamps tie.
 
-1. Start the dev server:
-   ```bash
-   python index.py
-   ```
-   The server should be running on `http://0.0.0.0:8000`
+The importer tests use a read-only in-memory Mongo source and a real PostgreSQL
+target, so no MongoDB server or production credentials are needed.
 
-2. Ensure testing dependencies are installed:
-   ```bash
-   pip install pytest pytest-asyncio requests
-   ```
+## HTTP and rendering
 
-### Running Tests
+The HTTP suites use real FastAPI routers and dependency injection with isolated
+service doubles. They cover authentication, page protection, feature flags,
+CSRF rejection, version/revision identity forwarding, JSON save acknowledgements,
+recoverable HTML save errors, and authenticated previews. The renderer fixtures
+cover wiki links, literal code, nested headings, tables, image captions and widths,
+citations, unsafe URLs/HTML, statistics placeholders, and source escaping.
+Secondary suites reject remote/filesystem PDF image sources, enforce image byte
+and count limits, validate admin log-stream origins, check API mutation CSRF,
+and verify that the web image library awaits its storage listing.
 
-Run the tests using pytest:
+Run `node --test tests/*.test.cjs` for editor and draft recovery tests. No npm
+dependencies are needed. `node --check static/editor.js` checks editor syntax.
 
-```bash
-# Run all tests
-pytest src/tests/
+## CI
 
-# Run with verbose output
-pytest src/tests/ -v
+The CI workflow runs backend tests on Python 3.13 and 3.14 with PostgreSQL 17,
+applies Alembic to an empty database, checks installed dependency compatibility,
+runs Ruff correctness checks and maintained-suite lint, and runs Node browser
+logic tests. Test results and coverage reports are retained for seven days.
+Coverage is reported without an arbitrary repository-wide percentage gate.
+CodeQL analyzes Python, JavaScript, and Actions on pull requests and weekly.
+Dependabot proposes weekly Actions and Python dependency updates.
 
-# Run with coverage
-pytest src/tests/ --cov=src/tests
-
-# Run only specific test
-pytest src/tests/test_user_and_pages.py::test_login
-```
-
-## Test Structure
-
-- `test_client` - A pytest fixture that provides a requests session with cookie persistence
-- `test_server_available` - Checks if the dev server is running
-- `test_account_creation` - Tests user registration
-- `test_login` - Tests user authentication
-- `test_page_creation` - Tests creating wiki pages
-- `test_page_view` - Tests viewing wiki pages
-
-## Notes
-
-- Tests use unique usernames based on timestamps to avoid conflicts
-- Tests require a running dev server on `http://0.0.0.0:8000`
-- Session cookies are preserved across requests to maintain logged-in state
-- Tests may create test pages that persist in the database
+Local verification during the current rewrite uses native Ruff and Node tools;
+the repository instruction against running Python locally remains in effect.
+The Python suites and GitHub workflows still need their first execution in CI.

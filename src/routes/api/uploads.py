@@ -13,7 +13,6 @@ from fastapi_csrf_protect.exceptions import CsrfProtectError
 from loguru import logger
 
 from ...config import ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE
-from ...database import get_image_hashes_collection
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.storage_service import (
     StorageError,
@@ -21,6 +20,7 @@ from ...services.storage_service import (
     upload_image_bytes,
 )
 from ...utils.validation import sanitize_filename
+from ...utils.imagehash import get_image_hash_by_sha256, save_image_hash
 
 
 router = APIRouter()
@@ -134,35 +134,29 @@ async def upload_image(
         await file.seek(0)
 
         # Check for duplicate
-        collection = get_image_hashes_collection()
-        if collection is not None:
-            try:
-                existing = await collection.find_one({"sha256": sha256_hash})
-            except Exception as exc:
-                logger.warning(f"Unable to check duplicate image hash: {exc}")
-                existing = None
-                collection = None
-            if existing:
-                logger.info(f"Duplicate image upload detected: {existing['filename']}")
-                duplicate_url = existing.get("url")
-                if not duplicate_url:
-                    duplicate_url = build_public_url(existing["filename"])
-                    try:
-                        await collection.update_one(
-                            {"filename": existing["filename"]},
-                            {"$set": {"url": duplicate_url}},
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            f"Unable to backfill duplicate image URL for '{existing['filename']}': {exc}"
-                        )
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "url": duplicate_url,
-                        "filename": existing["filename"],
-                    },
-                )
+        try:
+            existing = await get_image_hash_by_sha256(sha256_hash)
+        except Exception as exc:
+            logger.warning(f"Unable to check duplicate image hash: {exc}")
+            existing = None
+        if existing:
+            logger.info(f"Duplicate image upload detected: {existing['filename']}")
+            duplicate_url = existing.get("url")
+            if not duplicate_url:
+                duplicate_url = build_public_url(existing["filename"])
+                try:
+                    await save_image_hash(
+                        existing["filename"], existing["sha256"],
+                        existing.get("size", 0), existing.get("modified"), duplicate_url
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Unable to backfill duplicate image URL for '{existing['filename']}': {exc}"
+                    )
+            return JSONResponse(
+                status_code=200,
+                content={"url": duplicate_url, "filename": existing["filename"]},
+            )
 
         # Generate unique filename
         original_extension = (
@@ -219,25 +213,15 @@ async def upload_image(
             )
 
         # Store hash in database
-        if collection is not None:
-            try:
-                await collection.update_one(
-                    {"filename": unique_filename},
-                    {
-                        "$set": {
-                            "filename": unique_filename,
-                            "sha256": sha256_hash,
-                            "size": stored_image.size,
-                            "modified": stored_image.modified,
-                            "url": stored_image.url,
-                        }
-                    },
-                    upsert=True,
-                )
-            except Exception as exc:
-                logger.warning(
-                    f"Image uploaded but metadata was not recorded for '{unique_filename}': {exc}"
-                )
+        try:
+            await save_image_hash(
+                unique_filename, sha256_hash, stored_image.size,
+                stored_image.modified, stored_image.url
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Image uploaded but metadata was not recorded for '{unique_filename}': {exc}"
+            )
 
         # Return success response with image URL
         image_url = stored_image.url

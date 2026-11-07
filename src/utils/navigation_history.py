@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Tuple
 
 from fastapi import Request
 
+from .validation import is_safe_branch_parameter
+
 HISTORY_COOKIE_NAME = "wiki_page_history"
 HISTORY_COOKIE_MAX_AGE = 30 * 24 * 60 * 60  # 30 days
 HISTORY_MAX_LENGTH = 20
@@ -15,12 +17,18 @@ HISTORY_QUERY_PARAM = "nav"
 HISTORY_BACK_VALUE = "back"
 
 
+def _normalize_branch(branch: object) -> str:
+    """Return a branch value that is safe to store and echo in URLs."""
+    if isinstance(branch, str) and is_safe_branch_parameter(branch):
+        return branch
+    return "main"
+
+
 def build_history_entry(title: str, branch: str, is_home: bool) -> Dict[str, object]:
     """Return a normalized navigation history entry for storage."""
-    normalized_branch = branch or "main"
     return {
         "title": title,
-        "branch": normalized_branch,
+        "branch": _normalize_branch(branch),
         "is_home": bool(is_home),
     }
 
@@ -42,13 +50,10 @@ def load_history_cookie(request: Request) -> List[Dict[str, object]]:
         title = entry.get("title")
         if not isinstance(title, str) or not title:
             continue
-        branch_value = (
-            entry.get("branch") if isinstance(entry.get("branch"), str) else "main"
-        )
         history.append(
             {
                 "title": title,
-                "branch": branch_value or "main",
+                "branch": _normalize_branch(entry.get("branch")),
                 "is_home": bool(entry.get("is_home")),
             }
         )
@@ -68,7 +73,7 @@ def apply_history_update(
             updated_history.pop()
         if not updated_history or updated_history[-1] != current_entry:
             updated_history.append(current_entry)
-        return updated_history
+        return updated_history[-HISTORY_MAX_LENGTH:]
 
     updated_history = [entry for entry in updated_history if entry != current_entry]
     updated_history.append(current_entry)
@@ -96,7 +101,7 @@ def resolve_previous_entry(
 
 def build_history_link(request: Request, entry: Dict[str, object]) -> str:
     """Return a URL for the provided navigation entry including the back flag."""
-    branch_value = str(entry.get("branch") or "main")
+    branch_value = _normalize_branch(entry.get("branch"))
     if entry.get("is_home"):
         target_url = request.url_for("home")
     else:

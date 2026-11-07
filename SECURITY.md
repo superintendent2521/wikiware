@@ -22,7 +22,7 @@ To help us triage and remediate quickly, include as much of the following as pos
 - Impact assessment (e.g., RCE, data exposure, privilege escalation).
 - Environment details:
   - Python version (`python --version`)
-  - MongoDB version (`mongod --version`)
+  - PostgreSQL version (`psql --version`)
   - FastAPI version (e.g., `pip show fastapi`)
   - OS and other relevant dependencies
 - Any logs, stack traces, or HTTP traces (redact PII or secrets).

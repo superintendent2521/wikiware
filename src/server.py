@@ -8,12 +8,17 @@ import secrets
 from fastapi import FastAPI, Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from fastapi_csrf_protect import CsrfProtect
 from pydantic_settings import BaseSettings
 from loguru import logger
-from .config import NAME, APP_DESCRIPTION, STATIC_DIR, DEV
-from .database import init_database
+from .config import (
+    NAME, APP_DESCRIPTION, STATIC_DIR, DEV, CSRF_SECRET_KEY,
+    CSRF_COOKIE_SECURE, validate_runtime_config,
+)
+from .database import db_instance, init_database
 from .routes import media
+from .routes.api import preview
 
 # Why do we do it like this? Because otherwise we import a route that has both web and api routes, casuing circular imports
 from .routes.web import (
@@ -45,6 +50,9 @@ from .services.settings_service import SettingsService
 from .middleware.security_headers import SecurityHeadersMiddleware
 from .middleware.user_agent_middleware import UserAgentMiddleware
 from .utils.template_env import get_templates
+from .services.page_errors import PageServiceError
+from .services.storage_service import close_storage
+from .utils.error_utils import render_error_page
 
 # Configure loguru
 os.makedirs("logs", exist_ok=True)
@@ -52,7 +60,7 @@ logger.add("logs/wikiware.log", rotation="1 day", retention="7 days", level="INF
 logger.add("logs/errors.log", rotation="1 day", retention="7 days", level="ERROR")
 
 _CSRF_SECRET: str
-_env_csrf_secret = os.getenv("CSRF_SECRET_KEY")
+_env_csrf_secret = CSRF_SECRET_KEY
 if _env_csrf_secret:
     _CSRF_SECRET = _env_csrf_secret
 else:
@@ -66,7 +74,7 @@ class CsrfSettings(BaseSettings):
     secret_key: str
     cookie_samesite: str = "lax"
     # Use env override so local HTTP works by default; set CSRF_COOKIE_SECURE=true in prod
-    cookie_secure: bool = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
+    cookie_secure: bool = CSRF_COOKIE_SECURE
     httponly: bool = True
     cookie_key: str = "fastapi-csrf-token"
     # Read CSRF tokens from request body/forms so standard HTML forms work
@@ -147,6 +155,7 @@ app.include_router(api_admin.router, prefix="/api")
 app.include_router(api_page_markdown.router, prefix="/api")
 app.include_router(api_favorites.router, prefix="/api")
 app.include_router(api_logs.router, prefix="/api")
+app.include_router(preview.router, prefix="/api")
 # From Utils, because its a service, not a route
 app.include_router(log_streamer.router)
 # Initilize log streaming.
@@ -154,8 +163,19 @@ log_streamer.setup_log_streaming(app, add_file_sink=False)
 
 
 # 404 handler
+@app.exception_handler(PageServiceError)
+async def page_service_error_handler(request: Request, exc: PageServiceError):
+    if request.url.path.startswith("/api/") or "application/json" in request.headers.get("accept", ""):
+        return JSONResponse({"error": str(exc)}, status_code=exc.status_code)
+    return render_error_page(
+        request, title="Wiki Unavailable", message=str(exc), status_code=exc.status_code
+    )
+
+
 @app.exception_handler(StarletteHTTPException)
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if request.url.path.startswith("/api/") or "application/json" in request.headers.get("accept", ""):
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
     if exc.status_code == 404:
         return templates.TemplateResponse(
             "error.html",
@@ -168,7 +188,7 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
             status_code=404,
         )
     # let other errors pass through normally
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         "error.html",
         {
             "request": request,
@@ -178,15 +198,37 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
         },
         status_code=exc.status_code,
     )
+    if exc.headers:
+        response.headers.update(exc.headers)
+    return response
 
 
 @app.on_event("startup")
 async def startup_event():
     try:
+        validate_runtime_config()
         await init_database()
+        if not db_instance.is_connected:
+            message = (
+                "Database unavailable after startup; check DATABASE_URL and "
+                "network access from the deployed host"
+            )
+            if DEV:
+                logger.warning(f"{message}. Running in offline mode because DEV=true")
+                return
+            logger.error(message)
+            raise RuntimeError(message)
         logger.info("WikiWare application started successfully")
     except Exception as e:
         logger.error(f"Error during application startup: {str(e)}")
+        raise
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_storage()
+    await db_instance.disconnect()
+    logger.info("PostgreSQL connection pool closed")
 
 
 if __name__ == "__main__":

@@ -419,7 +419,7 @@ async def change_password(
     )
 
     if success:
-        context["success"] = "Password updated successfully."
+        context["success"] = "Password updated. Please sign in again on each device."
         logger.info(f"Password changed for user: {user['username']}")
     else:
         error_messages = {
@@ -446,6 +446,7 @@ async def logout_user(
 ):
     """Handle user logout."""
     try:
+        await csrf_protect.validate_csrf(request)
         # Get session ID from cookie
         session_id = (
             request.cookies.get(SESSION_COOKIE_NAME)

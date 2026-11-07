@@ -597,6 +597,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         },
                         body: JSON.stringify({
                             title: pageTitle,
+                            csrf_token: {{ csrf_token|tojson }},
                             branch: pageBranch,
                             depth,
                         }),
@@ -712,7 +713,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         credentials: 'include',
                         headers: {
                             'Content-Type': 'application/json',
-                        }
+                        },
+                        body: JSON.stringify({ csrf_token: {{ csrf_token|tojson }} })
                     });
 
                     console.log('Response status:', response.status); // Debug log

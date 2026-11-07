@@ -1,19 +1,39 @@
-"""
-User service layer for WikiWare.
-Contains business logic for user operations.
-"""
+"""User, favorite, and session operations backed by PostgreSQL."""
 
 import secrets
-from datetime import timedelta
-from typing import Optional, Dict, Any, Tuple, List, Set
-from datetime import datetime, timezone
-from passlib.context import CryptContext
-from loguru import logger
-from ..database import get_users_collection, db_instance
-from ..models.user import UserRegistration
+import asyncio
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-# Password hashing context
+from loguru import logger
+from passlib.context import CryptContext
+
+from ..database import db_instance
+from ..models.user import UserRegistration
+from ..utils.sql import execute, execute_returning, fetch_all, fetch_one
+
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
+
+
+def _user_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if row is None:
+        return None
+    result = dict(row)
+    if "id" in result:
+        result.setdefault("_id", result["id"])
+    result.setdefault("favorites", [])
+    result.setdefault("page_edits", {})
+    return result
+
+
+async def _page_edits(user_id: int) -> Dict[str, int]:
+    rows = await fetch_all(
+        "SELECT p.title, e.edit_count FROM user_page_edit_counts e "
+        "JOIN pages p ON p.id = e.page_id WHERE e.user_id = :user_id "
+        "ORDER BY p.title",
+        {"user_id": user_id},
+    )
+    return {str(row["title"]): int(row["edit_count"]) for row in rows}
 
 
 class UserService:
@@ -21,298 +41,132 @@ class UserService:
 
     @staticmethod
     def hash_password(password: str) -> str:
-        """
-        Hash a password using Argon2id (preferred) or bcrypt.
-
-        Args:
-            password: Plain text password
-
-        Returns:
-            Hashed password
-        """
         return pwd_context.hash(password)
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """
-        Verify a password against its hash.
-
-        Args:
-            plain_password: Plain text password
-            hashed_password: Hashed password
-
-        Returns:
-            True if password matches, False otherwise
-        """
         return pwd_context.verify(plain_password, hashed_password)
 
     @staticmethod
+    async def list_users() -> List[Dict[str, Any]]:
+        """Return the small user projection used by admin/editor screens."""
+        if not db_instance.is_connected:
+            return []
+        rows = await fetch_all(
+            "SELECT id, username, is_admin, is_active, created_at FROM users ORDER BY username"
+        )
+        return [_user_row(row) or {} for row in rows]
+
+    @staticmethod
     async def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
-        """
-        Get a user by username.
-
-        Args:
-            username: Username to search for
-
-        Returns:
-            User document or None if not found
-        """
+        if not db_instance.is_connected:
+            return None
         try:
-            if not db_instance.is_connected:
-                logger.warning(f"Database not connected - cannot get user: {username}")
-                return None
-
-            users_collection = get_users_collection()
-            if users_collection is None:
-                logger.error("Users collection not available")
-                return None
-
-            user = await users_collection.find_one({"username": username})
-            return user
-        except Exception as e:
-            logger.error(f"Error getting user {username}: {str(e)}")
+            user = await fetch_one(
+                "SELECT id, username, password_hash, created_at, is_active, "
+                "is_admin, total_edits, password_changed_at, "
+                "last_collection_export_at FROM users WHERE username = :username",
+                {"username": username},
+            )
+            result = _user_row(user)
+            if result is not None:
+                result["page_edits"] = await _page_edits(result["id"])
+            return result
+        except Exception as exc:
+            logger.error("Error getting user {}: {}", username, exc)
             return None
 
     @staticmethod
     async def list_favorites(username: str) -> Optional[List[Dict[str, str]]]:
-        """
-        Return the sanitized favorites list for a user.
-
-        Args:
-            username: Username whose favorites should be returned
-
-        Returns:
-            List of favorites as dictionaries with title/branch keys, or None if lookup failed
-        """
+        if not db_instance.is_connected:
+            return None
         try:
-            if not db_instance.is_connected:
-                logger.warning(
-                    f"Database not connected - cannot list favorites for user: {username}"
-                )
-                return None
-
-            users_collection = get_users_collection()
-            if users_collection is None:
-                logger.error("Users collection not available")
-                return None
-
-            user_doc = await users_collection.find_one(
-                {"username": username}, {"favorites": 1, "_id": 0}
+            user = await fetch_one(
+                "SELECT id FROM users WHERE username = :username", {"username": username}
             )
-            if user_doc is None:
-                logger.warning(f"User not found while listing favorites: {username}")
+            if user is None:
                 return None
-
-            raw_favorites = user_doc.get("favorites") or []
-            normalized: List[Dict[str, str]] = []
-            seen: Set[Tuple[str, str]] = set()
-            mutated = False
-
-            for entry in raw_favorites:
-                if isinstance(entry, dict):
-                    title = entry.get("title")
-                    if not title:
-                        mutated = True
-                        continue
-                    branch = (entry.get("branch") or "main").strip() or "main"
-                    key = (title, branch)
-                    if key in seen:
-                        mutated = True
-                        continue
-                    if branch != entry.get("branch"):
-                        mutated = True
-                    seen.add(key)
-                    normalized.append({"title": title, "branch": branch})
-                elif isinstance(entry, str):
-                    key = (entry, "main")
-                    if key in seen:
-                        mutated = True
-                        continue
-                    seen.add(key)
-                    normalized.append({"title": entry, "branch": "main"})
-                    mutated = True
-                else:
-                    mutated = True
-
-            if mutated:
-                await users_collection.update_one(
-                    {"username": username},
-                    {"$set": {"favorites": normalized}},
-                )
-
-            return normalized
-        except Exception as e:
-            logger.error(
-                f"Error listing favorites for user {username}: {str(e)}",
+            rows = await fetch_all(
+                "SELECT p.title, b.name AS branch FROM favorites f "
+                "JOIN page_branches b ON b.id = f.page_branch_id "
+                "JOIN pages p ON p.id = b.page_id "
+                "WHERE f.user_id = :user_id ORDER BY f.created_at",
+                {"user_id": user["id"]},
             )
+            return [
+                {"title": str(row["title"]), "branch": (row.get("branch") or "main")}
+                for row in rows
+                if row.get("title")
+            ]
+        except Exception as exc:
+            logger.error("Error listing favorites for {}: {}", username, exc)
             return None
 
     @staticmethod
     async def add_favorite(username: str, title: str, branch: str = "main") -> bool:
-        """
-        Add a favorite page for the specified user.
-
-        Args:
-            username: Username to update
-            title: Page title to favorite
-            branch: Branch name for the page
-
-        Returns:
-            True if the operation succeeded or favorite already exists, False otherwise
-        """
+        if not db_instance.is_connected:
+            return False
         try:
-            favorites = await UserService.list_favorites(username)
-            if favorites is None:
-                return False
-
-            if any(
-                fav["title"] == title and fav["branch"] == branch for fav in favorites
-            ):
-                return True
-
-            if not db_instance.is_connected:
-                logger.warning(
-                    f"Database not connected - cannot add favorite for user: {username}"
-                )
-                return False
-
-            users_collection = get_users_collection()
-            if users_collection is None:
-                logger.error("Users collection not available")
-                return False
-
-            favorite_entry = {"title": title, "branch": branch}
-            update_result = await users_collection.update_one(
-                {"username": username},
-                {"$addToSet": {"favorites": favorite_entry}},
+            user = await fetch_one(
+                "SELECT id FROM users WHERE username = :username", {"username": username}
             )
-
-            if update_result.matched_count == 0:
-                logger.warning(
-                    f"User not found while adding favorite: {username}",
-                )
+            if user is None:
                 return False
-
-            logger.info(
-                f"Added favorite '{title}' (branch: {branch}) for user '{username}'",
+            await execute(
+                "INSERT INTO favorites (user_id, page_branch_id) "
+                "SELECT :user_id, b.id FROM page_branches b JOIN pages p ON p.id = b.page_id "
+                "WHERE p.title = :title AND b.name = :branch "
+                "ON CONFLICT (user_id, page_branch_id) DO NOTHING",
+                {"user_id": user["id"], "title": title, "branch": branch or "main"},
             )
             return True
-        except Exception as e:
-            logger.error(
-                f"Error adding favorite '{title}' (branch: {branch}) for user {username}: {str(e)}",
-            )
+        except Exception as exc:
+            logger.error("Error adding favorite {} for {}: {}", title, username, exc)
             return False
 
     @staticmethod
     async def remove_favorite(username: str, title: str, branch: str = "main") -> bool:
-        """
-        Remove a favorite page for the specified user.
-
-        Args:
-            username: Username to update
-            title: Page title to remove
-            branch: Branch name for the page
-
-        Returns:
-            True if the operation succeeded or favorite was already missing, False otherwise
-        """
+        if not db_instance.is_connected:
+            return False
         try:
-            favorites = await UserService.list_favorites(username)
-            if favorites is None:
-                return False
-
-            if not any(
-                fav["title"] == title and fav["branch"] == branch for fav in favorites
-            ):
-                return True
-
-            if not db_instance.is_connected:
-                logger.warning(
-                    f"Database not connected - cannot remove favorite for user: {username}"
-                )
-                return False
-
-            users_collection = get_users_collection()
-            if users_collection is None:
-                logger.error("Users collection not available")
-                return False
-
-            favorite_entry = {"title": title, "branch": branch}
-            update_result = await users_collection.update_one(
-                {"username": username},
-                {"$pull": {"favorites": favorite_entry}},
+            user = await fetch_one(
+                "SELECT id FROM users WHERE username = :username", {"username": username}
             )
-
-            # Remove legacy string-only entries if present
-            await users_collection.update_one(
-                {"username": username},
-                {"$pull": {"favorites": title}},
-            )
-
-            if update_result.matched_count == 0:
-                logger.warning(
-                    f"User not found while removing favorite: {username}",
-                )
+            if user is None:
                 return False
-
-            logger.info(
-                f"Removed favorite '{title}' (branch: {branch}) for user '{username}'",
+            await execute(
+                "DELETE FROM favorites f USING page_branches b, pages p "
+                "WHERE f.page_branch_id = b.id AND b.page_id = p.id AND f.user_id = :user_id "
+                "AND p.title = :title AND b.name = :branch",
+                {"user_id": user["id"], "title": title, "branch": branch or "main"},
             )
             return True
-        except Exception as e:
-            logger.error(
-                f"Error removing favorite '{title}' (branch: {branch}) for user {username}: {str(e)}",
-            )
+        except Exception as exc:
+            logger.error("Error removing favorite {} for {}: {}", title, username, exc)
             return False
 
     @staticmethod
     async def create_user(user_data: UserRegistration) -> Optional[Dict[str, Any]]:
-        """
-        Create a new user.
-
-        Args:
-            user_data: User registration data
-
-        Returns:
-            Created user document or None if failed
-        """
+        if not db_instance.is_connected:
+            return None
         try:
-            if not db_instance.is_connected:
-                logger.error("Database not connected - cannot create user")
+            if await UserService.get_user_by_username(user_data.username):
                 return None
-
-            users_collection = get_users_collection()
-            if users_collection is None:
-                logger.error("Users collection not available")
-                return None
-
-            # Check if username already exists
-            existing_user = await UserService.get_user_by_username(user_data.username)
-            if existing_user:
-                logger.warning(f"Username already exists: {user_data.username}")
-                return None
-
-            # Hash password
-            hashed_password = UserService.hash_password(user_data.password)
-
-            # Create user document
-            user_doc = {
-                "username": user_data.username,
-                "password_hash": hashed_password,
-                "created_at": datetime.now(timezone.utc),
-                "is_active": True,
-                "is_admin": False,
-                "favorites": [],
-            }
-
-            # Insert user
-            result = await users_collection.insert_one(user_doc)
-            user_doc["_id"] = result.inserted_id
-
-            logger.info(f"User created: {user_data.username}")
-            return user_doc
-        except Exception as e:
-            logger.error(f"Error creating user {user_data.username}: {str(e)}")
+            row = await execute_returning(
+                "INSERT INTO users (username, password_hash, created_at, is_active, "
+                "is_admin, total_edits) VALUES (:username, :password_hash, "
+                ":created_at, TRUE, FALSE, 0) "
+                "RETURNING id, username, password_hash, created_at, is_active, is_admin, "
+                "total_edits",
+                {
+                    "username": user_data.username,
+                    "password_hash": await asyncio.to_thread(UserService.hash_password, user_data.password),
+                    "created_at": datetime.now(timezone.utc),
+                },
+            )
+            return _user_row(row)
+        except Exception as exc:
+            logger.error("Error creating user {}: {}", user_data.username, exc)
             return None
 
     @staticmethod
@@ -322,239 +176,119 @@ class UserService:
         client_ip: str = "unknown",
         user_agent: str = "unknown",
     ) -> Optional[Dict[str, Any]]:
-        """
-        Authenticate a user by username and password.
-
-        Args:
-            username: Username
-            password: Plain text password
-
-        Returns:
-            User document if authentication successful, None otherwise
-        """
         try:
-            # Get user
             user = await UserService.get_user_by_username(username)
-            if not user:
-                logger.warning(f"User not found: {username}")
-                logger.warning(
-                    f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}"
-                )  # pylint: disable=C0301
+            if not user or not user.get("is_active", True):
                 return None
-
-            # Check if user is active
-            if not user.get("is_active", True):
-                logger.warning(f"User account is inactive: {username}")
-                logger.warning(
-                    f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}"
-                )  # pylint: disable=C0301
-                return None
-
-            # Verify password
-            if not UserService.verify_password(password, user["password_hash"]):
-                logger.warning(f"Invalid password for user: {username}")
-                logger.warning(
-                    f"Failed login attempt: username={username}, ip={client_ip}, user_agent={user_agent}"
-                )  # pylint: disable=C0301
-                return None
-
-            logger.info(f"User authenticated: {username}")
-            return user
-        except Exception as e:
-            logger.error(f"Error authenticating user {username}: {str(e)}")
+            verified = await asyncio.to_thread(UserService.verify_password, password, user["password_hash"])
+            return user if verified else None
+        except Exception as exc:
+            logger.error("Error authenticating user {}: {}", username, exc)
             return None
 
     @staticmethod
     async def change_password(
-        username: str,
-        current_password: str,
-        new_password: str,
+        username: str, current_password: str, new_password: str
     ) -> Tuple[bool, str]:
-        """Change a user's password after verifying the current password."""
+        if not db_instance.is_connected:
+            return False, "offline"
         try:
-            if not db_instance.is_connected:
-                logger.error("Database not connected - cannot change password")
-                return False, "offline"
-
-            users_collection = get_users_collection()
-            if users_collection is None:
-                logger.error("Users collection not available")
-                return False, "users_collection_missing"
-
             user = await UserService.get_user_by_username(username)
             if not user:
-                logger.warning(f"User not found for password change: {username}")
                 return False, "user_not_found"
-
-            if not UserService.verify_password(current_password, user["password_hash"]):
-                logger.warning(f"Invalid current password for user: {username}")
+            if not await asyncio.to_thread(UserService.verify_password, current_password, user["password_hash"]):
                 return False, "invalid_current_password"
-
-            new_hash = UserService.hash_password(new_password)
-
-            result = await users_collection.update_one(
-                {"_id": user["_id"]},
+            count = await execute(
+                "UPDATE users SET password_hash = :password_hash, "
+                "password_changed_at = :changed_at WHERE id = :user_id",
                 {
-                    "$set": {
-                        "password_hash": new_hash,
-                        "password_changed_at": datetime.now(timezone.utc),
-                    }
+                    "password_hash": await asyncio.to_thread(UserService.hash_password, new_password),
+                    "changed_at": datetime.now(timezone.utc),
+                    "user_id": user["id"],
                 },
             )
-
-            if result.modified_count == 1 or result.matched_count == 1:
-                logger.info(f"Password updated for user: {username}")
-                return True, ""
-
-            logger.error(f"Failed to update password for user: {username}")
-            return False, "update_failed"
-        except Exception as e:
-            logger.error(f"Error changing password for {username}: {str(e)}")
+            return count > 0, "" if count > 0 else "update_failed"
+        except Exception as exc:
+            logger.error("Error changing password for {}: {}", username, exc)
             return False, "error"
 
     @staticmethod
     async def create_session(user_id: str) -> Optional[str]:
-        """
-        Create a new session for a user.
-
-        Args:
-            user_id: User ID
-
-        Returns:
-            Session ID if successful, None otherwise
-        """
+        if not db_instance.is_connected:
+            return None
         try:
-            if not db_instance.is_connected:
-                logger.error("Database not connected - cannot create session")
-                return None
-
-            sessions_collection = db_instance.get_collection("sessions")
-            if sessions_collection is None:
-                logger.error("Sessions collection not available")
-                return None
-
-            # Generate a secure random session ID
             session_id = secrets.token_urlsafe(32)
-
-            # Create session document
-            session_doc = {
-                "session_id": session_id,
-                "user_id": user_id,
-                "created_at": datetime.now(timezone.utc),
-                "expires_at": datetime.now(timezone.utc).replace(
-                    second=0, microsecond=0
-                )
-                + timedelta(hours=24),
-            }
-
-            # Insert session
-            await sessions_collection.insert_one(session_doc)
-
-            logger.info(f"Session created for user: {user_id}")
-            return session_id
-        except Exception as e:
-            logger.error(f"Error creating session for user {user_id}: {str(e)}")
+            now = datetime.now(timezone.utc)
+            count = await execute(
+                "INSERT INTO sessions (session_id, user_id, created_at, expires_at) "
+                "SELECT :session_id, id, :created_at, :expires_at FROM users "
+                "WHERE username = :user_id",
+                {
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "created_at": now,
+                    "expires_at": now + timedelta(hours=24),
+                },
+            )
+            return session_id if count else None
+        except Exception as exc:
+            logger.error("Error creating session for {}: {}", user_id, exc)
             return None
 
     @staticmethod
     async def get_session(session_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get a session by session ID.
-
-        Args:
-            session_id: Session ID
-
-        Returns:
-            Session document or None if not found or expired
-        """
+        if not db_instance.is_connected:
+            return None
         try:
-            if not db_instance.is_connected:
-                logger.warning(
-                    f"Database not connected - cannot get session: {session_id}"
-                )
-                return None
-
-            sessions_collection = db_instance.get_collection("sessions")
-            if sessions_collection is None:
-                logger.error("Sessions collection not available")
-                return None
-
-            session = await sessions_collection.find_one({"session_id": session_id})
+            session = await fetch_one(
+                "SELECT session_id, user_id, created_at, expires_at FROM sessions "
+                "WHERE session_id = :session_id",
+                {"session_id": session_id},
+            )
             if not session:
                 return None
-
-            # Normalize expires_at to timezone-aware UTC for safe comparison
             expires_at = session.get("expires_at")
             if isinstance(expires_at, datetime):
-                if expires_at.tzinfo is None:
-                    expires_at = expires_at.replace(tzinfo=timezone.utc)
-            else:
-                expires_at = None
-
-            now_utc = datetime.now(timezone.utc)
-            if expires_at and expires_at > now_utc:
-                return session
-
-            # Delete expired session
-            if session:
-                await sessions_collection.delete_one({"session_id": session_id})
-                logger.info(f"Expired session deleted: {session_id}")
-
+                expires_at = expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at
+                if expires_at > datetime.now(timezone.utc):
+                    return session
+            await execute("DELETE FROM sessions WHERE session_id = :session_id", {"session_id": session_id})
             return None
-        except Exception as e:
-            logger.error(f"Error getting session {session_id}: {str(e)}")
+        except Exception as exc:
+            logger.error("Error getting session {}: {}", session_id, exc)
             return None
 
     @staticmethod
     async def delete_session(session_id: str) -> bool:
-        """
-        Delete a session.
-
-        Args:
-            session_id: Session ID
-
-        Returns:
-            True if successful, False otherwise
-        """
+        if not db_instance.is_connected:
+            return False
         try:
-            if not db_instance.is_connected:
-                logger.warning(
-                    f"Database not connected - cannot delete session: {session_id}"
-                )
-                return False
-
-            sessions_collection = db_instance.get_collection("sessions")
-            if sessions_collection is None:
-                logger.error("Sessions collection not available")
-                return False
-
-            result = await sessions_collection.delete_one({"session_id": session_id})
-            logger.info(f"Session deleted: {session_id}")
-            return result.deleted_count > 0
-        except Exception as e:
-            logger.error(f"Error deleting session {session_id}: {str(e)}")
+            return await execute(
+                "DELETE FROM sessions WHERE session_id = :session_id", {"session_id": session_id}
+            ) > 0
+        except Exception as exc:
+            logger.error("Error deleting session {}: {}", session_id, exc)
             return False
 
     @staticmethod
     async def get_user_by_session(session_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get a user by session ID.
-
-        Args:
-            session_id: Session ID
-
-        Returns:
-            User document or None if not found
-        """
+        session = await UserService.get_session(session_id)
+        if not session:
+            return None
         try:
-            # Get session
-            session = await UserService.get_session(session_id)
-            if not session:
-                return None
-
-            # Get user
-            user = await UserService.get_user_by_username(session["user_id"])
-            return user
-        except Exception as e:
-            logger.error(f"Error getting user by session {session_id}: {str(e)}")
+            user = await fetch_one(
+                "SELECT id, username, password_hash, created_at, is_active, is_admin, "
+                "total_edits, password_changed_at, last_collection_export_at "
+                "FROM users WHERE id = :user_id",
+                {"user_id": session["user_id"]},
+            )
+            result = _user_row(user)
+            if result is not None:
+                changed_at = result.get("password_changed_at")
+                if changed_at is not None and session["created_at"] < changed_at:
+                    await UserService.delete_session(session_id)
+                    return None
+            return result
+        except Exception as exc:
+            logger.error("Error getting user by session {}: {}", session_id, exc)
             return None

@@ -44,21 +44,29 @@ class AuthMiddleware:
         Returns:
             User data if authenticated, None otherwise
         """
+        if hasattr(request.state, "authenticated_user"):
+            return request.state.authenticated_user
         try:
             session_id = _get_session_cookie(request)
             if not session_id or not db_instance.is_connected:
+                request.state.authenticated_user = None
                 return None
 
             user = await UserService.get_user_by_session(session_id)
             if not user or not user.get("is_active", True):
+                request.state.authenticated_user = None
                 return None
 
-            return {
+            payload = {
                 "username": user["username"],
                 "is_admin": user.get("is_admin", False),
+                "total_edits": user.get("total_edits", 0),
             }
+            request.state.authenticated_user = payload
+            return payload
         except Exception as exc:  # IGNORE W0718
             logger.warning("Error validating session: {}", exc)
+            request.state.authenticated_user = None
             return None
 
     @staticmethod

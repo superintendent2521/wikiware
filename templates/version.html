@@ -42,6 +42,7 @@
         <form action="/restore/{{ page.title }}/{{ version_index }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="branch" value="{{ branch or 'main' }}">
+            <input type="hidden" name="revision_id" value="{{ revision_id }}">
             <button type="submit" class="btn btn-primary" 
                     onclick="return confirm('Are you sure you want to restore this version?')">Restore This Version</button>
         </form>
