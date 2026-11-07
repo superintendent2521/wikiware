@@ -1,7 +1,7 @@
 """Import real legacy-shaped documents into an isolated PostgreSQL schema."""
 
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -61,7 +61,7 @@ def configure_source(monkeypatch, postgres, documents):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_import_preserves_content_history_permissions_and_relationships(postgres, monkeypatch):
-    now = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2025, 1, 1, tzinfo=UTC)
     user_id = ObjectId()
     client = configure_source(monkeypatch, postgres, {
         "users": [{
@@ -158,10 +158,10 @@ async def test_import_rolls_back_all_tables_when_a_later_document_fails(postgres
 
 @pytest.mark.parametrize("value", [
     "2025-01-01T00:00:00Z", "2025-01-01T01:00:00+01:00",
-    datetime(2025, 1, 1), datetime(2025, 1, 1, tzinfo=timezone.utc), 1735689600,  # noqa: DTZ001 - legacy Mongo timestamps are naive
+    datetime(2025, 1, 1), datetime(2025, 1, 1, tzinfo=UTC), 1735689600,
 ])
 def test_legacy_timestamp_formats_normalize_to_utc(value):
-    assert importer._utc(value) == datetime(2025, 1, 1, tzinfo=timezone.utc)
+    assert importer._utc(value) == datetime(2025, 1, 1, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("value", [None, "invalid", {}, []])
@@ -173,7 +173,7 @@ def test_nested_legacy_metadata_becomes_json_serializable():
     document_id = ObjectId()
     converted = importer._json_value({
         "id": document_id,
-        "nested": [{"timestamp": datetime(2025, 1, 1)}],  # noqa: DTZ001 - exercise legacy naive timestamps
+        "nested": [{"timestamp": datetime(2025, 1, 1)}],
     })
     assert converted == {
         "id": str(document_id),

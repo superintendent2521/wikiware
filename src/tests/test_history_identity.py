@@ -1,6 +1,6 @@
 """Recent-history widgets retain stable identity and real revision numbering."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlsplit
 
@@ -13,7 +13,7 @@ from src.services.page_service import PageService
 
 @pytest.mark.asyncio
 async def test_limited_history_labels_current_version_from_real_revision_numbers(monkeypatch):
-    timestamp = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    timestamp = datetime(2025, 1, 1, tzinfo=UTC)
     monkeypatch.setattr(PageService, "get_page", AsyncMock(return_value={
         "id": 5, "content": "Current", "author": "alice", "updated_at": timestamp,
     }))

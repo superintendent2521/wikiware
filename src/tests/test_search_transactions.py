@@ -1,6 +1,6 @@
 """Search uses literal queries, useful title ranking, and deterministic paging."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import insert
@@ -20,7 +20,7 @@ async def seed_search_pages(engine, documents):
             await connection.execute(insert(page_branches).values(
                 page_id=page_id, name=document.get("branch", "main"),
                 content=document.get("content", ""),
-                updated_at=document.get("updated_at", datetime(2025, 1, 1, tzinfo=timezone.utc)),
+                updated_at=document.get("updated_at", datetime(2025, 1, 1, tzinfo=UTC)),
             ))
 
 
@@ -44,7 +44,7 @@ async def test_like_wildcards_and_escape_character_are_literal(postgres, query, 
 
 
 async def test_exact_and_prefix_titles_rank_ahead_of_newer_body_matches(postgres):
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    start = datetime(2025, 1, 1, tzinfo=UTC)
     await seed_search_pages(postgres, [
         {"title": "Ship", "updated_at": start},
         {"title": "Ship systems", "updated_at": start + timedelta(days=1)},

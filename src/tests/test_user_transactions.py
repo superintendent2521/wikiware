@@ -1,6 +1,6 @@
 """Persistent account, session, and favorite flows against PostgreSQL."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select, update
@@ -53,7 +53,7 @@ async def test_expired_sessions_are_rejected_and_removed(postgres):
     assert session_id
     async with postgres.begin() as connection:
         await connection.execute(update(sessions).where(sessions.c.session_id == session_id)
-                                 .values(expires_at=datetime.now(timezone.utc) - timedelta(days=1)))
+                                 .values(expires_at=datetime.now(UTC) - timedelta(days=1)))
 
     assert await UserService.get_user_by_session(session_id) is None
 

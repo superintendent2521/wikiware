@@ -1,7 +1,7 @@
 """Exercise revision and policy guarantees against real PostgreSQL transactions."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -28,7 +28,7 @@ async def seed_page(engine, *, title="Article", branch="main", content="Original
         page_id = await connection.scalar(insert(pages).values(title=title).returning(pages.c.id))
         branch_id = await connection.scalar(insert(page_branches).values(
             page_id=page_id, name=branch, content=content, author_name="alice",
-            updated_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 1, 1, tzinfo=UTC),
         ).returning(page_branches.c.id))
     return page_id, branch_id
 

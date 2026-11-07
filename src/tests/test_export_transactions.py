@@ -3,7 +3,7 @@
 import asyncio
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zipfile import ZipFile
 
 import pytest
@@ -93,7 +93,7 @@ async def test_simultaneous_reservations_allow_only_one_export(postgres):
 
 @pytest.mark.parametrize("had_previous_export", [False, True])
 async def test_interrupted_download_releases_its_reservation(postgres, had_previous_export):
-    previous = datetime.now(timezone.utc) - timedelta(days=2) if had_previous_export else None
+    previous = datetime.now(UTC) - timedelta(days=2) if had_previous_export else None
     await seed_export(postgres, previous_export=previous)
     stream = ExportService.generate_export_archive("alice")
     try:
@@ -110,7 +110,7 @@ async def test_interrupted_download_releases_its_reservation(postgres, had_previ
 async def test_interrupted_download_cannot_release_a_newer_reservation(postgres):
     await seed_export(postgres)
     stream = ExportService.generate_export_archive("alice")
-    newer = datetime.now(timezone.utc) + timedelta(minutes=1)
+    newer = datetime.now(UTC) + timedelta(minutes=1)
     try:
         assert await anext(stream)
         async with postgres.begin() as connection:

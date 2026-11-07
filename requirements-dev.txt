@@ -3,4 +3,4 @@ pytest
 pytest-asyncio
 pytest-cov
 requests
-ruff
+ruff==0.17.4
