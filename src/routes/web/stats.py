@@ -11,7 +11,7 @@ from loguru import logger
 from ...database import db_instance
 from ...middleware.auth_middleware import AuthMiddleware
 from ...services.branch_service import BranchService
-from ...stats import get_stats
+from ...stats import get_dashboard_stats, get_public_stats, get_stats
 from ...utils.template_env import get_templates
 
 router = APIRouter()
@@ -50,6 +50,7 @@ async def stats_page(
     request: Request,
     response: Response,
     branch: str = "main",
+    days: int = 30,
     csrf_protect: CsrfProtect = Depends(),
 ):
     """Display wiki statistics page."""
@@ -77,7 +78,8 @@ async def stats_page(
         branches = await BranchService.get_available_branches()
 
         # Get statistics
-        stats = await get_stats()
+        stats = await get_public_stats()
+        dashboard = await get_dashboard_stats(days)
         template = templates.TemplateResponse(
             "stats.html",
             {
@@ -92,7 +94,7 @@ async def stats_page(
                 "branches": branches,
                 "user": user,
                 "csrf_token": csrf_token,
-                "user_edit_stats": stats["user_edit_stats"],
+                "dashboard": dashboard,
             },
         )
         csrf_protect.set_csrf_cookie(signed_token, template)

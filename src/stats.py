@@ -2,8 +2,9 @@
 
 import asyncio
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote, urlencode
 
 from loguru import logger
 from sqlalchemy import func, select
@@ -140,3 +141,63 @@ async def get_public_stats():
 async def get_stats():
     stats, user_edit_stats = await asyncio.gather(get_public_stats(), get_user_edit_stats())
     return {**stats, "user_edit_stats": user_edit_stats}
+
+
+async def get_dashboard_stats(days=30):
+    """Aggregate public editing activity without loading revision contents."""
+    if days not in (7, 30, 90):
+        days = 30
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days - 1)
+    window = (revisions.c.created_at >= start) & (revisions.c.created_at <= now)
+    day = func.date(func.timezone("UTC", revisions.c.created_at))
+    revision_pages = revisions.join(page_branches).join(pages)
+    statements = {
+        "daily": select(day.label("date"), func.count().label("edits"))
+        .where(window).group_by(day).order_by(day),
+        "contributors": select(revisions.c.edited_by.label("username"), func.count().label("edits"))
+        .where(window).group_by(revisions.c.edited_by)
+        .order_by(func.count().desc(), revisions.c.edited_by).limit(8),
+        "activity": select(
+            func.count().label("edits"),
+            func.count(func.distinct(revisions.c.edited_by)).label("contributors"),
+            func.count(func.distinct(page_branches.c.page_id)).label("pages"),
+        ).select_from(revisions.join(page_branches)).where(window),
+        "recent": select(
+            pages.c.title, page_branches.c.name.label("branch"),
+            revisions.c.edited_by.label("username"), revisions.c.edit_summary,
+            revisions.c.created_at,
+        ).select_from(revision_pages).where(window)
+        .order_by(revisions.c.created_at.desc(), revisions.c.id.desc()).limit(8),
+        "branches": select(page_branches.c.name, func.count().label("pages"))
+        .group_by(page_branches.c.name).order_by(func.count().desc(), page_branches.c.name),
+        "unique_pages": select(func.count().label("count")).select_from(pages),
+        "users": select(func.count().label("count")).select_from(users),
+    }
+    results = {}
+    async with _engine().connect() as conn:
+        for name, statement in statements.items():
+            result = await conn.execute(statement)
+            results[name] = [dict(row) for row in result.mappings().all()]
+
+    counts = {str(row["date"]): row["edits"] for row in results["daily"]}
+    daily = []
+    for offset in range(days):
+        date = (start + timedelta(days=offset)).date()
+        daily.append({"date": date.isoformat(), "label": date.strftime("%b %d"),
+                      "edits": counts.get(date.isoformat(), 0)})
+    for edit in results["recent"]:
+        edit["url"] = f"/page/{quote(edit['title'], safe='')}?{urlencode({'branch': edit['branch']})}"
+        edit["created_at"] = edit["created_at"].astimezone(timezone.utc)
+    return {
+        "days": days,
+        "daily": daily,
+        "peak_edits": max((row["edits"] for row in daily), default=0),
+        "activity": results["activity"][0],
+        "contributors": results["contributors"],
+        "recent": results["recent"],
+        "branches": results["branches"],
+        "unique_pages": results["unique_pages"][0]["count"],
+        "users": results["users"][0]["count"],
+        "generated_at": now.strftime("%Y-%m-%d %H:%M UTC"),
+    }

@@ -1,131 +1,113 @@
 {% extends "base.html" %}
-
 {% block title %}Statistics - {{ config.NAME }}{% endblock %}
-
 {% block content %}
-<div class="container">
-    <div class="page-header">
-        <h2>Wiki Statistics</h2>
+<div class="container stats-dashboard">
+    <div class="page-header stats-heading">
+        <div>
+            <p class="stats-eyebrow">THE WIKI AT A GLANCE</p>
+            <h2>Wiki Statistics</h2>
+            <p class="stats-muted">Explore the knowledge and people building {{ config.NAME }}.</p>
+        </div>
+        {% if not offline %}<span class="stats-badge">Across all branches</span>{% endif %}
     </div>
-
     {% if offline %}
-    <div class="offline-message">
-        <p><i class="fas fa-exclamation-triangle"></i> Database not available. Running in offline mode.</p>
-        <p>Statistics cannot be displayed when offline.</p>
+    <div class="offline-message" role="status">
+        <h3>Statistics are unavailable</h3>
+        <p>We couldn’t load the wiki’s statistics. Please try again shortly.</p>
+        <a href="/stats" class="btn btn-secondary">Try again</a>
     </div>
     {% else %}
-    <div class="stats-container">
-        <div class="stat-card">
-            <h3><i class="fas fa-edit"></i> Total Edits</h3>
-            <p class="stat-number">{{ total_edits }}</p>
-            <p class="stat-description">Total number of edits made to wiki pages</p>
-        </div>
-
-        <div class="stat-card">
-            <h3><i class="fas fa-font"></i> Total Characters</h3>
-            <p class="stat-number">{{ total_characters }}</p>
-            <p class="stat-description">Total characters across all wiki pages</p>
-            {% if last_updated %}
-            <p class="stat-updated">Last updated: {{ last_updated }}</p>
-            {% endif %}
-        </div>
-
-        <div class="stat-card">
-            <h3><i class="fas fa-file-alt"></i> Total Pages</h3>
-            <p class="stat-number">{{ total_pages }}</p>
-            <p class="stat-description">Number of wiki pages in the database</p>
-        </div>
-
-        <div class="stat-card">
-            <h3><i class="fas fa-image"></i> Total Images</h3>
-            <p class="stat-number">{{ total_images }}</p>
-            <p class="stat-description">Number of images uploaded to the wiki</p>
-        </div>
+    <section class="stats-overview" aria-label="All-time wiki totals">
+        {% for icon, label, value, description in [
+            ('file-alt', 'Pages', dashboard.unique_pages, 'Unique page titles'),
+            ('edit', 'Edits', total_edits, 'Saved revisions across all branches'),
+            ('users', 'Registered users', dashboard.users, 'Accounts in the wiki'),
+            ('image', 'Images', total_images, 'Uploaded images')
+        ] %}
+        <article class="stats-metric">
+            <div class="stats-metric-label"><i class="fas fa-{{ icon }}" aria-hidden="true"></i> {{ label }}</div>
+            <p class="stats-value">{{ '{:,}'.format(value) }}</p>
+            <p class="stats-muted">{{ description }}</p>
+        </article>
+        {% endfor %}
+    </section>
+    <div class="stats-period-heading">
+        <div><h3>Editing activity</h3><p class="stats-muted">Last {{ dashboard.days }} calendar days · UTC</p></div>
+        <nav class="stats-period" aria-label="Activity period">
+            {% for period in [7, 30, 90] %}
+            <a href="/stats?days={{ period }}&amp;branch={{ branch|urlencode }}" {% if dashboard.days == period %}aria-current="page"{% endif %}>{{ period }} days</a>
+            {% endfor %}
+        </nav>
     </div>
+    <section class="stats-panel" aria-labelledby="activity-title">
+        <div class="stats-activity-summary">
+            <div><h3 id="activity-title">Saved edits</h3><strong>{{ '{:,}'.format(dashboard.activity.edits) }}</strong></div>
+            <div><span class="stats-muted">Contributors</span><strong>{{ '{:,}'.format(dashboard.activity.contributors) }}</strong></div>
+            <div><span class="stats-muted">Pages edited</span><strong>{{ '{:,}'.format(dashboard.activity.pages) }}</strong></div>
+        </div>
+        {% if dashboard.activity.edits %}
+        <div class="stats-chart" role="img" aria-label="Daily edits over the last {{ dashboard.days }} days. Peak: {{ dashboard.peak_edits }} edits in one day. Exact counts are in the daily breakdown below.">
+            {% for day in dashboard.daily %}
+            <div class="stats-chart-column" title="{{ day.date }}: {{ day.edits }} edits"><div class="stats-chart-bar" style="height: {{ 100 * day.edits / dashboard.peak_edits }}%"></div></div>
+            {% endfor %}
+        </div>
+        <div class="stats-chart-axis stats-muted"><span>{{ dashboard.daily[0].label }}</span><span>Peak: {{ dashboard.peak_edits }} edits/day</span><span>{{ dashboard.daily[-1].label }}</span></div>
+        <details class="stats-daily-details">
+            <summary>View daily breakdown</summary>
+            <div class="stats-daily-grid">
+                {% for day in dashboard.daily %}<div><time datetime="{{ day.date }}">{{ day.label }}</time><strong>{{ day.edits }}</strong></div>{% endfor %}
+            </div>
+        </details>
+        {% else %}<p class="stats-empty">No saved edits in this period. Choose a longer time range to explore earlier activity.</p>{% endif %}
+    </section>
+    <div class="stats-columns">
+        <section class="stats-panel" aria-labelledby="contributors-title">
+            <h3 id="contributors-title">Top contributors</h3>
+            <p class="stats-muted">Most saved edits in the last {{ dashboard.days }} days</p>
+            <ol class="stats-ranking">
+                {% for contributor in dashboard.contributors %}
+                <li><span class="stats-rank" aria-hidden="true">{{ loop.index }}</span><span class="stats-contributor">{{ contributor.username }}</span><span><strong>{{ '{:,}'.format(contributor.edits) }}</strong> <span class="stats-muted">edits</span></span></li>
+                {% else %}<li class="stats-empty">Contributor activity will appear here after pages are edited.</li>{% endfor %}
+            </ol>
+        </section>
+        <section class="stats-panel" aria-labelledby="content-title">
+            <h3 id="content-title">Inside the wiki</h3>
+            <p class="stats-muted">Current content across all branches</p>
+            <dl class="stats-content-totals">
+                <div><dt>Characters</dt><dd>{{ '{:,}'.format(total_characters) }}</dd></div>
+                <div><dt>Page versions across branches</dt><dd>{{ '{:,}'.format(total_pages) }}</dd></div>
+                <div><dt>Branches</dt><dd>{{ '{:,}'.format(dashboard.branches|length) }}</dd></div>
+            </dl>
+            <details><summary>Pages by branch</summary>
+                <ul class="stats-branches">
+                    {% for item in dashboard.branches %}<li><span>{{ item.name }}</span><strong>{{ '{:,}'.format(item.pages) }}</strong></li>
+                    {% else %}<li class="stats-muted">No branches yet.</li>{% endfor %}
+                </ul>
+            </details>
+            <p class="stats-note">A page can exist in multiple branches. Characters include each branch’s current content.</p>
+        </section>
+    </div>
+    <section class="stats-panel" aria-labelledby="recent-title">
+        <h3 id="recent-title">Recent edits</h3>
+        <p class="stats-muted">Latest saved revisions in the selected period</p>
+        {% if dashboard.recent %}
+        <div class="stats-table-scroll" role="region" aria-label="Recent edits" tabindex="0">
+            <table class="stats-table">
+                <thead><tr><th scope="col">Page</th><th scope="col">Contributor</th><th scope="col">Summary</th><th scope="col">Saved (UTC)</th></tr></thead>
+                <tbody>
+                {% for edit in dashboard.recent %}
+                <tr>
+                    <td><a href="{{ edit.url }}">{{ edit.title }}</a><span class="stats-branch-label">{{ edit.branch }}</span></td>
+                    <td>{{ edit.username }}</td><td class="stats-muted">{{ edit.edit_summary or 'No summary provided' }}</td>
+                    <td><time datetime="{{ edit.created_at.isoformat() }}">{{ edit.created_at.strftime('%Y-%m-%d %H:%M') }}</time></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<p class="stats-empty">No recent edits in this period.</p>{% endif %}
+    </section>
+    <p class="stats-note">Activity counts saved revisions, including edits by unregistered contributors. Updated {{ dashboard.generated_at }}.{% if last_updated %} Character and image totals refresh every 30 minutes.{% endif %}</p>
     {% endif %}
 </div>
-
-<style>
-.stats-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-lg);
-    margin-top: var(--space-xl);
-}
-
-.stat-card {
-    background: var(--surface-raised);
-    padding: 32px;
-    border-radius: 16px;
-    border: 1px solid var(--surface-border);
-    box-shadow: var(--box-shadow-md);
-    text-align: center;
-    transition: transform var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-fast);
-    position: relative;
-    overflow: hidden;
-}
-
-.stat-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(52, 152, 219, 0.12), rgba(26, 188, 156, 0.1));
-    opacity: 0;
-    transition: opacity var(--transition-normal);
-    pointer-events: none;
-}
-
-.stat-card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--box-shadow-lg);
-    border-color: var(--surface-border-strong);
-}
-
-.stat-card:hover::before {
-    opacity: 1;
-}
-
-.stat-card h3 {
-    color: var(--darker-gray);
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-medium);
-    letter-spacing: 0.4px;
-}
-
-.stat-number {
-    font-size: clamp(2.5rem, 3vw, 3.6rem);
-    font-weight: var(--font-weight-bold);
-    color: var(--accent-blue);
-    margin: 16px 0;
-}
-
-.stat-description {
-    color: var(--dark-gray);
-    font-size: var(--font-size-sm);
-    max-width: 90%;
-    margin: 0 auto;
-}
-
-.stat-updated {
-    color: var(--medium-gray);
-    font-size: var(--font-size-xs);
-    margin-top: 14px;
-}
-
-[data-theme="dark"] .stat-card {
-    box-shadow: 0 18px 36px rgba(5, 10, 24, 0.6);
-    border-color: var(--surface-border-strong);
-}
-
-[data-theme="dark"] .stat-card::before {
-    background: linear-gradient(135deg, rgba(52, 152, 219, 0.2), rgba(26, 188, 156, 0.12));
-}
-
-@media (max-width: 600px) {
-    .stat-card {
-        padding: 24px;
-    }
-}
-</style>
-
 {% endblock %}
