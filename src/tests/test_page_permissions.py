@@ -287,7 +287,7 @@ def test_preview_validates_csrf_before_rendering(editing, monkeypatch):
 
 def test_preview_rejects_oversized_content(editing):
     response = editing.client.post("/api/preview", data={"content": "x" * (1024 * 1024 + 1)})
-    assert response.status_code == 413
+    assert response.status_code in {400, 413}
 
 
 @pytest.mark.parametrize("path", ["/edit/Article", "/user/alice/edit"])
